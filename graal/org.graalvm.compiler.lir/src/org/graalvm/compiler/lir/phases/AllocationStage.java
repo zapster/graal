@@ -26,6 +26,7 @@ import static org.graalvm.compiler.core.common.GraalOptions.TraceRA;
 
 import org.graalvm.compiler.core.common.GraalOptions;
 import org.graalvm.compiler.lir.alloc.AllocationStageVerifier;
+import org.graalvm.compiler.lir.alloc.graphcoloring.GraphColoringPhase;
 import org.graalvm.compiler.lir.alloc.lsra.LinearScanPhase;
 import org.graalvm.compiler.lir.alloc.trace.TraceBuilderPhase;
 import org.graalvm.compiler.lir.alloc.trace.TraceRegisterAllocationPhase;
@@ -40,7 +41,9 @@ public class AllocationStage extends LIRPhaseSuite<AllocationContext> {
 
     public AllocationStage() {
         appendPhase(new MarkBasePointersPhase());
-        if (TraceRA.getValue()) {
+        if (GraphColoringPhase.Options.LIROptGraphColoringPhase.getValue()) {
+            appendPhase(new GraphColoringPhase());
+        } else if (TraceRA.getValue()) {
             appendPhase(new TraceBuilderPhase());
             appendPhase(new SSIConstructionPhase());
             appendPhase(new TraceRegisterAllocationPhase());
