@@ -32,6 +32,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import org.graalvm.compiler.core.test.backend.AllocatorTest;
+import org.graalvm.compiler.lir.alloc.graphcoloring.GraphColoringPhase;
 
 public class AMD64AllocatorTest extends AllocatorTest {
 
@@ -40,6 +41,7 @@ public class AMD64AllocatorTest extends AllocatorTest {
         assumeTrue("skipping AMD64 specific test", getTarget().arch instanceof AMD64);
         assumeTrue("RegisterPressure is set -> skip", RegisterPressure.getValue() == null);
         assumeTrue("TraceRA is set -> skip", !TraceRA.getValue());
+        assumeTrue("Graphcoloring is enabled -> skip", !GraphColoringPhase.Options.LIROptGraphColoringPhase.getValue());
     }
 
     @Test

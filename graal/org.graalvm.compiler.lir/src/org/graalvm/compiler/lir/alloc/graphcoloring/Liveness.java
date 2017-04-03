@@ -1,17 +1,38 @@
+/*
+ * Copyright (c) 2015, 2015, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
 package org.graalvm.compiler.lir.alloc.graphcoloring;
 
-import static org.graalvm.compiler.lir.LIRValueUtil.isVariable;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
-import static jdk.vm.ci.code.ValueUtil.asStackSlot;
 import static jdk.vm.ci.code.ValueUtil.isRegister;
-import static jdk.vm.ci.code.ValueUtil.isStackSlot;
 import static org.graalvm.compiler.lir.LIRValueUtil.asVariable;
+import static org.graalvm.compiler.lir.LIRValueUtil.isVariable;
 
 import java.util.BitSet;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 
+import org.graalvm.compiler.common.PermanentBailoutException;
 import org.graalvm.compiler.core.common.alloc.RegisterAllocationConfig;
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.core.common.cfg.AbstractControlFlowGraph;
@@ -28,11 +49,9 @@ import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.alloc.graphcoloring.Interval.RegisterPriority;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 
-import jdk.vm.ci.code.BailoutException;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.Register.RegisterCategory;
 import jdk.vm.ci.code.RegisterArray;
-import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.meta.PlatformKind;
 import jdk.vm.ci.meta.Value;
 
@@ -95,7 +114,8 @@ public class Liveness {
 
         ValueConsumer setVariableConsumer = (value, mode, flags) -> {
             if (isVariable(value)) {
-                Interval inter = allocator.AddValue(asVariable(value), operandNumber(value));
+                Interval inter = allocator.addValue(asVariable(value), operandNumber(value));
+                assert inter != null;
                 Debug.log("NumberInstruction: %d", operandNumber(value));
             }
         };
@@ -208,7 +228,6 @@ public class Liveness {
             ret = operandRegCatNum[opNum];
         }
 
-        // TODO:lookup or init hashmap register Category to registercategory number
         return ret;
     }
 
@@ -275,12 +294,12 @@ public class Liveness {
 
                 };
 
-                InstructionValueConsumer TempConsumer = (inst, operand, mode, flags) -> {
+                InstructionValueConsumer tempConsumer = (inst, operand, mode, flags) -> {
 
                     if (isVariable(operand) || isRegister(operand)) {
 
                         int operandNum = operandNumber(operand);
-
+                        assert operandNum >= 0;
                         int catNum = getCategoryNumber(operand);
                         addTemp(operand, inst.id(), inst.id() + 1, catNum, RegisterPriority.MustHaveRegister);
 
@@ -296,7 +315,7 @@ public class Liveness {
                     if (isVariable(operand) || isRegister(operand)) {
                         int operandNum = operandNumber(operand);
 
-                        Interval inter = allocator.AddValue(operand, operandNum);
+                        Interval inter = allocator.addValue(operand, operandNum);
                         int blockFrom = allocator.getFirstLirInstructionId(block);
                         int catNum = getCategoryNumber(operand);
                         inter.setCatNum(catNum);
@@ -312,7 +331,8 @@ public class Liveness {
                     if (isVariable(operand) || isRegister(operand)) {
 
                         int operandNum = operandNumber(operand);
-                        Interval inter = allocator.AddValue(operand, operandNum);
+                        // Interval inter = allocator.addValue(operand, operandNum);
+
                         int catNum = getCategoryNumber(operand);
                         // addDef(operand, operandNum, inst.id(), inst, catNum,
                         // registerPriorityOfOutputOperand(inst));
@@ -338,7 +358,7 @@ public class Liveness {
 
                     // addUse(operand, operandNum, blockFrom, blockTo + 2,
                     // getCategoryNumber(operand), RegisterPriority.None);
-                    Interval inter = allocator.AddValue(operand, operandNum);
+                    Interval inter = allocator.addValue(operand, operandNum);
 
                     inter.addLiveRange(blockFrom, blockTo + 2);
 // Debug.log(1, "Add Live Range id:%d Use from: %d to %d", inter.getOpId(), blockFrom, blockTo + 2);
@@ -364,7 +384,7 @@ public class Liveness {
                         for (Register r : callerSaveRegs) {
                             if (allocator.attributes(r).isAllocatable()) {
                                 int catNum = getCategoryNumber(r.asValue());
-                                addTemp(r.asValue(), inst.id(), inst.id() + 1, catNum, RegisterPriority.None);
+                                addTemp(r.asValue(), inst.id() + 1, inst.id() + 1, catNum, RegisterPriority.None);
 
                             }
                         }
@@ -376,7 +396,7 @@ public class Liveness {
                     inst.visitEachInput(useConsumer);
                     inst.visitEachAlive(aliveConsumer);
                     inst.visitEachOutput(defConsumer);
-                    inst.visitEachTemp(TempConsumer);
+                    inst.visitEachTemp(tempConsumer);
                     inst.visitEachState(stateConsumer);
                 }
 
@@ -399,7 +419,7 @@ public class Liveness {
         if (!allocator.isProcessed(operand)) {
             return;
         }
-        Interval inter = allocator.AddValue(operand, operandNum);
+        Interval inter = allocator.addValue(operand, operandNum);
 // Debug.log(1, "Add Live Range id:%d Use from: %d to %d", inter.getOpId(), from, to);
         inter.addLiveRange(from, to);
         inter.addUse(to & ~1, priority);
@@ -413,7 +433,7 @@ public class Liveness {
         if (!allocator.isProcessed(operand)) {
             return;
         }
-        Interval inter = allocator.AddValue(operand, operandNum);
+        Interval inter = allocator.addValue(operand, operandNum);
 // Debug.log(1, "Add Live Range id:%d State from: %d to %d", inter.getOpId(), from, to);
         inter.addLiveRange(from, to);
         // inter.addUse(to);
@@ -427,7 +447,7 @@ public class Liveness {
         if (!allocator.isProcessed(operand)) {
             return;
         }
-        Interval inter = allocator.AddValue(operand, operandNum);
+        Interval inter = allocator.addValue(operand, operandNum);
 // Debug.log(1, "Add Live Range id:%d Alive from: %d to %d", inter.getOpId(), from, to);
         inter.addLiveRange(from, to);
         inter.addUse(to, priority);
@@ -443,7 +463,7 @@ public class Liveness {
             return;
         }
         int defPos = inst.id();
-        Interval inter = allocator.AddValue(operand, operandNum);
+        Interval inter = allocator.addValue(operand, operandNum);
         inter.setCatNum(catNum);
 
         LifeRange r = inter.first();
@@ -487,7 +507,7 @@ public class Liveness {
         if (!allocator.isProcessed(operand)) {
             return;
         }
-        Interval inter = allocator.AddValue(operand, operandNumber(operand));
+        Interval inter = allocator.addValue(operand, operandNumber(operand));
         inter.addTempRange(pos, to);
 // Debug.log(1, "Add Live Range id:%d Temp from: %d to %d", inter.getOpId(), pos, to);
         inter.setCatNum(catNum);
@@ -551,7 +571,8 @@ public class Liveness {
                         liveGen.set(operandNum);
                     }
                     int regCatNum = getCategoryNumber(operand);
-                    allocator.AddValue(operand, operandNum);
+                    assert regCatNum >= 0;
+                    allocator.addValue(operand, operandNum);
                     if (block.getLoop() != null) {
                         intervalInLoop.setBit(operandNum, block.getLoop().getIndex());
                     }
@@ -566,7 +587,8 @@ public class Liveness {
                         liveGen.set(operandNum);
                     }
                     int regCatNum = getCategoryNumber(operand);
-                    allocator.AddValue(operand, operandNum);
+                    assert regCatNum >= 0;
+                    allocator.addValue(operand, operandNum);
 
                 }
             };
@@ -575,7 +597,8 @@ public class Liveness {
                     int varNum = operandNumber(operand);
                     liveKill.set(varNum);
                     int regCatNum = getCategoryNumber(operand);
-                    allocator.AddValue(operand, varNum);
+                    assert regCatNum >= 0;
+                    allocator.addValue(operand, varNum);
                     if (block.getLoop() != null) {
                         intervalInLoop.setBit(varNum, block.getLoop().getIndex());
                     }
@@ -680,7 +703,7 @@ public class Liveness {
             iterationCount++;
 
             if (changeOccurred && iterationCount > 50) {
-                throw new BailoutException("too many iterations in computeGlobalLiveSets");
+                throw new PermanentBailoutException("too many iterations in computeGlobalLiveSets");
             }
 
         } while (changeOccurred);
@@ -712,30 +735,30 @@ public class Liveness {
     }
 
     private void buildGraph() {
-        Interval[] IntervalList = allocator.getIntervals();
-        Interferencegraph IG;
+        Interval[] intervalList = allocator.getIntervals();
+        Interferencegraph iG;
         Interval currentInter;
         Interval tempInter;
-        for (int i = 0; i < IntervalList.length; i++) {
-            currentInter = IntervalList[i];
+        for (int i = 0; i < intervalList.length; i++) {
+            currentInter = intervalList[i];
 
             if (currentInter != null && (currentInter.getOpId() >= firstVariableNumber || allocator.isAllocateable(currentInter.getOpId()))) {
                 Debug.log("BuildGraph: CurrentInterval: %s catNum: %d", toString(currentInter.getOpId()), currentInter.getCatNum());
-                IG = graphArr[currentInter.getCatNum()];
-                IG.addNode(currentInter.getOpId());
-                for (int j = i + 1; j < IntervalList.length; j++) {
-                    tempInter = IntervalList[j];
+                iG = graphArr[currentInter.getCatNum()];
+                iG.addNode(currentInter.getOpId());
+                for (int j = i + 1; j < intervalList.length; j++) {
+                    tempInter = intervalList[j];
 
                     if (tempInter != null && ((tempInter.getOpId() >= firstVariableNumber || allocator.isAllocateable(tempInter.getOpId())) && currentInter.getCatNum() == tempInter.getCatNum())) {
 
-                        IG.addNode(tempInter.getOpId());
+                        iG.addNode(tempInter.getOpId());
 
                         for (LifeRange range : currentInter.getLifeRanges()) {
 
                             boolean interference = tempInter.hasInterference(range, currentInter.isSpilled());
 
                             if (interference) {
-                                IG.setEdge(currentInter.getOpId(), tempInter.getOpId(), true);
+                                iG.setEdge(currentInter.getOpId(), tempInter.getOpId(), true);
                                 break;
                             }
                         }

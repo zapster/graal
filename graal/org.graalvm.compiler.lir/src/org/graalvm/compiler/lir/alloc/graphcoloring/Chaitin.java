@@ -32,12 +32,12 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Stack;
 import java.util.Vector;
 
 import org.graalvm.compiler.core.common.alloc.RegisterAllocationConfig;
@@ -47,6 +47,7 @@ import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInsertionBuffer;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.VirtualStackSlot;
+import org.graalvm.compiler.lir.alloc.graphcoloring.GraphColoringPhase.Options;
 import org.graalvm.compiler.lir.alloc.graphcoloring.Interval.RegisterPriority;
 import org.graalvm.compiler.lir.alloc.graphcoloring.Interval.UsePosition;
 import org.graalvm.compiler.lir.debug.IntervalDumper;
@@ -54,6 +55,7 @@ import org.graalvm.compiler.lir.framemap.FrameMapBuilder;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.gen.LIRGeneratorTool.MoveFactory;
 
+import javafx.scene.control.SpinnerValueFactory.IntegerSpinnerValueFactory;
 import jdk.vm.ci.code.BailoutException;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.Register.RegisterCategory;
@@ -68,12 +70,12 @@ public class Chaitin implements IntervalDumper {
     private MoveFactory spillMoveFactory;
     private RegisterAllocationConfig registerAllocationConfig;
     private RegisterArray registers;
-    private Liveness LifeTimeAnalysis;
+    private Liveness lifeTimeAnalysis;
     private Interferencegraph[] graphArr;
-    private Stack<StackObject>[] stackArr;
+    private ArrayList<ArrayDeque<StackObject>> stackArr;
     private RegisterArray[] allocRegs;
-    private Stack<StackObject>[] spillStackArr;
-    private Stack<StackObject>[] spilledStackArr;
+    private ArrayList<ArrayDeque<StackObject>> spillStackArr;
+    private ArrayList<ArrayDeque<StackObject>> spilledStackArr;
     private HashMap<RegisterCategory, Number> regCatToRegCatNum;
     private int[][] colorArr;
     private int firstVariableNumber;
@@ -101,18 +103,15 @@ public class Chaitin implements IntervalDumper {
 // ValueList = new ArrayList<>();
         intervals = new Interval[10];
         initAllocRegs();
-        this.LifeTimeAnalysis = new Liveness(registers, lirGenRes, registerAllocationConfig, this);
-        this.graphArr = LifeTimeAnalysis.getInterferencegraph();
-        this.stackArr = new Stack[graphArr.length];
-        this.spillStackArr = new Stack[graphArr.length];
-        this.spilledStackArr = new Stack[graphArr.length];
+        this.lifeTimeAnalysis = new Liveness(registers, lirGenRes, registerAllocationConfig, this);
+        this.graphArr = lifeTimeAnalysis.getInterferencegraph();
         this.colorArr = new int[graphArr.length][];
         this.insertionBuffer = new LIRInsertionBuffer();
 
         initStack();
         fillAllocRegs();
-        this.regCatToRegCatNum = LifeTimeAnalysis.getRegCatToRegCatNum();
-        Debug.log(LifeTimeAnalysis.getCompilationUnitName());
+        this.regCatToRegCatNum = lifeTimeAnalysis.getRegCatToRegCatNum();
+        Debug.log(lifeTimeAnalysis.getCompilationUnitName());
         Debug.log("Graph size: %d", graphArr[0].size());
 
         if (Debug.isLogEnabled()) {
@@ -131,15 +130,18 @@ public class Chaitin implements IntervalDumper {
         colorGraph();
         // dumpLIR();
         int tries = 0;
-        while (!foundColor && !isSpillStackEmpty()) {
+        while (!foundColor && !isSpillStackEmpty() && tries < 500) {
 
             tries++;
-            Debug.log("CompilationUnitName: %s", LifeTimeAnalysis.getCompilationUnitName());
+            Debug.log("CompilationUnitName: %s", lifeTimeAnalysis.getCompilationUnitName());
             Debug.dump(1, lir, "before spillntries: %d", tries);
             Debug.dump(1, this, "before spillntries: %d", tries);
             Debug.log("Spill beginn: ");
-
-            spill();
+            if (Options.LIROptGcIrSpilling.getValue()) {
+                interferenceRegionSpill();
+            } else {
+                spill();
+            }
             Debug.log("Spill end: ");
 
             colorGraph();
@@ -200,7 +202,7 @@ public class Chaitin implements IntervalDumper {
 //
 // }
         Debug.log("\nbeginn Assignment: ");
-        AssignLocations assignLocations = new AssignLocations(registerAllocationConfig, colorArr, allocRegs, lirGenRes, LifeTimeAnalysis, this);
+        AssignLocations assignLocations = new AssignLocations(registerAllocationConfig, colorArr, allocRegs, lirGenRes, lifeTimeAnalysis, this);
         assignLocations.run();
         Debug.log("end Assignment: ");
         Debug.dump(1, lir, "After AssignLocations");
@@ -235,11 +237,9 @@ public class Chaitin implements IntervalDumper {
 // printGraph("After simplify");
 // }
 
-// System.out.println("start");
         Debug.log("\nbeginn select: ");
         select();
         Debug.log("end select: ");
-// System.out.println("end");
 
         Debug.log("Graph size: %d", graphArr[0].size());
 // if (Debug.isLogEnabled()) {
@@ -250,11 +250,365 @@ public class Chaitin implements IntervalDumper {
 
     }
 
+    private void interferenceRegionSpill() {
+        Interval spilledInterval = null;
+
+        for (ArrayDeque<StackObject> s : spillStackArr) {
+            while (!s.isEmpty()) {
+                StackObject o = s.pop();
+                Interval inter = intervalFor(o.id);
+                assert o.spillCandidate;
+                assert inter != null;
+
+                spilledInterval = inter;
+
+                // assert !spilledInterval.isSpilled() : "Interval already spilled";
+                Debug.dump(1, lir, "Before spilling: %s", lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
+                Debug.log("Choose %s for spilling", lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
+                if (!spilledInterval.isSpilled()) {
+                    FrameMapBuilder frameMapBuilder = lirGenRes.getFrameMapBuilder();
+                    VirtualStackSlot slot = frameMapBuilder.allocateSpillSlot(spilledInterval.getKind());
+                    spilledInterval.setSlot(slot);
+                }
+                int def = spilledInterval.getDef();
+
+                ArrayList<UsePosition> usePositions = spilledInterval.getUsePositions();
+
+                ArrayList<ArrayList<LifeRange>> interferenceRegions = getInterferceRegions(spilledInterval, o);
+                spilledInterval.setInterferenceRegions(interferenceRegions);
+                int neighbour = chooseNeighbour(spilledInterval);
+
+                ArrayList<LifeRange> spilledRegions = interferenceRegions.get(neighbour);
+                createNewLifeRanges(spilledInterval, spilledRegions);
+
+// spilledInterval.delRanges();
+//
+// if (usePositions.get(usePositions.size() - 1).getPriority() == RegisterPriority.MustHaveRegister)
+// {
+// spillBlock = getSpillBlock(def);
+// insertionBuffer.init(lir.getLIRforBlock(spillBlock));
+// spillPos = getSpillPos(spillBlock, spilledInterval.getDef());
+// spillPos++;
+// Debug.log("Spilled def instId: %d at index: %d", spilledInterval.getDef(), spillPos);
+//
+// assert spillPos != -1 : "Spill Position not found!";
+//
+// lifeTimeAnalysis.addTemp(spilledInterval, def);
+//
+// insertionBuffer.append(spillPos, spillMoveFactory.createMove(spilledInterval.getSlot(),
+// spilledInterval.getOperand()));
+// insertionBuffer.finish();
+//
+// }
+
+                Debug.log(1, "Spilling %s def: %d priority: %s", getVarName(spilledInterval.getOpId()), def, usePositions.get(usePositions.size() - 1).getPriority());
+
+// for (int i = usePositions.size() - 1; i >= 0; i--) {
+// UsePosition pos = usePositions.get(i);
+//
+// if (pos.getPriority() == RegisterPriority.MustHaveRegister) {
+// int current = pos.getPos();
+//
+// if (current != def) {
+//
+// if ((current & 1) != 0) {
+// current--;
+// lifeTimeAnalysis.addTemp(spilledInterval, current);
+// }
+//
+// Debug.log("ID: %s Def pos: %d spillPos: %d Must have register",
+// lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()), spilledInterval.getDef(), current);
+//
+// spillBlock = getSpillBlock(current);
+// spillPos = getSpillPos(spillBlock, current);
+//
+// assert spillPos != -1 : "Spill Position not found!";
+// insertionBuffer.init(lir.getLIRforBlock(spillBlock));
+// insertionBuffer.append(spillPos, spillMoveFactory.createMove((AllocatableValue)
+// spilledInterval.getOperand(), slot));
+// insertionBuffer.finish();
+// lifeTimeAnalysis.addTemp(spilledInterval, pos.getPos());
+//
+// }
+// }
+// }
+// }
+                if (Debug.isLogEnabled(1)) {
+
+                    ArrayList<LifeRange> lifeRanges = spilledInterval.getLifeRanges();
+                    Debug.log(1, "%s was spilled. New LifeRanges:", lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
+                    for (LifeRange range : lifeRanges) {
+                        Debug.log(1, "Range from: %d to: %d", range.getFrom(), range.getTo());
+                    }
+
+                }
+
+            }
+        }
+        lifeTimeAnalysis.rebuildGraph();
+        graphArr = lifeTimeAnalysis.getInterferencegraph();
+
+    }
+
+    private void createNewLifeRanges(Interval spilledInterval, ArrayList<LifeRange> spilledRegions) {
+
+        int def = spilledInterval.getDef();
+        AbstractBlockBase<?> spillBlock;
+        int spillPos;
+
+        ArrayList<LifeRange> lifeRanges = spilledInterval.getLifeRanges();
+        ArrayList<UsePosition> usePositions = spilledInterval.getUsePositions();
+// System.out.println("Spilled: " + lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
+        ArrayList<LifeRange> lifeRangesNew = new ArrayList<>();
+        spilledInterval.delRanges();
+
+        if (usePositions.get(usePositions.size() - 1).getPriority() == RegisterPriority.MustHaveRegister) {
+            if (!spilledInterval.isSpilled()) {
+                spillBlock = getSpillBlock(def);
+                insertionBuffer.init(lir.getLIRforBlock(spillBlock));
+                spillPos = getSpillPos(spillBlock, spilledInterval.getDef());
+                spillPos++;
+                Debug.log("Spilled def instId: %d at index: %d", spilledInterval.getDef(), spillPos);
+
+                assert spillPos != -1 : "Spill Position not found!";
+
+                lifeTimeAnalysis.addTemp(spilledInterval, def);
+// lifeRangesNew.add(new LifeRange(0, def, def, null));
+
+                insertionBuffer.append(spillPos, spillMoveFactory.createMove(spilledInterval.getSlot(),
+                                spilledInterval.getOperand()));
+                insertionBuffer.finish();
+            } else {
+                lifeTimeAnalysis.addTemp(spilledInterval, def);
+            }
+
+        }
+
+        BitSet live = new BitSet();
+
+        for (int i = usePositions.get(usePositions.size() - 1).getPos(); i <= usePositions.get(0).getPos(); i++) {
+            live.set(i, false);
+            for (LifeRange range : lifeRanges) {
+                if (i >= range.getFrom() && i <= range.getTo()) { // index in live range
+                    live.set(i, true);
+                    for (LifeRange region : spilledRegions) {
+                        if (i >= region.getFrom() && i <= region.getTo()) { // index in region
+                            live.set(i, false);
+                        }
+                    }
+                }
+            }
+
+        }
+        for (int i = usePositions.size() - 1; i > 0; i--) {
+
+// System.out.println("i: " + i + " pos: " + usePositions.get(i).getPos());
+            UsePosition current = usePositions.get(i);
+            UsePosition next = usePositions.get(i - 1);
+            if (current.getPos() != next.getPos()) {
+                for (LifeRange range : lifeRanges) {
+                    if (current.getPos() >= range.getFrom() && current.getPos() <= range.getTo()) { // pos
+                                                                                                    // in
+                                                                                                    // range
+// System.out.println("pos: " + current.getPos() + " next clear: " +
+// live.nextClearBit(current.getPos()));
+
+                        if (next.getPos() >= range.getFrom() && next.getPos() <= range.getTo()) { // next
+                                                                                                  // in
+                                                                                                  // range
+                            if (live.nextClearBit(current.getPos()) > next.getPos()) { // next pos
+                                                                                       // in
+                                                                                       // live Range
+                                                                                       // and
+                                                                                       // not
+                                                                                       // spilled
+// lifeRangesNew.add(new LifeRange(0, current.getPos(), next.getPos(), null));
+// System.out.println("New range: from: " + current.getPos() + " To: " + next.getPos());
+
+                                spilledInterval.addLiveRange(current.getPos(), next.getPos());
+                            } else { // next pos in live Range and spilled
+                                spilledInterval.addSpilledRegion(new LifeRange(0, current.getPos(), next.getPos(), null));
+                                spillPosition(spilledInterval, next);
+                            }
+                        } else { // next not in range
+                            if (live.nextClearBit(current.getPos()) > next.getPos()) { // next pos
+                                                                                       // in
+                                                                                       // live Range
+                                                                                       // and
+                                                                                       // spilled
+// lifeRangesNew.add(new LifeRange(0, current.getPos(), range.getTo(), null));
+// lifeRangesNew.add(new LifeRange(0, live.nextSetBit(range.getTo()), next.getPos(), null));
+
+                                spilledInterval.addLiveRange(current.getPos(), range.getTo());
+                                spilledInterval.addLiveRange(live.nextSetBit(range.getTo()), next.getPos());
+                            } else {
+                                spilledInterval.addSpilledRegion(new LifeRange(0, current.getPos(), range.getTo(), null));
+                                spilledInterval.addSpilledRegion(new LifeRange(0, live.nextSetBit(range.getTo()), next.getPos(), null));
+                                spillPosition(spilledInterval, next);
+                            }
+                        }
+
+                    }
+                }
+            }
+        }
+
+// System.out.println("usePositions.get(first): " + usePositions.get(0).getPos());
+// for (UsePosition pos : usePositions) {
+// System.out.println("UsePos: " + pos.getPos());
+// }
+// for (LifeRange range : lifeRanges) {
+// System.out.println("lifeRange From: " + range.getFrom() + " To: " + range.getTo());
+// }
+// for (LifeRange range : spilledRegions) {
+// System.out.println("spilledRegion From: " + range.getFrom() + " To: " + range.getTo());
+// }
+// System.out.println("");
+
+    }
+
+    private void spillPosition(Interval spilledInterval, UsePosition pos) {
+
+        if (pos.getPriority() == RegisterPriority.MustHaveRegister) {
+            int current = pos.getPos();
+
+            if ((current & 1) != 0) {
+                current--;
+                lifeTimeAnalysis.addTemp(spilledInterval, current);
+            }
+
+            Debug.log("ID: %s Def pos: %d spillPos: %d Must have register",
+                            lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()), spilledInterval.getDef(), current);
+
+            AbstractBlockBase<?> spillBlock = getSpillBlock(current);
+            int spillPos = getSpillPos(spillBlock, current);
+
+            assert spillPos != -1 : "Spill Position not found!";
+            insertionBuffer.init(lir.getLIRforBlock(spillBlock));
+            insertionBuffer.append(spillPos, spillMoveFactory.createMove((AllocatableValue) spilledInterval.getOperand(), spilledInterval.getSlot()));
+            insertionBuffer.finish();
+            lifeTimeAnalysis.addTemp(spilledInterval, pos.getPos());
+
+        }
+
+    }
+
+    private int chooseNeighbour(Interval spilledInterval) {
+        ArrayList<UsePosition> usePositions = spilledInterval.getUsePositions();
+        ArrayList<ArrayList<LifeRange>> regions = spilledInterval.getInterferenceRegions();
+        double[] costs = new double[regions.size()];
+
+        for (UsePosition pos : usePositions) {
+            AbstractBlockBase<?> block = getSpillBlock(pos.getPos());
+            double cost = 0.0;
+            if (block != null) {
+                cost = block.probability();
+            }
+            for (int i = 0; i < regions.size(); i++) {
+                for (LifeRange range : regions.get(i)) {
+                    if (pos.getPos() <= range.getTo() && pos.getPos() >= range.getFrom()) {
+                        costs[i] += cost;
+                    }
+                }
+
+            }
+
+        }
+
+        int neighbour = 0;
+        for (int i = 0; i < regions.size(); i++) {
+            if (costs[i] < costs[neighbour] && spilledInterval.getNeighbour(i) == false) {
+                neighbour = i;
+            }
+        }
+        return neighbour;
+
+    }
+
+    private ArrayList<ArrayList<LifeRange>> getInterferceRegions(Interval spilledInterval, StackObject o) {
+
+        Vector<Integer> neighbours = o.edges;
+
+        ArrayList<ArrayList<LifeRange>> regions = new ArrayList<>();
+
+        for (LifeRange interRange : spilledInterval.getLifeRanges()) {
+
+            int interFrom = interRange.getFrom();
+            int interTo = interRange.getTo();
+
+            for (Integer i : neighbours) {
+
+                while (i >= regions.size()) {
+                    regions.add(new ArrayList<>());
+
+                }
+
+                Interval tempInter = intervalFor(i);
+                ArrayList<LifeRange> tempRanges = tempInter.getLifeRanges();
+
+                for (LifeRange tempRange : tempRanges) {
+
+                    int tempFrom = tempRange.getFrom();
+                    int tempTo = tempRange.getTo();
+                    LifeRange interferenceRange;
+
+                    if (tempFrom <= interTo && interFrom <= tempTo) { // overlap of life Ranges
+
+                        if (tempFrom >= interFrom) { // tempFrom between interFrom and interTo
+                            if (tempTo >= interTo) { // tempTo after interTo
+                                interferenceRange = new LifeRange(i, tempFrom, interTo, null);
+// regions.get(i).add(new LifeRange(i, tempFrom, interTo, null));
+                            } else { // tempTo between interFrom and InterTo
+                                interferenceRange = new LifeRange(i, tempFrom, tempTo, null);
+// regions.get(i).add(new LifeRange(i, tempFrom, tempTo, null));
+                            }
+                        } else {
+                            if (tempTo >= interTo) { // tempTo after interTo
+                                interferenceRange = new LifeRange(i, interFrom, tempTo, null);
+// regions.get(i).add(new LifeRange(i, interFrom, tempTo, null));
+                            } else {
+                                interferenceRange = new LifeRange(i, interFrom, interTo, null);
+// regions.get(i).add(new LifeRange(i, interFrom, interTo, null));
+                            }
+                        }
+                        ArrayList<LifeRange> interferenceRanges = regions.get(i);
+                        if (interferenceRanges.size() > 0) {
+                            LifeRange last = interferenceRanges.get(interferenceRanges.size() - 1);
+                            if (interferenceRange.getFrom() >= last.getTo()) {
+                                last.setTo(interferenceRange.getFrom());
+                            } else {
+                                interferenceRanges.add(interferenceRange);
+                            }
+                        } else {
+                            interferenceRanges.add(interferenceRange);
+
+                        }
+
+                    }
+                }
+            }
+        }
+
+// for (int i = 0; i < regions.size(); i++) {
+//// System.out.println("check regions loop");
+// ArrayList<LifeRange> temp = regions.get(i);
+//
+// if (!temp.isEmpty()) {
+//// System.out.println("Neighbour: " + lifeTimeAnalysis.toString(i));
+// for (LifeRange range : temp) {
+// System.out.println("From: " + range.getFrom() + " To: " + range.getTo());
+// }
+// }
+// }
+        return regions;
+
+    }
+
     private void spill() {
 
         Interval spilledInterval = null;
 
-        for (Stack<StackObject> s : spillStackArr) {
+        for (ArrayDeque<StackObject> s : spillStackArr) {
             while (!s.isEmpty()) {
                 StackObject o = s.pop();
                 Interval inter = intervalFor(o.id);
@@ -268,8 +622,8 @@ public class Chaitin implements IntervalDumper {
                 // }
 
                 assert !spilledInterval.isSpilled() : "Interval already spilled";
-                Debug.dump(1, lir, "Before spilling: %s", LifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
-                Debug.log("Choose %s for spilling", LifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
+                Debug.dump(1, lir, "Before spilling: %s", lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
+                Debug.log("Choose %s for spilling", lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
                 FrameMapBuilder frameMapBuilder = lirGenRes.getFrameMapBuilder();
                 VirtualStackSlot slot = frameMapBuilder.allocateSpillSlot(spilledInterval.getKind());
                 spilledInterval.setSlot(slot);
@@ -278,11 +632,7 @@ public class Chaitin implements IntervalDumper {
                 int spillPos;
                 ArrayList<UsePosition> usePositions = spilledInterval.getUsePositions();
                 spilledInterval.delRanges();
-// if (lirGenRes.getCompilationUnitName().equals("org.h2.index.TreeIndex.findFirstNode(SearchRow,
-// boolean)")) {
-// System.out.println("Spilling " + getVarName(spilledInterval.getOpId()) + " def: " + def + "
-// priority: " + usePositions.get(usePositions.size() - 1).getPriority());
-// }
+
                 Debug.log(1, "Spilling %s def: %d priority: %s", getVarName(spilledInterval.getOpId()), def, usePositions.get(usePositions.size() - 1).getPriority());
                 if (usePositions.get(usePositions.size() - 1).getPriority() == RegisterPriority.MustHaveRegister) {
                     spillBlock = getSpillBlock(def);
@@ -290,14 +640,10 @@ public class Chaitin implements IntervalDumper {
                     spillPos = getSpillPos(spillBlock, spilledInterval.getDef());
                     spillPos++;
                     Debug.log("Spilled def instId: %d at index: %d", spilledInterval.getDef(), spillPos);
-// if (lirGenRes.getCompilationUnitName().equals("org.h2.index.TreeIndex.findFirstNode(SearchRow,
-// boolean)")) {
-// System.out.println("Spilled def instId: " + spilledInterval.getDef() + " at index: " + spillPos);
-// }
 
                     assert spillPos != -1 : "Spill Position not found!";
 
-                    LifeTimeAnalysis.addTemp(spilledInterval, def);
+                    lifeTimeAnalysis.addTemp(spilledInterval, def);
 
                     insertionBuffer.append(spillPos, spillMoveFactory.createMove(slot, spilledInterval.getOperand()));
                     insertionBuffer.finish();
@@ -318,17 +664,13 @@ public class Chaitin implements IntervalDumper {
                         int current = pos.getPos();
 
                         if (current != def) {
-// if (lirGenRes.getCompilationUnitName().equals("org.h2.index.TreeIndex.findFirstNode(SearchRow,
-// boolean)")) {
-// System.out.println("ID: " + LifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()) + " Def
-// pos: " + spilledInterval.getDef() + " spillPos: " + current);
-// }
+
                             if ((current & 1) != 0) {
                                 current--;
-                                LifeTimeAnalysis.addTemp(spilledInterval, current);
+                                lifeTimeAnalysis.addTemp(spilledInterval, current);
                             }
 
-                            Debug.log("ID: %s Def pos: %d spillPos: %d Must have register", LifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()), spilledInterval.getDef(), current);
+                            Debug.log("ID: %s Def pos: %d spillPos: %d Must have register", lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()), spilledInterval.getDef(), current);
 
                             spillBlock = getSpillBlock(current);
                             spillPos = getSpillPos(spillBlock, current);
@@ -337,7 +679,7 @@ public class Chaitin implements IntervalDumper {
                             insertionBuffer.init(lir.getLIRforBlock(spillBlock));
                             insertionBuffer.append(spillPos, spillMoveFactory.createMove((AllocatableValue) spilledInterval.getOperand(), slot));
                             insertionBuffer.finish();
-                            LifeTimeAnalysis.addTemp(spilledInterval, pos.getPos());
+                            lifeTimeAnalysis.addTemp(spilledInterval, pos.getPos());
 
                         }
                     }
@@ -346,30 +688,17 @@ public class Chaitin implements IntervalDumper {
                 if (Debug.isLogEnabled(1)) {
 
                     ArrayList<LifeRange> lifeRanges = spilledInterval.getLifeRanges();
-                    Debug.log(1, "%s was spilled. New LifeRanges:", LifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
+                    Debug.log(1, "%s was spilled. New LifeRanges:", lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
                     for (LifeRange range : lifeRanges) {
                         Debug.log(1, "Range from: %d to: %d", range.getFrom(), range.getTo());
                     }
 
                 }
 
-// if (lirGenRes.getCompilationUnitName().equals("org.h2.index.TreeIndex.findFirstNode(SearchRow,
-// boolean)")) {
-// ArrayList<LifeRange> lifeRanges = spilledInterval.getLifeRanges();
-//
-// System.out.println(LifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()) + " was spilled. New
-// LifeRanges:");
-// for (LifeRange range : lifeRanges) {
-//
-// System.out.println("Range from: " + range.getFrom() + " to: " + range.getTo());
-// }
-// }
-
-                // spilledInterval.delRanges();
             }
         }
-        LifeTimeAnalysis.rebuildGraph();
-        graphArr = LifeTimeAnalysis.getInterferencegraph();
+        lifeTimeAnalysis.rebuildGraph();
+        graphArr = lifeTimeAnalysis.getInterferencegraph();
 
     }
 
@@ -418,10 +747,10 @@ public class Chaitin implements IntervalDumper {
 
     private boolean isSpillStackEmpty() {
 
-        for (int i = 0; i < spillStackArr.length; i++) {
-            if (spillStackArr[i] != null) {
-                if (!spillStackArr[i].empty()) {
-                    Debug.log("foundColoring: SpillStack size: %d", spillStackArr[i].size());
+        for (int i = 0; i < spillStackArr.size(); i++) {
+            if (spillStackArr.get(i) != null) {
+                if (!spillStackArr.get(i).isEmpty()) {
+                    Debug.log("foundColoring: SpillStack size: %d", spillStackArr.get(i).size());
                     return false;
                 }
             }
@@ -432,10 +761,14 @@ public class Chaitin implements IntervalDumper {
     }
 
     private void initStack() {
+        stackArr = new ArrayList<>(graphArr.length);
+        spillStackArr = new ArrayList<>(graphArr.length);
+        spilledStackArr = new ArrayList<>(graphArr.length);
         for (int i = 0; i < graphArr.length; i++) {
-            stackArr[i] = new Stack<>();
-            spillStackArr[i] = new Stack<>();
-            spilledStackArr[i] = new Stack<>();
+
+            stackArr.add(i, new ArrayDeque<>());
+            spillStackArr.add(i, new ArrayDeque<>());
+            spilledStackArr.add(i, new ArrayDeque<>());
             int[] temp = new int[1];
             temp[0] = -1;
             colorArr[i] = temp;
@@ -470,15 +803,15 @@ public class Chaitin implements IntervalDumper {
     }
 
     private void fillAllocRegs() {
-        regCatToRegCatNum = LifeTimeAnalysis.getRegCatToRegCatNum();
+        regCatToRegCatNum = lifeTimeAnalysis.getRegCatToRegCatNum();
 
         RegisterArray temp = registerAllocationConfig.getAllocatableRegisters();
 
         allocRegs = new RegisterArray[regCatToRegCatNum.size()];
 
-        ArrayList<Register>[] tempList = new ArrayList[allocRegs.length];
+        ArrayList<ArrayList<Register>> tempList = new ArrayList<>(allocRegs.length);
         for (int i = 0; i < regCatToRegCatNum.size(); i++) {
-            tempList[i] = new ArrayList<>();
+            tempList.add(i, new ArrayList<>());
         }
 
         for (int i = 0; i < temp.size(); i++) {
@@ -487,11 +820,11 @@ public class Chaitin implements IntervalDumper {
 
             if (regCatToRegCatNum.containsKey(cat)) {
                 int catNum = (int) regCatToRegCatNum.get(cat);
-                tempList[catNum].add(r);
+                tempList.get(catNum).add(r);
             }
         }
         for (int i = 0; i < regCatToRegCatNum.size(); i++) {
-            allocRegs[i] = new RegisterArray(tempList[i]);
+            allocRegs[i] = new RegisterArray(tempList.get(i));
         }
 
     }
@@ -502,8 +835,7 @@ public class Chaitin implements IntervalDumper {
 
             int nRegs = 0;
             Interferencegraph graph = graphArr[i];
-            Stack<StackObject> stack = stackArr[i];
-            Stack<StackObject> spilledstack = spilledStackArr[i];
+            ArrayDeque<StackObject> stack = stackArr.get(i);
             // graph.printGraph(LifeTimeAnalysis);
             Debug.log("Before simplify: graph.size():%d nRegs: %d", graph.size(), nRegs);
 
@@ -522,15 +854,14 @@ public class Chaitin implements IntervalDumper {
                     }
 
                     int reg = regNumtoAllocRegNum(j, regs);
-                    Debug.log(" isRegister: %s regnum: %d", LifeTimeAnalysis.toString(j), reg);
+                    Debug.log(" isRegister: %s regnum: %d", lifeTimeAnalysis.toString(j), reg);
 
                     if (reg == -1) {
                         Debug.log("Fixed register not in allocatable Registers!");
-                        Debug.log(LifeTimeAnalysis.toString(j));
-                        // System.out.println("Registers: " + regs);
+                        Debug.log(lifeTimeAnalysis.toString(j));
+
                     }
-                    // System.out.println("Colors length: " + colors.length + " j: " +
-                    // j);
+
                     colors[j] = reg;
 
                     colorArr[i] = colors;
@@ -553,7 +884,7 @@ public class Chaitin implements IntervalDumper {
                 nodes = graph.getNodeList();
                 for (int v = 0; v < nodes.length; v++) {
                     if (nodes[v] != null) {
-                        s += LifeTimeAnalysis.toStringGraph(v) + " ";
+                        s += lifeTimeAnalysis.toStringGraph(v) + " ";
                         number++;
                     }
                 }
@@ -566,7 +897,7 @@ public class Chaitin implements IntervalDumper {
 
     }
 
-    private void removeNodes(Interferencegraph graph, Stack<Chaitin.StackObject> stack, int k) {
+    private void removeNodes(Interferencegraph graph, ArrayDeque<StackObject> stack, int k) {
         BitSet[] nodes = graph.getNodeList();
         boolean nodeRemoved = true;
         while (nodeRemoved) {
@@ -587,7 +918,7 @@ public class Chaitin implements IntervalDumper {
         }
     }
 
-    private void chooseSpillCandidate(Interferencegraph graph, Stack<Chaitin.StackObject> stack, int k) {
+    private void chooseSpillCandidate(Interferencegraph graph, ArrayDeque<StackObject> stack, int k) {
 
         BitSet[] nodes = graph.getNodeList();
         int min = -1;
@@ -603,13 +934,36 @@ public class Chaitin implements IntervalDumper {
 
                 int ratio = pos.size() / edges.size();
 
-                if (min < 0 || ratio < min) {
+                if ((min < 0 || ratio < min) && (!intervalFor(j).isSpilled())) {
                     min = ratio;
                     spillNode = j;
                 }
 
             }
         }
+        if (spillNode == -1) {
+            min = -1;
+            spillNode = -1;
+
+            for (int j = firstVariableNumber; j < nodes.length; j++) {
+                if (nodes[j] != null) {
+                    Vector<Integer> edges = graph.getEdges(j);
+                    assert edges.size() >= k;
+
+                    Interval inter = intervalFor(j);
+                    ArrayList<UsePosition> pos = inter.getUsePositions();
+
+                    int ratio = pos.size() / edges.size();
+
+                    if ((min < 0 || ratio < min)) {
+                        min = ratio;
+                        spillNode = j;
+                    }
+
+                }
+            }
+        }
+
         assert spillNode != -1;
 
         stack.push(new StackObject(spillNode, graph.getEdges(spillNode), true));
@@ -621,8 +975,8 @@ public class Chaitin implements IntervalDumper {
     private void select() {
         for (int i = 0; i < graphArr.length; i++) {
             Interferencegraph graph = graphArr[i];
-            Stack<StackObject> stack = stackArr[i];
-            Stack<StackObject> spillStack = spillStackArr[i];
+            ArrayDeque<StackObject> stack = stackArr.get(i);
+            ArrayDeque<StackObject> spillStack = spillStackArr.get(i);
             RegisterArray regs = allocRegs[i];
 
             int[] colors = colorArr[i];
@@ -636,15 +990,11 @@ public class Chaitin implements IntervalDumper {
                 }
                 Interval inter = intervalFor(o.id);
 
-                if (o.id < firstVariableNumber) {// if isRegister();
-                    // probably unused
-                    // int reg = regNumtoAllocRegNum(o.id, regs);
-
-                    // System.out.println(" isRegister" + " op id: " + o.id + " regnum: " + reg);
+                if (o.id < firstVariableNumber) { // if isRegister();
 
                     graph.addNode(o.id, o.edges);
 
-                } else {// if isVarable();
+                } else { // if isVarable();
 
                     graph.addNode(o.id, o.edges);
                     int temp = isVarColorAvailable(graph.getEdges(o.id), colors, regs);
@@ -653,18 +1003,19 @@ public class Chaitin implements IntervalDumper {
                         inter.setLocation(regs.get(temp).asValue(inter.getKind()));
 
                         colors[o.id] = temp;
-                        Debug.log("Varableid + name: %s  ColorArr[?]: %d Color: %d Colors.size %d", LifeTimeAnalysis.toString(o.id), i, temp, colors.length);
+                        Debug.log("Varableid + name: %s  ColorArr[?]: %d Color: %d Colors.size %d", lifeTimeAnalysis.toString(o.id), i, temp, colors.length);
 
                     } else {
                         foundColor = false;
                         graph.removeNode(o.id);
 
-                        Debug.log("Variable spill! : %s", LifeTimeAnalysis.toString(o.id));
-                        if (!intervalFor(o.id).isSpilled()) {
+                        Debug.log("Variable spill! : %s", lifeTimeAnalysis.toString(o.id));
+
+                        if (!intervalFor(o.id).isSpilled() || Options.LIROptGcIrSpilling.getValue()) {
                             spillStack.push(o);
                         }
 
-                        Debug.log(1, "Variable spill! : %s neighbours: %d", LifeTimeAnalysis.toString(o.id), o.edges.size());
+                        Debug.log(1, "Variable spill! : %s neighbours: %d", lifeTimeAnalysis.toString(o.id), o.edges.size());
 
                     }
 
@@ -835,7 +1186,7 @@ public class Chaitin implements IntervalDumper {
         return intervals;
     }
 
-    public Interval AddValue(Value operand, int opId) {
+    public Interval addValue(Value operand, int opId) {
         Interval v;
         while (intervals.length <= opId) {
             intervals = resizeArray(intervals);
@@ -870,7 +1221,7 @@ public class Chaitin implements IntervalDumper {
 
     private void printGraph(String s) {
         for (int i = 0; i < graphArr.length; i++) {
-            graphArr[i].printGraph(LifeTimeAnalysis, s);
+            graphArr[i].printGraph(lifeTimeAnalysis, s);
 
         }
     }
@@ -879,7 +1230,7 @@ public class Chaitin implements IntervalDumper {
 
         for (int i = 0; i < colorArr.length; i++) {
             try {
-                File f = new File(".." + File.separator + "Colors_" + i + "_" + LifeTimeAnalysis.getCompilationUnitName() + new Date().getTime() + ".txt");
+                File f = new File(".." + File.separator + "Colors_" + i + "_" + lifeTimeAnalysis.getCompilationUnitName() + new Date().getTime() + ".txt");
                 f.createNewFile();
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f)));
                 writer.write("Graph: " + i + "\n");
@@ -887,7 +1238,7 @@ public class Chaitin implements IntervalDumper {
                     int temp = colorArr[i][j];
                     if (temp != -1) {
 
-                        writer.write(LifeTimeAnalysis.toStringGraph(j) + " " + temp + "\n");
+                        writer.write(lifeTimeAnalysis.toStringGraph(j) + " " + temp + "\n");
                     }
 
                 }
@@ -971,8 +1322,8 @@ public class Chaitin implements IntervalDumper {
         for (LifeRange range : ranges) {
             int from = range.getFrom();
             int to = range.getTo();
-            if (to - from == 0) {// If live range is spilled, it has a length of 0. We set the
-                                 // length to 1 in order to be shown in the c1 visualizer.
+            if (to - from == 0) { // If live range is spilled, it has a length of 0. We set the
+                                  // length to 1 in order to be shown in the c1 visualizer.
                 to += 1;
             }
 
@@ -1059,6 +1410,6 @@ public class Chaitin implements IntervalDumper {
 
     public String getVarName(int opId) {
 
-        return LifeTimeAnalysis.toString(opId);
+        return lifeTimeAnalysis.toString(opId);
     }
 }

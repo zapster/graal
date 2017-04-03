@@ -1,9 +1,33 @@
+/*
+ * Copyright (c) 2015, 2015, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
 package org.graalvm.compiler.lir.alloc.graphcoloring;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 
 import org.graalvm.compiler.core.common.util.IntList;
 import org.graalvm.compiler.lir.VirtualStackSlot;
+import org.graalvm.compiler.lir.alloc.graphcoloring.GraphColoringPhase.Options;
 
 import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
@@ -14,6 +38,7 @@ public class Interval {
     private int opId;
     private ArrayList<LifeRange> lifeRanges;
     private ArrayList<UsePosition> usePositions;
+    private ArrayList<LifeRange> spilledRegions;
     private IntList usePositions1;
     private int defPos;
     private int catNum;
@@ -22,6 +47,8 @@ public class Interval {
     private Value location;
     private ValueKind<?> kind;
     private RegisterPriority priority;
+    private ArrayList<ArrayList<LifeRange>> interferenceRegions;
+    private BitSet spilledNeighbours;
 
     public Interval(Value operand, int opId) {
         this.operand = operand;
@@ -30,6 +57,7 @@ public class Interval {
 
         usePositions = new ArrayList<>();
         usePositions1 = new IntList(0);
+        spilledNeighbours = new BitSet();
 
         defPos = -1;
         catNum = -1;
@@ -39,6 +67,7 @@ public class Interval {
         this.setLocation(null);
         this.setPriority(RegisterPriority.None);
 
+        this.setSpilledRegions(new ArrayList<>());
     }
 
     public void setCatNum(int catNum) {
@@ -56,6 +85,14 @@ public class Interval {
     public Value getOperand() {
 
         return operand;
+    }
+
+    public void setNeighbour(int n, boolean set) {
+        spilledNeighbours.set(n, set);
+    }
+
+    public boolean getNeighbour(int n) {
+        return spilledNeighbours.get(n);
     }
 
     public void addUse(int pos, RegisterPriority prio) {
@@ -105,8 +142,11 @@ public class Interval {
     }
 
     public void addLiveRange(int from, int to) {
-        assert from < to : "invalid range";
-
+        if (Options.LIROptGcIrSpilling.getValue()) {
+            assert from <= to : "invalid range";
+        } else {
+            assert from < to : "invalid range";
+        }
         if (first.getFrom() <= to) {
 
             first.setFrom((from < first.getFrom()) ? from : first.getFrom());
@@ -135,7 +175,7 @@ public class Interval {
             int curFrom = currentRange.getFrom();
             int curTo = currentRange.getTo();
 
-            if (isSpilled() && spilledRange) {// both spilled
+            if (isSpilled() && spilledRange) { // both spilled
 
                 if (tempFrom == curFrom) {
                     return true;
@@ -143,12 +183,12 @@ public class Interval {
             }
             if (isSpilled()) {
 
-                if (curFrom < tempFrom && tempFrom <= curTo) {// a between x and y
+                if (curFrom < tempFrom && tempFrom <= curTo) { // a between x and y
                     return true;
                 }
             }
             if (spilledRange) {
-                if (tempFrom < curFrom && curFrom <= tempTo) {// x between a and b
+                if (tempFrom < curFrom && curFrom <= tempTo) { // x between a and b
                     return true;
                 }
             } else {
@@ -157,13 +197,13 @@ public class Interval {
                 if (tempFrom <= curFrom && curFrom <= tempTo) { // x between a and b
 // Debug.log("true");
                     return true;
-                } else if (tempFrom <= curTo && curTo <= tempTo) {// y between a and b
+                } else if (tempFrom <= curTo && curTo <= tempTo) { // y between a and b
 // Debug.log("true");
                     return true;
-                } else if (curFrom <= tempFrom && tempFrom <= curTo) {// a between x and y
+                } else if (curFrom <= tempFrom && tempFrom <= curTo) { // a between x and y
 // Debug.log("true");
                     return true;
-                } else if (curFrom <= tempTo && tempTo <= curTo) {// b between x and y
+                } else if (curFrom <= tempTo && tempTo <= curTo) { // b between x and y
 // Debug.log("true");
                     return true;
 
@@ -213,6 +253,30 @@ public class Interval {
 
     public boolean isSpilled() {
         return slot != null;
+    }
+
+    public boolean isRegionSpilled() {
+        return spilledRegions.size() > 0;
+    }
+
+    public ArrayList<LifeRange> getSpilledRegions() {
+        return spilledRegions;
+    }
+
+    public void setSpilledRegions(ArrayList<LifeRange> spilledRegions) {
+        this.spilledRegions = spilledRegions;
+    }
+
+    public void addSpilledRegion(LifeRange range) {
+        spilledRegions.add(range);
+    }
+
+    public ArrayList<ArrayList<LifeRange>> getInterferenceRegions() {
+        return interferenceRegions;
+    }
+
+    public void setInterferenceRegions(ArrayList<ArrayList<LifeRange>> interferenceRegions) {
+        this.interferenceRegions = interferenceRegions;
     }
 
     public enum RegisterPriority {
@@ -271,6 +335,24 @@ public class Interval {
             return priority;
         }
 
+    }
+
+    public boolean isSpilledRegion(int id) {
+        for (LifeRange region : spilledRegions) {
+            if (id >= region.getFrom() && id <= region.getTo()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isAlive(int id) {
+        for (LifeRange range : lifeRanges) {
+            if (id >= range.getFrom() && id <= range.getTo()) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }

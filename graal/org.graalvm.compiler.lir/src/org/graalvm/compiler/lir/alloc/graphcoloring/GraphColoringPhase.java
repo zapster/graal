@@ -42,6 +42,10 @@ public class GraphColoringPhase extends AllocationPhase {
         @Option(help = "", type = OptionType.Debug)
         public static final OptionValue<Boolean> LIROptGraphColoringPhase = new OptionValue<>(false);
         // @formatter:on
+        // @formatter:off
+        @Option(help = "", type = OptionType.Debug)
+        public static final OptionValue<Boolean> LIROptGcIrSpilling = new OptionValue<>(false);
+        // @formatter:on
     }
 
     @Override
