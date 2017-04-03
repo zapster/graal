@@ -265,11 +265,11 @@ public class Chaitin implements IntervalDumper {
                 // assert !spilledInterval.isSpilled() : "Interval already spilled";
                 Debug.dump(1, lir, "Before spilling: %s", lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
                 Debug.log("Choose %s for spilling", lifeTimeAnalysis.toStringGraph(spilledInterval.getOpId()));
-                if (!spilledInterval.isSpilled()) {
-                    FrameMapBuilder frameMapBuilder = lirGenRes.getFrameMapBuilder();
-                    VirtualStackSlot slot = frameMapBuilder.allocateSpillSlot(spilledInterval.getKind());
-                    spilledInterval.setSlot(slot);
-                }
+// if (!spilledInterval.isSpilled()) {
+// FrameMapBuilder frameMapBuilder = lirGenRes.getFrameMapBuilder();
+// VirtualStackSlot slot = frameMapBuilder.allocateSpillSlot(spilledInterval.getKind());
+// spilledInterval.setSlot(slot);
+// }
                 int def = spilledInterval.getDef();
 
                 ArrayList<UsePosition> usePositions = spilledInterval.getUsePositions();
@@ -364,6 +364,9 @@ public class Chaitin implements IntervalDumper {
 
         if (usePositions.get(usePositions.size() - 1).getPriority() == RegisterPriority.MustHaveRegister) {
             if (!spilledInterval.isSpilled()) {
+                FrameMapBuilder frameMapBuilder = lirGenRes.getFrameMapBuilder();
+                VirtualStackSlot slot = frameMapBuilder.allocateSpillSlot(spilledInterval.getKind());
+                spilledInterval.setSlot(slot);
                 spillBlock = getSpillBlock(def);
                 insertionBuffer.init(lir.getLIRforBlock(spillBlock));
                 spillPos = getSpillPos(spillBlock, spilledInterval.getDef());
