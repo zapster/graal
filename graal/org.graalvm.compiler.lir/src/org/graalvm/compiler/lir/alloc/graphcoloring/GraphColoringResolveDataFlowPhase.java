@@ -145,9 +145,11 @@ public class GraphColoringResolveDataFlowPhase {
             if (Options.LIROptGcIrSpilling.getValue()) {
                 Interval[] intervals = allocator.getIntervals();
                 for (int i = 0; i < intervals.length; i++) {
-                    if (intervals[i] != null && intervals[i].isSpilledRegion(fromBlockLastInstructionId) && !intervals[i].isSpilledRegion(toBlockFirstInstructionId) &&
-                                    intervals[i].isAlive(toBlockFirstInstructionId)) {
-                        moveResolver.addMapping(intervals[i].getSlot(), intervals[i].getLocation());
+                    if (intervals[i] != null) {
+                        if (needsMapping(fromBlockLastInstructionId, toBlockFirstInstructionId, intervals[i])) {
+
+                            moveResolver.addMapping(intervals[i].getSlot(), intervals[i].getLocation());
+                        }
                     }
                 }
 
@@ -188,6 +190,25 @@ public class GraphColoringResolveDataFlowPhase {
             SSAUtil.forEachPhiValuePair(allocator.getLIR(), toBlock, phiOutBlock, visitor);
             SSAUtil.removePhiOut(allocator.getLIR(), phiOutBlock);
         }
+    }
+
+    private static boolean needsMapping(int fromBlockLastInstructionId, int toBlockFirstInstructionId, Interval inter) {
+
+        if (inter.isSpilled()) { // only needed if spilled
+            if (fromBlockLastInstructionId >= inter.getDef()) { // no mapping if def in beginning of
+                                                                // next block
+                if (inter.isInLiveRange(toBlockFirstInstructionId)) { // alive in to Block
+                    if (!inter.isInLiveRange(fromBlockLastInstructionId)) { // not alive in from
+                        return true;                                         // block
+
+                    }
+                }
+
+            }
+
+        }
+
+        return false;
     }
 
 }

@@ -96,7 +96,7 @@ public class AssignLocations {
                     } else {
                         if (Options.LIROptGcIrSpilling.getValue()) {
 
-                            if (inter.isSpilledRegion(inst.id())) {
+                            if (inter.isInLiveRange(inst.id())) {
                                 RegisterPriority priority = findUsePosPriority(inst.id(), inter);
                                 if (inst.id() == -1) { // move from or to stackslot, replace with
                                     // location!

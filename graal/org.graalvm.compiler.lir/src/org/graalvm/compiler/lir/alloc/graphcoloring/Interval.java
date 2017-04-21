@@ -38,7 +38,7 @@ public class Interval {
     private int opId;
     private ArrayList<LifeRange> lifeRanges;
     private ArrayList<UsePosition> usePositions;
-    private ArrayList<LifeRange> spilledRegions;
+
     private IntList usePositions1;
     private int defPos;
     private int catNum;
@@ -67,7 +67,6 @@ public class Interval {
         this.setLocation(null);
         this.setPriority(RegisterPriority.None);
 
-        this.setSpilledRegions(new ArrayList<>());
     }
 
     public void setCatNum(int catNum) {
@@ -87,11 +86,11 @@ public class Interval {
         return operand;
     }
 
-    public void setNeighbour(int n, boolean set) {
+    public void setNeighbourSpilled(int n, boolean set) {
         spilledNeighbours.set(n, set);
     }
 
-    public boolean getNeighbour(int n) {
+    public boolean isNeighbourSpilled(int n) {
         return spilledNeighbours.get(n);
     }
 
@@ -255,28 +254,17 @@ public class Interval {
         return slot != null;
     }
 
-    public boolean isRegionSpilled() {
-        return spilledRegions.size() > 0;
-    }
-
-    public ArrayList<LifeRange> getSpilledRegions() {
-        return spilledRegions;
-    }
-
-    public void setSpilledRegions(ArrayList<LifeRange> spilledRegions) {
-        this.spilledRegions = spilledRegions;
-    }
-
-    public void addSpilledRegion(LifeRange range) {
-        spilledRegions.add(range);
-    }
-
     public ArrayList<ArrayList<LifeRange>> getInterferenceRegions() {
         return interferenceRegions;
     }
 
     public void setInterferenceRegions(ArrayList<ArrayList<LifeRange>> interferenceRegions) {
         this.interferenceRegions = interferenceRegions;
+    }
+
+    @Override
+    public String toString() {
+        return operand.toString();
     }
 
     public enum RegisterPriority {
@@ -318,13 +306,14 @@ public class Interval {
     }
 
     public class UsePosition {
+        private boolean restored;
         private int pos;
         private RegisterPriority priority;
 
         public UsePosition(int pos, RegisterPriority priority) {
             this.pos = pos;
             this.priority = priority;
-
+            this.restored = false;
         }
 
         public int getPos() {
@@ -335,18 +324,21 @@ public class Interval {
             return priority;
         }
 
-    }
-
-    public boolean isSpilledRegion(int id) {
-        for (LifeRange region : spilledRegions) {
-            if (id >= region.getFrom() && id <= region.getTo()) {
-                return true;
-            }
+        public boolean isRestored() {
+            return restored;
         }
-        return false;
+
+        public void setRestored(boolean set) {
+            restored = set;
+        }
+
+        @Override
+        public String toString() {
+            return pos + " " + priority.toString();
+        }
     }
 
-    public boolean isAlive(int id) {
+    public boolean isInLiveRange(int id) {
         for (LifeRange range : lifeRanges) {
             if (id >= range.getFrom() && id <= range.getTo()) {
                 return true;

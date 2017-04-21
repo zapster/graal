@@ -66,4 +66,8 @@ public class LifeRange {
         this.next = next;
     }
 
+    @Override
+    public String toString() {
+        return "from: " + from + " to: " + to;
+    }
 }
