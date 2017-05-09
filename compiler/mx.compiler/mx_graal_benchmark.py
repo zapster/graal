@@ -274,6 +274,9 @@ class CounterBenchmarkMixin(DebugValueBenchmarkMixin):
         "FinalNodeCount",
         "GeneratedLIRInstructions",
         "InstalledCodeSize",
+        "TraceRA[TraceLinearScanPhase]",
+        "TraceRA[TrivialTraceAllocator]",
+        "TraceRA[BottomUpAllocator]",
     ]
 
     @staticmethod
