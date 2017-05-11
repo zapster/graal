@@ -24,6 +24,13 @@ local compiler_suite_root = (import "../ci.jsonnet").compiler_suite_root;
       "Graal diagnostic output saved in (?P<filename>.+\\.zip)",
     ],
   },
+  Target:: {
+    Daily : { targets+:["daily"]},
+    PostMerge : { targets+:["post-merge"]},
+    Weekly: { targets+:["weekly"]},
+    Bench : { targets+:["bench"]},
+    Gate : { targets+:["Gate"]},
+  },
   CompilerCommonBuild:: self.GraalCommonBuild {
     setup: [
       ["cd", compiler_suite_root],
@@ -58,9 +65,37 @@ local compiler_suite_root = (import "../ci.jsonnet").compiler_suite_root;
     capabilities+: ["linux"],
     name+: "-linux",
   },
+  Solaris:: {
+    packages+: {
+      git: ">=1.8.3",
+      mercurial: ">=2.2",
+      "pip:astroid": "==1.1.0",
+      "pip:pylint": "==1.1.0",
+    },
+    capabilities+: ["solaris"],
+    name+: "-solaris",
+  },
+  Darwin : {
+    packages+: {
+      # Brew does not support versions
+      mercurial : "",
+      "pip:astroid": "==1.1.0",
+      "pip:pylint": "==1.1.0",
+    },
+    environment+: {
+      # we might need to do something like PATH+: and set it to PATH:"$PATH" in Build
+      PATH : "/usr/local/bin:$PATH",
+    },
+    capabilities+: ["darwin"],
+    name+: "-darwin",
+  },
   # architecture mixins
   AMD64:: {
     capabilities+: ["amd64"],
     name+: "-amd64",
+  },
+  SPARCv9:: {
+    capabilities+: ["sparcv9"],
+    name+: "-sparcv9",
   },
 }

@@ -6,4 +6,7 @@
   Tmpfs10G:: {
     capabilities+: ["tmpfs10g"],
   },
+  Tmpfs25G:: {
+    capabilities+: ["tmpfs25g"],
+  },
 }

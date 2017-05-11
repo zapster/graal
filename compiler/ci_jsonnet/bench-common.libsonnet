@@ -1,4 +1,6 @@
-local CompilerCommonBuild = (import "common.libsonnet").CompilerCommonBuild;
+local common = import "common.libsonnet";
+local CompilerCommonBuild = common.CompilerCommonBuild;
+local target = common.Target;
 
 {
   #
@@ -10,7 +12,7 @@ local CompilerCommonBuild = (import "common.libsonnet").CompilerCommonBuild;
       benchmark_args:: [],
       cmd:: self.mx_cmd + ["--"] + self.suite_args + ["--"] + self.benchmark_args,
   },
-  MxBenchmarkBuild:: CompilerCommonBuild {
+  MxBenchmarkBuild:: CompilerCommonBuild + target.Bench {
     bench_suite:: error "no benchmark suite defined",
     bench_suite_name:: self.bench_suite,
     jvm_config:: error "no jvm_config defined",
