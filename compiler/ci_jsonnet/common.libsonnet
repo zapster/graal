@@ -29,7 +29,7 @@ local compiler_suite_root = (import "../ci.jsonnet").compiler_suite_root;
     PostMerge : { targets+:["post-merge"]},
     Weekly: { targets+:["weekly"]},
     Bench : { targets+:["bench"]},
-    Gate : { targets+:["Gate"]},
+    Gate : { targets+:["gate"]},
   },
   CompilerCommonBuild:: self.GraalCommonBuild {
     setup: [
