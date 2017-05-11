@@ -1,1 +1,4 @@
-import "ci_jsonnet/trace-policies.jsonnet"
+{
+  compiler_suite_root::  "./compiler",
+} +
+(import "ci_jsonnet/bench-tasks.jsonnet")
