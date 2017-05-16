@@ -22,14 +22,10 @@
  */
 package org.graalvm.compiler.truffle.test;
 
-import jdk.vm.ci.code.BailoutException;
-
-import org.junit.Assert;
-import org.junit.Test;
-
 import org.graalvm.compiler.code.SourceStackTraceBailoutException;
 import org.graalvm.compiler.replacements.PEGraphDecoder;
 import org.graalvm.compiler.truffle.OptimizedCallTarget;
+import org.graalvm.compiler.truffle.TruffleCompilerOptions;
 import org.graalvm.compiler.truffle.test.nodes.AbstractTestNode;
 import org.graalvm.compiler.truffle.test.nodes.AddTestNode;
 import org.graalvm.compiler.truffle.test.nodes.BlockTestNode;
@@ -47,10 +43,17 @@ import org.graalvm.compiler.truffle.test.nodes.RecursionTestNode;
 import org.graalvm.compiler.truffle.test.nodes.RootTestNode;
 import org.graalvm.compiler.truffle.test.nodes.StoreLocalTestNode;
 import org.graalvm.compiler.truffle.test.nodes.StringEqualsNode;
+import org.graalvm.compiler.truffle.test.nodes.StringHashCodeFinalNode;
+import org.graalvm.compiler.truffle.test.nodes.StringHashCodeNonFinalNode;
 import org.graalvm.compiler.truffle.test.nodes.SynchronizedExceptionMergeNode;
 import org.graalvm.compiler.truffle.test.nodes.TwoMergesExplodedLoopTestNode;
+import org.junit.Assert;
+import org.junit.Test;
+
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.nodes.RootNode;
+
+import jdk.vm.ci.code.BailoutException;
 
 public class SimplePartialEvaluationTest extends PartialEvaluationTest {
 
@@ -184,7 +187,7 @@ public class SimplePartialEvaluationTest extends PartialEvaluationTest {
     public void allowedRecursion() {
         /* Recursion depth just below the threshold that reports it as too deep recursion. */
         FrameDescriptor fd = new FrameDescriptor();
-        AbstractTestNode result = new RecursionTestNode(PEGraphDecoder.Options.InliningDepthError.getValue() - 5);
+        AbstractTestNode result = new RecursionTestNode(TruffleCompilerOptions.getValue(PEGraphDecoder.Options.InliningDepthError) - 5);
         assertPartialEvalEquals("constant42", new RootTestNode(fd, "allowedRecursion", result));
     }
 
@@ -192,7 +195,7 @@ public class SimplePartialEvaluationTest extends PartialEvaluationTest {
     public void tooDeepRecursion() {
         /* Recursion depth just above the threshold that reports it as too deep recursion. */
         FrameDescriptor fd = new FrameDescriptor();
-        AbstractTestNode result = new RecursionTestNode(PEGraphDecoder.Options.InliningDepthError.getValue());
+        AbstractTestNode result = new RecursionTestNode(TruffleCompilerOptions.getValue(PEGraphDecoder.Options.InliningDepthError));
         assertPartialEvalEquals("constant42", new RootTestNode(fd, "tooDeepRecursion", result));
     }
 
@@ -270,5 +273,26 @@ public class SimplePartialEvaluationTest extends PartialEvaluationTest {
         FrameDescriptor fd = new FrameDescriptor();
         AbstractTestNode result = new ExplodeLoopUntilReturnWithThrowNode();
         assertPartialEvalEquals("constant42", new RootTestNode(fd, "explodeLoopUntilReturnWithThrow", result));
+    }
+
+    @Test
+    public void intrinsicStringHashCodeFinal() {
+        /* The intrinsic for String.hashcode() triggers on constant strings. */
+        FrameDescriptor fd = new FrameDescriptor();
+        AbstractTestNode result = new StringHashCodeFinalNode("*");
+        /* The hash code of "*" is 42. */
+        assertPartialEvalEquals("constant42", new RootTestNode(fd, "intrinsicStringHashCodeFinal", result));
+    }
+
+    @Test
+    public void intrinsicStringHashCodeNonFinal() {
+        /*
+         * The intrinsic for String.hashcode() does not trigger on non-constant strings, so the
+         * method String.hashCode() must be inlined during partial evaluation (so there must not be
+         * an invoke after partial evaluation).
+         */
+        FrameDescriptor fd = new FrameDescriptor();
+        AbstractTestNode result = new StringHashCodeNonFinalNode("*");
+        assertPartialEvalNoInvokes(new RootTestNode(fd, "intrinsicStringHashCodeNonFinal", result));
     }
 }

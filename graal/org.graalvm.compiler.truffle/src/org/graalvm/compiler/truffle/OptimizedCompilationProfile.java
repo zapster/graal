@@ -24,6 +24,7 @@ package org.graalvm.compiler.truffle;
 
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleArgumentTypeSpeculation;
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleCompilationThreshold;
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleCompileImmediately;
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleInvalidationReprofileCount;
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleMinInvokeThreshold;
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleReplaceReprofileCount;
@@ -57,22 +58,60 @@ public class OptimizedCompilationProfile {
     private long timestamp;
 
     @CompilationFinal(dimensions = 1) private Class<?>[] profiledArgumentTypes;
-    @CompilationFinal private Assumption profiledArgumentTypesAssumption;
+    @CompilationFinal private OptimizedAssumption profiledArgumentTypesAssumption;
     @CompilationFinal private Class<?> profiledReturnType;
-    @CompilationFinal private Assumption profiledReturnTypeAssumption;
+    @CompilationFinal private OptimizedAssumption profiledReturnTypeAssumption;
     @CompilationFinal private Class<?> exceptionType;
 
     private volatile boolean compilationFailed;
 
     public OptimizedCompilationProfile() {
-        compilationCallThreshold = TruffleMinInvokeThreshold.getValue();
-        compilationCallAndLoopThreshold = TruffleCompilationThreshold.getValue();
+        compilationCallThreshold = TruffleCompilerOptions.getValue(TruffleMinInvokeThreshold);
+        compilationCallAndLoopThreshold = TruffleCompilerOptions.getValue(TruffleCompilationThreshold);
     }
 
     @Override
     public String toString() {
         return String.format("CompilationProfile(callCount=%d/%d, callAndLoopCount=%d/%d)", interpreterCallCount, compilationCallThreshold, interpreterCallAndLoopCount,
                         compilationCallAndLoopThreshold);
+    }
+
+    Class<?>[] getProfiledArgumentTypes() {
+        if (profiledArgumentTypesAssumption == null) {
+            /*
+             * We always need an assumption. If this method is called before the profile was
+             * initialized, we have to be conservative and disable profiling, which is done by
+             * creating an invalid assumption but leaving the type field null.
+             */
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            profiledArgumentTypesAssumption = createAssumption("Profiled Argument Types");
+            profiledArgumentTypesAssumption.invalidate();
+        }
+
+        if (profiledArgumentTypesAssumption.isValid()) {
+            return profiledArgumentTypes;
+        } else {
+            return null;
+        }
+    }
+
+    Class<?> getProfiledReturnType() {
+        if (profiledReturnTypeAssumption == null) {
+            /*
+             * We always need an assumption. If this method is called before the profile was
+             * initialized, we have to be conservative and disable profiling, which is done by
+             * creating an invalid assumption but leaving the type field null.
+             */
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            profiledReturnTypeAssumption = createAssumption("Profiled Return Type");
+            profiledReturnTypeAssumption.invalidate();
+        }
+
+        if (profiledReturnTypeAssumption.isValid()) {
+            return profiledReturnType;
+        } else {
+            return null;
+        }
     }
 
     @ExplodeLoop
@@ -123,9 +162,9 @@ public class OptimizedCompilationProfile {
         if (CompilerDirectives.inInterpreter() && returnTypeAssumption == null) {
             // we only profile return values in the interpreter as we don't want to deoptimize
             // for immediate compiles.
-            if (TruffleReturnTypeSpeculation.getValue()) {
+            if (TruffleCompilerOptions.getValue(TruffleReturnTypeSpeculation)) {
                 profiledReturnType = classOf(result);
-                profiledReturnTypeAssumption = Truffle.getRuntime().createAssumption("Profiled Return Type");
+                profiledReturnTypeAssumption = createAssumption("Profiled Return Type");
             }
         } else if (profiledReturnType != null) {
             if (result == null || profiledReturnType != result.getClass()) {
@@ -200,13 +239,13 @@ public class OptimizedCompilationProfile {
 
     final void reportInvalidated() {
         invalidationCount++;
-        int reprofile = TruffleInvalidationReprofileCount.getValue();
+        int reprofile = TruffleCompilerOptions.getValue(TruffleInvalidationReprofileCount);
         ensureProfiling(reprofile, reprofile);
     }
 
     final void reportNodeReplaced() {
         // delay compilation until tree is deemed stable enough
-        int replaceBackoff = TruffleReplaceReprofileCount.getValue();
+        int replaceBackoff = TruffleCompilerOptions.getValue(TruffleReplaceReprofileCount);
         ensureProfiling(1, replaceBackoff);
     }
 
@@ -221,18 +260,20 @@ public class OptimizedCompilationProfile {
         if (!callTarget.isCompiling() && !compilationFailed) {
             // check if call target is hot enough to get compiled, but took not too long to get hot
             if ((intAndLoopCallCount >= compilationCallAndLoopThreshold && intCallCount >= compilationCallThreshold && !isDeferredCompile(callTarget)) ||
-                            TruffleCompilerOptions.TruffleCompileImmediately.getValue()) {
+                            TruffleCompilerOptions.getValue(TruffleCompileImmediately)) {
                 callTarget.compile();
             }
         }
     }
 
     private boolean isDeferredCompile(OptimizedCallTarget target) {
-        long threshold = TruffleTimeThreshold.getValue();
+        // Workaround for https://bugs.eclipse.org/bugs/show_bug.cgi?id=440019
+        int thresholdInt = TruffleCompilerOptions.getValue(TruffleTimeThreshold);
+        long threshold = thresholdInt;
 
-        CompilerOptions options = target.getCompilerOptions();
-        if (options instanceof GraalCompilerOptions) {
-            threshold = Math.max(threshold, ((GraalCompilerOptions) options).getMinTimeThreshold());
+        CompilerOptions compilerOptions = target.getCompilerOptions();
+        if (compilerOptions instanceof GraalCompilerOptions) {
+            threshold = Math.max(threshold, ((GraalCompilerOptions) compilerOptions).getMinTimeThreshold());
         }
 
         long time = getTimestamp();
@@ -251,13 +292,13 @@ public class OptimizedCompilationProfile {
     }
 
     private static int getTimestampThreshold() {
-        return Math.max(TruffleCompilationThreshold.getValue() / 2, 1);
+        return Math.max(TruffleCompilerOptions.getValue(TruffleCompilationThreshold) / 2, 1);
     }
 
     private void initializeProfiledArgumentTypes(Object[] args) {
         CompilerAsserts.neverPartOfCompilation();
-        profiledArgumentTypesAssumption = Truffle.getRuntime().createAssumption("Profiled Argument Types");
-        if (TruffleArgumentTypeSpeculation.getValue()) {
+        profiledArgumentTypesAssumption = createAssumption("Profiled Argument Types");
+        if (TruffleCompilerOptions.getValue(TruffleArgumentTypeSpeculation)) {
             Class<?>[] result = new Class<?>[args.length];
             for (int i = 0; i < args.length; i++) {
                 result[i] = classOf(args[i]);
@@ -272,7 +313,7 @@ public class OptimizedCompilationProfile {
         for (int j = 0; j < types.length; j++) {
             types[j] = joinTypes(types[j], classOf(args[j]));
         }
-        profiledArgumentTypesAssumption = Truffle.getRuntime().createAssumption("Profiled Argument Types");
+        profiledArgumentTypesAssumption = createAssumption("Profiled Argument Types");
     }
 
     private static Class<?> classOf(Object arg) {
@@ -342,4 +383,7 @@ public class OptimizedCompilationProfile {
         return new OptimizedCompilationProfile();
     }
 
+    private static OptimizedAssumption createAssumption(String name) {
+        return (OptimizedAssumption) Truffle.getRuntime().createAssumption(name);
+    }
 }

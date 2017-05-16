@@ -1,16 +1,22 @@
 # overlay version
-overlay = a2d443535b19d206bf0082b3716cef407782f5fd
+overlay = d8d8bb68148b7e5a1ec7958a55f4a340397a3757
 
 java7 : {name : oraclejdk, version : "7",    platformspecific: true}
-java8 : {name : labsjdk, version : "8u111-jvmci-0.24-dev", platformspecific: true}
-java9 : {name : labsjdk, version : "9-SNAPSHOT", platformspecific: true}
-java9EA : {name : labsjdk, version : "9-ea+143", platformspecific: true}
-java8Debug : {name : labsjdk, version : "8u111-jvmci-0.24-dev-fastdebug", platformspecific: true}
+java8 : {name : labsjdk, version : "8u121-jvmci-0.25", platformspecific: true}
+java9 : {name : labsjdk, version : "9-20170301-144518", platformspecific: true}
+java9EA : {name : labsjdk, version : "9-ea+161", platformspecific: true}
+java8Debug : {name : labsjdk, version : "8u121-jvmci-0.25-fastdebug", platformspecific: true}
+
+# Overlay placeholder for pinning mx to a specific revision
+mx : {}
 
 chdirToSuite : ["cd", ${suite-root}]
-common : {
+common : ${mx} {
   setup : [${chdirToSuite}]
   timelimit : "30:00"
+  catch_files : [
+    "Graal diagnostic output saved in (?P<filename>.+\.zip)"
+  ]
 }
 
 commonLinux : ${common} {
@@ -34,7 +40,6 @@ commonSolaris : ${common} {
 commonDarwin : ${common} {
   packages : {
     # Brew does not support versions
-    git : ""
     mercurial : ""
     "pip:astroid" : "==1.1.0"
     "pip:pylint" : "==1.1.0"

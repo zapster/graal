@@ -22,25 +22,17 @@
  */
 package org.graalvm.compiler.hotspot;
 
+import org.graalvm.compiler.core.common.LIRKind;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.hotspot.meta.HotSpotConstantLoadAction;
 import org.graalvm.compiler.hotspot.meta.HotSpotProviders;
-import org.graalvm.compiler.hotspot.nodes.DeoptimizationFetchUnrollInfoCallNode;
-import org.graalvm.compiler.hotspot.nodes.EnterUnpackFramesStackFrameNode;
 import org.graalvm.compiler.hotspot.nodes.GraalHotSpotVMConfigNode;
-import org.graalvm.compiler.hotspot.nodes.LeaveCurrentStackFrameNode;
-import org.graalvm.compiler.hotspot.nodes.LeaveDeoptimizedStackFrameNode;
-import org.graalvm.compiler.hotspot.nodes.LeaveUnpackFramesStackFrameNode;
-import org.graalvm.compiler.hotspot.nodes.PushInterpreterFrameNode;
-import org.graalvm.compiler.hotspot.nodes.SaveAllRegistersNode;
-import org.graalvm.compiler.hotspot.nodes.UncommonTrapCallNode;
 import org.graalvm.compiler.hotspot.nodes.aot.LoadConstantIndirectlyNode;
 import org.graalvm.compiler.hotspot.nodes.aot.ResolveConstantNode;
 import org.graalvm.compiler.hotspot.nodes.aot.ResolveMethodAndLoadCountersNode;
 import org.graalvm.compiler.hotspot.nodes.profiling.RandomSeedNode;
 import org.graalvm.compiler.hotspot.replacements.EncodedSymbolConstant;
 import org.graalvm.compiler.lir.LIRFrameState;
-import org.graalvm.compiler.lir.StandardOp.SaveRegistersOp;
 import org.graalvm.compiler.lir.VirtualStackSlot;
 import org.graalvm.compiler.lir.gen.LIRGenerator;
 import org.graalvm.compiler.lir.gen.LIRGeneratorTool;
@@ -70,65 +62,6 @@ public interface HotSpotLIRGenerator extends LIRGeneratorTool {
     void emitDeoptimizeCaller(DeoptimizationAction action, DeoptimizationReason reason);
 
     /**
-     * Emits code for a {@link SaveAllRegistersNode}.
-     *
-     * @return a {@link SaveRegistersOp} operation
-     */
-    SaveRegistersOp emitSaveAllRegisters();
-
-    /**
-     * Emits code for a {@link LeaveCurrentStackFrameNode}.
-     *
-     * @param saveRegisterOp saved registers
-     */
-    default void emitLeaveCurrentStackFrame(SaveRegistersOp saveRegisterOp) {
-        throw GraalError.unimplemented();
-    }
-
-    /**
-     * Emits code for a {@link LeaveDeoptimizedStackFrameNode}.
-     *
-     * @param frameSize
-     * @param initialInfo
-     */
-    default void emitLeaveDeoptimizedStackFrame(Value frameSize, Value initialInfo) {
-        throw GraalError.unimplemented();
-    }
-
-    /**
-     * Emits code for a {@link EnterUnpackFramesStackFrameNode}.
-     *
-     * @param framePc
-     * @param senderSp
-     * @param senderFp
-     * @param saveRegisterOp
-     */
-    default void emitEnterUnpackFramesStackFrame(Value framePc, Value senderSp, Value senderFp, SaveRegistersOp saveRegisterOp) {
-        throw GraalError.unimplemented();
-    }
-
-    /**
-     * Emits code for a {@link LeaveUnpackFramesStackFrameNode}.
-     *
-     * @param saveRegisterOp
-     */
-    default void emitLeaveUnpackFramesStackFrame(SaveRegistersOp saveRegisterOp) {
-        throw GraalError.unimplemented();
-    }
-
-    /**
-     * Emits code for a {@link PushInterpreterFrameNode}.
-     *
-     * @param frameSize
-     * @param framePc
-     * @param senderSp
-     * @param initialInfo
-     */
-    default void emitPushInterpreterFrame(Value frameSize, Value framePc, Value senderSp, Value initialInfo) {
-        throw GraalError.unimplemented();
-    }
-
-    /**
      * Emits code for a {@link LoadConstantIndirectlyNode}.
      *
      * @param constant
@@ -141,10 +74,10 @@ public interface HotSpotLIRGenerator extends LIRGeneratorTool {
     /**
      * Emits code for a {@link LoadConstantIndirectlyNode}.
      *
-     * @param constant
+     * @param constant original constant
+     * @param action action to perform on the metaspace object
      * @return Value of loaded address in register
      */
-    @SuppressWarnings("unused")
     default Value emitLoadMetaspaceAddress(Constant constant, HotSpotConstantLoadAction action) {
         throw GraalError.unimplemented();
     }
@@ -152,21 +85,23 @@ public interface HotSpotLIRGenerator extends LIRGeneratorTool {
     /**
      * Emits code for a {@link GraalHotSpotVMConfigNode}.
      *
-     * @param markId type of address to load
+     * @param markId id of the value to load
+     * @param kind type of the value to load
      * @return value of loaded global in register
      */
-    default Value emitLoadConfigValue(int markId) {
+    default Value emitLoadConfigValue(int markId, LIRKind kind) {
         throw GraalError.unimplemented();
     }
 
     /**
      * Emits code for a {@link ResolveConstantNode} to resolve a {@link HotSpotObjectConstant}.
      *
+     * @param constant original constant
      * @param constantDescription a description of the string that need to be materialized (and
      *            interned) as java.lang.String, generated with {@link EncodedSymbolConstant}
+     * @param frameState frame state for the runtime call
      * @return Returns the address of the requested constant.
      */
-    @SuppressWarnings("unused")
     default Value emitObjectConstantRetrieval(Constant constant, Value constantDescription, LIRFrameState frameState) {
         throw GraalError.unimplemented();
     }
@@ -174,11 +109,12 @@ public interface HotSpotLIRGenerator extends LIRGeneratorTool {
     /**
      * Emits code for a {@link ResolveConstantNode} to resolve a {@link HotSpotMetaspaceConstant}.
      *
+     * @param constant original constant
      * @param constantDescription a symbolic description of the {@link HotSpotMetaspaceConstant}
      *            generated by {@link EncodedSymbolConstant}
+     * @param frameState frame state for the runtime call
      * @return Returns the address of the requested constant.
      */
-    @SuppressWarnings("unused")
     default Value emitMetaspaceConstantRetrieval(Constant constant, Value constantDescription, LIRFrameState frameState) {
         throw GraalError.unimplemented();
     }
@@ -188,12 +124,13 @@ public interface HotSpotLIRGenerator extends LIRGeneratorTool {
      * {@link HotSpotMetaspaceConstant} that represents a {@link ResolvedJavaMethod} and return the
      * corresponding MethodCounters object.
      *
+     * @param method original constant
      * @param klassHint a klass in which the method is declared
      * @param methodDescription is symbolic description of the constant generated by
      *            {@link EncodedSymbolConstant}
+     * @param frameState frame state for the runtime call
      * @return Returns the address of the requested constant.
      */
-    @SuppressWarnings("unused")
     default Value emitResolveMethodAndLoadCounters(Constant method, Value klassHint, Value methodDescription, LIRFrameState frameState) {
         throw GraalError.unimplemented();
     }
@@ -202,11 +139,13 @@ public interface HotSpotLIRGenerator extends LIRGeneratorTool {
      * Emits code for a {@link ResolveConstantNode} to resolve a klass
      * {@link HotSpotMetaspaceConstant} and run static initializer.
      *
+     *
+     * @param constant original constant
      * @param constantDescription a symbolic description of the {@link HotSpotMetaspaceConstant}
      *            generated by {@link EncodedSymbolConstant}
+     * @param frameState frame state for the runtime call
      * @return Returns the address of the requested constant.
      */
-    @SuppressWarnings("unused")
     default Value emitKlassInitializationAndRetrieval(Constant constant, Value constantDescription, LIRFrameState frameState) {
         throw GraalError.unimplemented();
     }
@@ -221,38 +160,11 @@ public interface HotSpotLIRGenerator extends LIRGeneratorTool {
     }
 
     /**
-     * Emits code for a {@link UncommonTrapCallNode}.
-     *
-     * @param trapRequest
-     * @param mode
-     * @param saveRegisterOp
-     * @return a {@code Deoptimization::UnrollBlock} pointer
-     */
-    default Value emitUncommonTrapCall(Value trapRequest, Value mode, SaveRegistersOp saveRegisterOp) {
-        throw GraalError.unimplemented();
-    }
-
-    /**
-     * Emits code for a {@link DeoptimizationFetchUnrollInfoCallNode}.
-     *
-     * @param mode
-     * @param saveRegisterOp
-     * @return a {@code Deoptimization::UnrollBlock} pointer
-     */
-    default Value emitDeoptimizationFetchUnrollInfoCall(Value mode, SaveRegistersOp saveRegisterOp) {
-        throw GraalError.unimplemented();
-    }
-
-    /**
      * Gets a stack slot for a lock at a given lock nesting depth.
      */
     VirtualStackSlot getLockSlot(int lockDepth);
 
     @Override
     HotSpotProviders getProviders();
-
-    Value emitCompress(Value pointer, CompressEncoding encoding, boolean nonNull);
-
-    Value emitUncompress(Value pointer, CompressEncoding encoding, boolean nonNull);
 
 }

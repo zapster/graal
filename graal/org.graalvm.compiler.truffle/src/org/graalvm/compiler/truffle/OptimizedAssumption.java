@@ -26,8 +26,6 @@ import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TraceTruffleAs
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TraceTruffleStackTraceLimit;
 
 import java.lang.ref.WeakReference;
-import java.util.Arrays;
-import java.util.stream.Collectors;
 
 import org.graalvm.compiler.debug.TTY;
 import com.oracle.truffle.api.CompilerDirectives;
@@ -83,7 +81,7 @@ public final class OptimizedAssumption extends AbstractAssumption {
             if (installedCode != null && installedCode.getVersion() == e.version) {
                 invalidateWithReason(installedCode, "assumption invalidated");
                 invalidatedInstalledCode = true;
-                if (TraceTruffleAssumptions.getValue()) {
+                if (TruffleCompilerOptions.getValue(TraceTruffleAssumptions)) {
                     logInvalidatedInstalledCode(installedCode);
                 }
             }
@@ -92,7 +90,7 @@ public final class OptimizedAssumption extends AbstractAssumption {
         first = null;
         isValid = false;
 
-        if (TraceTruffleAssumptions.getValue()) {
+        if (TruffleCompilerOptions.getValue(TraceTruffleAssumptions)) {
             if (invalidatedInstalledCode) {
                 logStackTrace();
             }
@@ -108,7 +106,7 @@ public final class OptimizedAssumption extends AbstractAssumption {
             first = e;
         } else {
             invalidateWithReason(installedCode, "assumption already invalidated when installing code");
-            if (TraceTruffleAssumptions.getValue()) {
+            if (TruffleCompilerOptions.getValue(TraceTruffleAssumptions)) {
                 logInvalidatedInstalledCode(installedCode);
                 logStackTrace();
             }
@@ -134,9 +132,18 @@ public final class OptimizedAssumption extends AbstractAssumption {
 
     private static void logStackTrace() {
         final int skip = 1;
-        final int limit = TraceTruffleStackTraceLimit.getValue();
+        final int limit = TruffleCompilerOptions.getValue(TraceTruffleStackTraceLimit);
         StackTraceElement[] stackTrace = new Throwable().getStackTrace();
-        String suffix = stackTrace.length > skip + limit ? "\n  ..." : "";
-        TTY.out().out().println(Arrays.stream(stackTrace).skip(skip).limit(limit).map(StackTraceElement::toString).collect(Collectors.joining("\n  ", "", suffix)));
+        StringBuilder strb = new StringBuilder();
+        String sep = "";
+        for (int i = skip; i < stackTrace.length && i < skip + limit; i++) {
+            strb.append(sep).append("  ").append(stackTrace[i].toString());
+            sep = "\n";
+        }
+        if (stackTrace.length > skip + limit) {
+            strb.append("\n    ...");
+        }
+
+        TTY.out().out().println(strb);
     }
 }

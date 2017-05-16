@@ -29,9 +29,10 @@ import com.oracle.truffle.api.CompilerOptions;
 
 public class DefaultInliningPolicy implements TruffleInliningPolicy {
 
-    private static final String REASON_RECURSION = "number of recursions > " + TruffleMaximumRecursiveInlining.getValue();
-    private static final String REASON_MAXIMUM_NODE_COUNT = "deepNodeCount * callSites  > " + TruffleInliningMaxCallerSize.getValue();
-    private static final String REASON_MAXIMUM_TOTAL_NODE_COUNT = "totalNodeCount > " + TruffleInliningMaxCallerSize.getValue();
+    private static final String REASON_RECURSION = "number of recursions > " + TruffleCompilerOptions.getValue(TruffleMaximumRecursiveInlining);
+    private static final String REASON_MAXIMUM_NODE_COUNT = "deepNodeCount * callSites  > " + TruffleCompilerOptions.getValue(TruffleInliningMaxCallerSize);
+    private static final String REASON_MAXIMUM_TOTAL_NODE_COUNT = "totalNodeCount > " + TruffleCompilerOptions.getValue(TruffleInliningMaxCallerSize);
+    private static final String REASON_CACHED = "CACHED!";
 
     @Override
     public double calculateScore(TruffleInliningProfile profile) {
@@ -40,12 +41,16 @@ public class DefaultInliningPolicy implements TruffleInliningPolicy {
 
     @Override
     public boolean isAllowed(TruffleInliningProfile profile, int currentNodeCount, CompilerOptions options) {
-        if (profile.getRecursions() > TruffleMaximumRecursiveInlining.getValue()) {
+        if (profile.isCached()) {
+            profile.setFailedReason(REASON_CACHED);
+            return false;
+        }
+        if (profile.getRecursions() > TruffleCompilerOptions.getValue(TruffleMaximumRecursiveInlining)) {
             profile.setFailedReason(REASON_RECURSION);
             return false;
         }
 
-        int inliningMaxCallerSize = TruffleInliningMaxCallerSize.getValue();
+        int inliningMaxCallerSize = TruffleCompilerOptions.getValue(TruffleInliningMaxCallerSize);
 
         if (options instanceof GraalCompilerOptions) {
             inliningMaxCallerSize = Math.max(inliningMaxCallerSize, ((GraalCompilerOptions) options).getMinInliningMaxCallerSize());

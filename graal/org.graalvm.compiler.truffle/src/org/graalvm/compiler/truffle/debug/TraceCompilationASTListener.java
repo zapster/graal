@@ -25,26 +25,30 @@ package org.graalvm.compiler.truffle.debug;
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TraceTruffleCompilationAST;
 
 import java.util.List;
+import java.util.Map;
 
 import org.graalvm.compiler.code.CompilationResult;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.truffle.GraalTruffleRuntime;
 import org.graalvm.compiler.truffle.OptimizedCallTarget;
+import org.graalvm.compiler.truffle.TruffleCompilerOptions;
 import org.graalvm.compiler.truffle.TruffleInlining;
 import org.graalvm.compiler.truffle.TruffleInlining.CallTreeNodeVisitor;
+
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.NodeClass;
 
 public final class TraceCompilationASTListener extends AbstractDebugCompilationListener {
 
     public static void install(GraalTruffleRuntime runtime) {
-        if (TraceTruffleCompilationAST.getValue()) {
+        if (TruffleCompilerOptions.getValue(TraceTruffleCompilationAST)) {
             runtime.addCompilationListener(new TraceCompilationASTListener());
         }
     }
 
     @Override
-    public void notifyCompilationSuccess(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph, CompilationResult result) {
+    public void notifyCompilationSuccess(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph, CompilationResult result,
+                    Map<OptimizedCallTarget, Object> compilationMap) {
         log(0, "opt AST", target.toString(), target.getDebugProperties(inliningDecision));
         printCompactTree(target, inliningDecision);
     }

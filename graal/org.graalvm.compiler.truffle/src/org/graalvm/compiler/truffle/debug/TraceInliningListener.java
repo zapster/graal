@@ -23,10 +23,14 @@
 package org.graalvm.compiler.truffle.debug;
 
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TraceTruffleInlining;
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleFunctionInlining;
+
+import java.util.Map;
 
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.truffle.GraalTruffleRuntime;
 import org.graalvm.compiler.truffle.OptimizedCallTarget;
+import org.graalvm.compiler.truffle.TruffleCompilerOptions;
 import org.graalvm.compiler.truffle.TruffleInlining;
 import org.graalvm.compiler.truffle.TruffleInliningDecision;
 import org.graalvm.compiler.truffle.TruffleInliningProfile;
@@ -37,20 +41,24 @@ public final class TraceInliningListener extends AbstractDebugCompilationListene
     }
 
     public static void install(GraalTruffleRuntime runtime) {
-        if (TraceTruffleInlining.getValue()) {
+        if (TruffleCompilerOptions.getValue(TraceTruffleInlining)) {
             runtime.addCompilationListener(new TraceInliningListener());
         }
     }
 
     @Override
-    public void notifyCompilationTruffleTierFinished(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph) {
+    public void notifyCompilationTruffleTierFinished(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph, Map<OptimizedCallTarget, Object> compilationMap) {
         if (inliningDecision == null) {
             return;
         }
-
-        log(0, "inline start", target.toString(), target.getDebugProperties(null));
-        logInliningDecisionRecursive(target, inliningDecision, 1);
-        log(0, "inline done", target.toString(), target.getDebugProperties(inliningDecision));
+        if (TruffleCompilerOptions.getValue(TruffleFunctionInlining)) {
+            log(0, "inline start", target.toString(), target.getDebugProperties(null));
+            logInliningDecisionRecursive(target, inliningDecision, 1);
+            log(0, "inline done", target.toString(), target.getDebugProperties(inliningDecision));
+        } else {
+            log(0, "TruffleFunctionInlining is set to false", "", null);
+            return;
+        }
     }
 
     private void logInliningDecisionRecursive(OptimizedCallTarget target, TruffleInlining inliningDecision, int depth) {

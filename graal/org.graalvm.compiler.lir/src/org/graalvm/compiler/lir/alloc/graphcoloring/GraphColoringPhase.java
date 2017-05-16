@@ -29,8 +29,8 @@ import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.gen.LIRGeneratorTool.MoveFactory;
 import org.graalvm.compiler.lir.phases.AllocationPhase;
 import org.graalvm.compiler.options.Option;
+import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionType;
-import org.graalvm.compiler.options.OptionValue;
 
 import jdk.vm.ci.code.TargetDescription;
 
@@ -40,11 +40,11 @@ public class GraphColoringPhase extends AllocationPhase {
     public static class Options {
         // @formatter:off
         @Option(help = "", type = OptionType.Debug)
-        public static final OptionValue<Boolean> LIROptGraphColoringPhase = new OptionValue<>(false);
+        public static final OptionKey<Boolean> LIROptGraphColoringPhase = new OptionKey<>(false);
         // @formatter:on
         // @formatter:off
         @Option(help = "", type = OptionType.Debug)
-        public static final OptionValue<Boolean> LIROptGcIrSpilling = new OptionValue<>(false);
+        public static final OptionKey<Boolean> LIROptGcIrSpilling = new OptionKey<>(false);
         // @formatter:on
     }
 

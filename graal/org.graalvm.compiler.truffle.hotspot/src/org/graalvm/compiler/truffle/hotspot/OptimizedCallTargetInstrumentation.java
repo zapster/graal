@@ -29,6 +29,7 @@ import java.lang.reflect.Field;
 import org.graalvm.compiler.asm.Assembler;
 import org.graalvm.compiler.code.CompilationResult;
 import org.graalvm.compiler.core.common.spi.ForeignCallsProvider;
+import org.graalvm.compiler.core.common.util.Util;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
 import org.graalvm.compiler.hotspot.meta.HotSpotRegistersProvider;
@@ -36,6 +37,7 @@ import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
 import org.graalvm.compiler.lir.asm.DataBuilder;
 import org.graalvm.compiler.lir.asm.FrameContext;
 import org.graalvm.compiler.lir.framemap.FrameMap;
+import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.truffle.OptimizedCallTarget;
 
 import jdk.vm.ci.code.CodeCacheProvider;
@@ -49,8 +51,8 @@ public abstract class OptimizedCallTargetInstrumentation extends CompilationResu
     protected final HotSpotRegistersProvider registers;
 
     public OptimizedCallTargetInstrumentation(CodeCacheProvider codeCache, ForeignCallsProvider foreignCalls, FrameMap frameMap, Assembler asm, DataBuilder dataBuilder, FrameContext frameContext,
-                    CompilationResult compilationResult, GraalHotSpotVMConfig config, HotSpotRegistersProvider registers) {
-        super(codeCache, foreignCalls, frameMap, asm, dataBuilder, frameContext, compilationResult);
+                    OptionValues options, CompilationResult compilationResult, GraalHotSpotVMConfig config, HotSpotRegistersProvider registers) {
+        super(codeCache, foreignCalls, frameMap, asm, dataBuilder, frameContext, options, compilationResult);
         this.config = config;
         this.registers = registers;
     }
@@ -66,8 +68,8 @@ public abstract class OptimizedCallTargetInstrumentation extends CompilationResu
 
     protected static int getFieldOffset(String name, Class<?> declaringClass) {
         try {
-            declaringClass.getDeclaredField(name).setAccessible(true);
             Field field = declaringClass.getDeclaredField(name);
+            Util.setAccessible(field, true);
             return (int) UNSAFE.objectFieldOffset(field);
         } catch (NoSuchFieldException | SecurityException e) {
             throw GraalError.shouldNotReachHere();

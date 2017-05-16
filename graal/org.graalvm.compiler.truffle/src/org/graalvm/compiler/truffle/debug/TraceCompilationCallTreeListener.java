@@ -34,9 +34,11 @@ import org.graalvm.compiler.truffle.GraalTruffleRuntime;
 import org.graalvm.compiler.truffle.OptimizedCallTarget;
 import org.graalvm.compiler.truffle.OptimizedDirectCallNode;
 import org.graalvm.compiler.truffle.OptimizedIndirectCallNode;
+import org.graalvm.compiler.truffle.TruffleCompilerOptions;
 import org.graalvm.compiler.truffle.TruffleInlining;
 import org.graalvm.compiler.truffle.TruffleInlining.CallTreeNodeVisitor;
 import org.graalvm.compiler.truffle.TruffleInliningDecision;
+
 import com.oracle.truffle.api.nodes.Node;
 
 public final class TraceCompilationCallTreeListener extends AbstractDebugCompilationListener {
@@ -45,13 +47,14 @@ public final class TraceCompilationCallTreeListener extends AbstractDebugCompila
     }
 
     public static void install(GraalTruffleRuntime runtime) {
-        if (TraceTruffleCompilationCallTree.getValue()) {
+        if (TruffleCompilerOptions.getValue(TraceTruffleCompilationCallTree)) {
             runtime.addCompilationListener(new TraceCompilationCallTreeListener());
         }
     }
 
     @Override
-    public void notifyCompilationSuccess(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph, CompilationResult result) {
+    public void notifyCompilationSuccess(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph, CompilationResult result,
+                    Map<OptimizedCallTarget, Object> compilationMap) {
         log(0, "opt call tree", target.toString(), target.getDebugProperties(inliningDecision));
         logTruffleCallTree(target, inliningDecision);
     }
@@ -75,7 +78,7 @@ public final class TraceCompilationCallTreeListener extends AbstractDebugCompila
                     log(depth, "opt call tree", callNode.getCurrentCallTarget().toString() + dispatched, properties);
                 } else if (node instanceof OptimizedIndirectCallNode) {
                     int depth = decisionStack == null ? 0 : decisionStack.size() - 1;
-                    log(depth, "opt call tree", "<indirect>", new LinkedHashMap<String, Object>());
+                    log(depth, "opt call tree", "<indirect>", new LinkedHashMap<>());
                 }
                 return true;
             }

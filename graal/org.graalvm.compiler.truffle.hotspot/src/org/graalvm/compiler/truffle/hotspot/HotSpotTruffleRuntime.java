@@ -23,9 +23,11 @@
 package org.graalvm.compiler.truffle.hotspot;
 
 import static org.graalvm.compiler.core.GraalCompiler.compileGraph;
+import static org.graalvm.compiler.debug.GraalDebugConfig.Options.DebugStubsAndSnippets;
 import static org.graalvm.compiler.hotspot.meta.HotSpotSuitesProvider.withNodeSourcePosition;
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TraceTruffleStackTraceLimit;
 import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TraceTruffleTransferToInterpreter;
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.getOptions;
 import static org.graalvm.compiler.truffle.hotspot.UnsafeAccess.UNSAFE;
 
 import java.nio.file.FileSystems;
@@ -42,15 +44,17 @@ import org.graalvm.compiler.core.common.CompilationIdentifier;
 import org.graalvm.compiler.core.common.CompilationRequestIdentifier;
 import org.graalvm.compiler.core.target.Backend;
 import org.graalvm.compiler.debug.Debug;
+import org.graalvm.compiler.debug.DebugConfig;
 import org.graalvm.compiler.debug.Debug.Scope;
+import org.graalvm.compiler.debug.internal.DebugScope;
 import org.graalvm.compiler.debug.DebugEnvironment;
 import org.graalvm.compiler.debug.GraalDebugConfig;
 import org.graalvm.compiler.debug.GraalError;
-import org.graalvm.compiler.debug.TTY;
 import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
 import org.graalvm.compiler.hotspot.HotSpotBackend;
 import org.graalvm.compiler.hotspot.HotSpotCompilationIdentifier;
 import org.graalvm.compiler.hotspot.HotSpotCompiledCodeBuilder;
+import org.graalvm.compiler.hotspot.HotSpotGraalOptionValues;
 import org.graalvm.compiler.hotspot.HotSpotGraalRuntimeProvider;
 import org.graalvm.compiler.hotspot.meta.HotSpotProviders;
 import org.graalvm.compiler.java.GraphBuilderPhase;
@@ -61,6 +65,7 @@ import org.graalvm.compiler.nodes.StructuredGraph.AllowAssumptions;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration.Plugins;
 import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugins;
+import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.phases.BasePhase;
 import org.graalvm.compiler.phases.OptimisticOptimizations;
 import org.graalvm.compiler.phases.PhaseSuite;
@@ -76,8 +81,10 @@ import org.graalvm.compiler.truffle.GraalTruffleRuntime;
 import org.graalvm.compiler.truffle.OptimizedCallTarget;
 import org.graalvm.compiler.truffle.TruffleCallBoundary;
 import org.graalvm.compiler.truffle.TruffleCompiler;
+import org.graalvm.compiler.truffle.TruffleCompilerOptions;
 import org.graalvm.compiler.truffle.hotspot.nfi.HotSpotNativeFunctionInterface;
 import org.graalvm.compiler.truffle.hotspot.nfi.RawNativeCallNodeFactory;
+
 import com.oracle.nfi.api.NativeFunctionInterface;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
@@ -121,7 +128,7 @@ public final class HotSpotTruffleRuntime extends GraalTruffleRuntime {
         public GraalDebugConfig getDebugConfig() {
             if (Debug.isEnabled()) {
                 SnippetReflectionProvider snippetReflection = runtime.getRequiredGraalCapability(SnippetReflectionProvider.class);
-                return DebugEnvironment.initialize(TTY.out().out(), snippetReflection);
+                return DebugEnvironment.ensureInitialized(TruffleCompilerOptions.getOptions(), snippetReflection);
             } else {
                 return null;
             }
@@ -131,6 +138,11 @@ public final class HotSpotTruffleRuntime extends GraalTruffleRuntime {
     public HotSpotTruffleRuntime(Supplier<GraalRuntime> graalRuntime) {
         super(graalRuntime);
         setDontInlineCallBoundaryMethod();
+    }
+
+    @Override
+    public OptionValues getInitialOptions() {
+        return HotSpotGraalOptionValues.HOTSPOT_OPTIONS;
     }
 
     @Override
@@ -209,7 +221,7 @@ public final class HotSpotTruffleRuntime extends GraalTruffleRuntime {
                 CompilationResult compResult = compileMethod(method, compilationId);
                 CodeCacheProvider codeCache = providers.getCodeCache();
                 try (Scope s = Debug.scope("CodeInstall", codeCache, method, compResult)) {
-                    CompiledCode compiledCode = HotSpotCompiledCodeBuilder.createCompiledCode(method, compilationId.getRequest(), compResult);
+                    CompiledCode compiledCode = HotSpotCompiledCodeBuilder.createCompiledCode(codeCache, method, compilationId.getRequest(), compResult);
                     codeCache.setDefaultCode(method, compiledCode);
                 } catch (Throwable e) {
                     throw Debug.handle(e);
@@ -238,13 +250,14 @@ public final class HotSpotTruffleRuntime extends GraalTruffleRuntime {
     private CompilationResult compileMethod(ResolvedJavaMethod javaMethod, CompilationIdentifier compilationId) {
         HotSpotProviders providers = getHotSpotProviders();
         SuitesProvider suitesProvider = providers.getSuites();
-        Suites suites = suitesProvider.getDefaultSuites().copy();
-        LIRSuites lirSuites = suitesProvider.getDefaultLIRSuites();
+        OptionValues options = getOptions();
+        Suites suites = suitesProvider.getDefaultSuites(options).copy();
+        LIRSuites lirSuites = suitesProvider.getDefaultLIRSuites(options);
         removeInliningPhase(suites);
-        StructuredGraph graph = new StructuredGraph(javaMethod, AllowAssumptions.NO, compilationId);
+        StructuredGraph graph = new StructuredGraph.Builder(options, AllowAssumptions.NO).method(javaMethod).compilationId(compilationId).build();
 
         MetaAccessProvider metaAccess = providers.getMetaAccess();
-        Plugins plugins = new Plugins(new InvocationPlugins(metaAccess));
+        Plugins plugins = new Plugins(new InvocationPlugins());
         HotSpotCodeCacheProvider codeCache = providers.getCodeCache();
         boolean infoPoints = codeCache.shouldDebugNonSafepoints();
         GraphBuilderConfiguration config = GraphBuilderConfiguration.getDefault(plugins).withEagerResolving(true).withNodeSourcePosition(infoPoints);
@@ -311,9 +324,16 @@ public final class HotSpotTruffleRuntime extends GraalTruffleRuntime {
         getCompilationNotify().notifyCompilationInvalidated(optimizedCallTarget, source, reason);
     }
 
+    @SuppressWarnings("try")
     @Override
     public void reinstallStubs() {
-        installOptimizedCallTargetCallMethod();
+        OptionValues options = TruffleCompilerOptions.getOptions();
+        DebugConfig config = DebugStubsAndSnippets.getValue(options) ? DebugScope.getConfig() : Debug.silentConfig();
+        try (Scope d = Debug.sandbox("InstallingTruffleStub", config)) {
+            installOptimizedCallTargetCallMethod();
+        } catch (Throwable e) {
+            throw Debug.handle(e);
+        }
     }
 
     @Override
@@ -332,7 +352,7 @@ public final class HotSpotTruffleRuntime extends GraalTruffleRuntime {
     @Override
     public void notifyTransferToInterpreter() {
         CompilerAsserts.neverPartOfCompilation();
-        if (TraceTruffleTransferToInterpreter.getValue()) {
+        if (TruffleCompilerOptions.getValue(TraceTruffleTransferToInterpreter)) {
             TraceTransferToInterpreterHelper.traceTransferToInterpreter(this, getVMConfig());
         }
     }
@@ -354,7 +374,7 @@ public final class HotSpotTruffleRuntime extends GraalTruffleRuntime {
         if (factory == null) {
             return null;
         }
-        return new HotSpotNativeFunctionInterface(getHotSpotProviders(), factory, backend, config.dllLoad, config.dllLookup, config.rtldDefault);
+        return new HotSpotNativeFunctionInterface(getOptions(), getHotSpotProviders(), factory, backend, config.dllLoad, config.dllLookup, config.rtldDefault);
     }
 
     private static class TraceTransferToInterpreterHelper {
@@ -434,7 +454,7 @@ public final class HotSpotTruffleRuntime extends GraalTruffleRuntime {
         }
 
         private static void logTransferToInterpreter(final HotSpotTruffleRuntime runtime) {
-            final int limit = TraceTruffleStackTraceLimit.getValue();
+            final int limit = TruffleCompilerOptions.getValue(TraceTruffleStackTraceLimit);
 
             runtime.log("[truffle] transferToInterpreter at");
             runtime.iterateFrames(new FrameInstanceVisitor<Object>() {

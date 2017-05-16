@@ -37,7 +37,6 @@ import org.graalvm.compiler.lir.phases.LIRSuites;
 import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.FixedWithNextNode;
 import org.graalvm.compiler.nodes.StructuredGraph;
-import org.graalvm.compiler.nodes.StructuredGraph.AllowAssumptions;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.extended.BoxNode;
 import org.graalvm.compiler.nodes.extended.UnboxNode;
@@ -46,15 +45,18 @@ import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration.Plu
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderContext;
 import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugin;
 import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugin.Receiver;
-import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugins.Registration;
+import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugins;
+import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugins.LateRegistration;
 import org.graalvm.compiler.nodes.java.LoadIndexedNode;
 import org.graalvm.compiler.nodes.memory.address.OffsetAddressNode;
+import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.phases.OptimisticOptimizations;
 import org.graalvm.compiler.phases.PhaseSuite;
 import org.graalvm.compiler.phases.tiers.HighTierContext;
 import org.graalvm.compiler.phases.tiers.Suites;
 import org.graalvm.compiler.replacements.ConstantBindingParameterPlugin;
 
+import jdk.vm.ci.hotspot.HotSpotCodeCacheProvider;
 import jdk.vm.ci.hotspot.HotSpotCompiledCode;
 import jdk.vm.ci.meta.DefaultProfilingInfo;
 import jdk.vm.ci.meta.JavaConstant;
@@ -68,6 +70,7 @@ import jdk.vm.ci.meta.TriState;
  */
 public class NativeCallStubGraphBuilder {
 
+    private final OptionValues options;
     private final HotSpotProviders providers;
     private final Backend backend;
     private final RawNativeCallNodeFactory factory;
@@ -97,13 +100,16 @@ public class NativeCallStubGraphBuilder {
         }
     }
 
-    NativeCallStubGraphBuilder(HotSpotProviders providers, Backend backend, RawNativeCallNodeFactory factory) {
+    NativeCallStubGraphBuilder(OptionValues options, HotSpotProviders providers, Backend backend, RawNativeCallNodeFactory factory) {
+        this.options = options;
         this.providers = providers;
         this.backend = backend;
         this.factory = factory;
 
-        Registration r = new Registration(providers.getGraphBuilderPlugins().getInvocationPlugins(), HotSpotNativeFunctionHandle.class);
-        r.register2("call", Receiver.class, Object[].class, new CallPlugin());
+        InvocationPlugins plugins = providers.getGraphBuilderPlugins().getInvocationPlugins();
+        try (LateRegistration r = new LateRegistration(plugins, HotSpotNativeFunctionHandle.class)) {
+            r.register(new CallPlugin(), "call", Receiver.class, Object[].class);
+        }
 
         ResolvedJavaType stubClass = providers.getMetaAccess().lookupJavaType(NativeCallStub.class);
         ResolvedJavaMethod[] methods = stubClass.getDeclaredMethods();
@@ -122,16 +128,17 @@ public class NativeCallStubGraphBuilder {
         PhaseSuite<HighTierContext> graphBuilder = new PhaseSuite<>();
         graphBuilder.appendPhase(new GraphBuilderPhase(GraphBuilderConfiguration.getDefault(plugins)));
 
-        Suites suites = providers.getSuites().getDefaultSuites();
-        LIRSuites lirSuites = providers.getSuites().getDefaultLIRSuites();
+        Suites suites = providers.getSuites().getDefaultSuites(options);
+        LIRSuites lirSuites = providers.getSuites().getDefaultLIRSuites(options);
 
-        StructuredGraph g = new StructuredGraph(callStubMethod, AllowAssumptions.NO, backend.getCompilationIdentifier(callStubMethod));
+        StructuredGraph g = new StructuredGraph.Builder(options).method(callStubMethod).compilationId(backend.getCompilationIdentifier(callStubMethod)).build();
         CompilationResult compResult = GraalCompiler.compileGraph(g, callStubMethod, providers, backend, graphBuilder, OptimisticOptimizations.ALL, DefaultProfilingInfo.get(TriState.UNKNOWN), suites,
                         lirSuites, new CompilationResult(), CompilationResultBuilderFactory.Default);
 
-        try (Scope s = Debug.scope("CodeInstall", providers.getCodeCache(), g.method(), compResult)) {
-            HotSpotCompiledCode compiledCode = HotSpotCompiledCodeBuilder.createCompiledCode(g.method(), null, compResult);
-            function.code = providers.getCodeCache().addCode(g.method(), compiledCode, null, null);
+        HotSpotCodeCacheProvider codeCache = providers.getCodeCache();
+        try (Scope s = Debug.scope("CodeInstall", codeCache, g.method(), compResult)) {
+            HotSpotCompiledCode compiledCode = HotSpotCompiledCodeBuilder.createCompiledCode(codeCache, g.method(), null, compResult);
+            function.code = codeCache.addCode(g.method(), compiledCode, null, null);
         } catch (Throwable e) {
             throw Debug.handle(e);
         }

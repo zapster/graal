@@ -33,33 +33,34 @@ import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.truffle.GraalTruffleRuntime;
 import org.graalvm.compiler.truffle.OptimizedCallTarget;
 import org.graalvm.compiler.truffle.OptimizedDirectCallNode;
+import org.graalvm.compiler.truffle.TruffleCompilerOptions;
 import org.graalvm.compiler.truffle.TruffleInlining;
+
 import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.source.SourceSection;
 
 public final class TraceCompilationListener extends AbstractDebugCompilationListener {
-
-    private final ThreadLocal<LocalCompilation> currentCompilation = new ThreadLocal<>();
 
     private TraceCompilationListener() {
     }
 
     public static void install(GraalTruffleRuntime runtime) {
-        if (TraceTruffleCompilation.getValue() || TraceTruffleCompilationDetails.getValue()) {
+        if (TruffleCompilerOptions.getValue(TraceTruffleCompilation) || TruffleCompilerOptions.getValue(TraceTruffleCompilationDetails)) {
             runtime.addCompilationListener(new TraceCompilationListener());
         }
     }
 
     @Override
     public void notifyCompilationQueued(OptimizedCallTarget target) {
-        if (TraceTruffleCompilationDetails.getValue()) {
+        if (TruffleCompilerOptions.getValue(TraceTruffleCompilationDetails)) {
             log(0, "opt queued", target.toString(), target.getDebugProperties(null));
         }
     }
 
     @Override
     public void notifyCompilationDequeued(OptimizedCallTarget target, Object source, CharSequence reason) {
-        if (TraceTruffleCompilationDetails.getValue()) {
+        if (TruffleCompilerOptions.getValue(TraceTruffleCompilationDetails)) {
             Map<String, Object> properties = new LinkedHashMap<>();
             addSourceInfo(properties, source);
             properties.put("Reason", reason);
@@ -68,22 +69,24 @@ public final class TraceCompilationListener extends AbstractDebugCompilationList
     }
 
     @Override
-    public void notifyCompilationFailed(OptimizedCallTarget target, StructuredGraph graph, Throwable t) {
-        super.notifyCompilationFailed(target, graph, t);
+    public void notifyCompilationFailed(OptimizedCallTarget target, StructuredGraph graph, Throwable t, Map<OptimizedCallTarget, Object> compilationMap) {
+        super.notifyCompilationFailed(target, graph, t, compilationMap);
         if (!TraceCompilationFailureListener.isPermanentBailout(t)) {
             notifyCompilationDequeued(target, null, "Non permanent bailout: " + t.toString());
         }
-        currentCompilation.set(null);
+        compilationMap.remove(target);
+
     }
 
     @Override
-    public void notifyCompilationStarted(OptimizedCallTarget target) {
-        if (TraceTruffleCompilationDetails.getValue()) {
+    public void notifyCompilationStarted(OptimizedCallTarget target, Map<OptimizedCallTarget, Object> compilationMap) {
+        if (TruffleCompilerOptions.getValue(TraceTruffleCompilationDetails)) {
             log(0, "opt start", target.toString(), target.getDebugProperties(null));
         }
         LocalCompilation compilation = new LocalCompilation();
         compilation.timeCompilationStarted = System.nanoTime();
-        currentCompilation.set(compilation);
+
+        compilationMap.put(target, compilation);
     }
 
     @Override
@@ -92,23 +95,30 @@ public final class TraceCompilationListener extends AbstractDebugCompilationList
     }
 
     @Override
-    public void notifyCompilationTruffleTierFinished(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph) {
-        super.notifyCompilationTruffleTierFinished(target, inliningDecision, graph);
-        LocalCompilation compilation = currentCompilation.get();
+    public void notifyCompilationTruffleTierFinished(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph, Map<OptimizedCallTarget, Object> compilationMap) {
+        super.notifyCompilationTruffleTierFinished(target, inliningDecision, graph, compilationMap);
+        LocalCompilation compilation = (LocalCompilation) compilationMap.get(target);
         compilation.timePartialEvaluationFinished = System.nanoTime();
         compilation.nodeCountPartialEval = graph.getNodeCount();
     }
 
     @Override
-    public void notifyCompilationSuccess(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph, CompilationResult result) {
+    public void notifyCompilationSuccess(OptimizedCallTarget target, TruffleInlining inliningDecision, StructuredGraph graph, CompilationResult result,
+                    Map<OptimizedCallTarget, Object> compilationMap) {
         long timeCompilationFinished = System.nanoTime();
         int nodeCountLowered = graph.getNodeCount();
-        LocalCompilation compilation = currentCompilation.get();
+        LocalCompilation compilation = (LocalCompilation) compilationMap.get(target);
 
-        int calls;
+        int calls = 0;
         int inlinedCalls;
         if (inliningDecision == null) {
-            calls = (int) target.nodeStream(null).filter(node -> (node instanceof OptimizedDirectCallNode)).count();
+
+            for (Node node : target.nodeIterable(null)) {
+                if (node instanceof OptimizedDirectCallNode) {
+                    calls++;
+                }
+            }
+
             inlinedCalls = 0;
         } else {
             calls = inliningDecision.countCalls();
@@ -125,11 +135,13 @@ public final class TraceCompilationListener extends AbstractDebugCompilationList
         properties.put("DirectCallNodes", String.format("I %4d/D %4d", inlinedCalls, dispatchedCalls));
         properties.put("GraalNodes", String.format("%5d/%5d", compilation.nodeCountPartialEval, nodeCountLowered));
         properties.put("CodeSize", result.getTargetCodeSize());
+        properties.put("CodeAddress", "0x" + Long.toHexString(target.getAddress()));
         properties.put("Source", formatSourceSection(target.getRootNode().getSourceSection()));
 
         log(0, "opt done", target.toString(), properties);
-        super.notifyCompilationSuccess(target, inliningDecision, graph, result);
-        currentCompilation.set(null);
+        super.notifyCompilationSuccess(target, inliningDecision, graph, result, compilationMap);
+
+        compilationMap.remove(target);
     }
 
     private static String formatSourceSection(SourceSection sourceSection) {

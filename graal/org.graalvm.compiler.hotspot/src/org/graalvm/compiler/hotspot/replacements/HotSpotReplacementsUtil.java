@@ -22,11 +22,11 @@
  */
 package org.graalvm.compiler.hotspot.replacements;
 
+import static jdk.vm.ci.hotspot.HotSpotJVMCIRuntimeProvider.getArrayBaseOffset;
+import static jdk.vm.ci.hotspot.HotSpotJVMCIRuntimeProvider.getArrayIndexScale;
 import static org.graalvm.compiler.hotspot.GraalHotSpotVMConfig.INJECTED_VMCONFIG;
 import static org.graalvm.compiler.hotspot.meta.HotSpotForeignCallsProviderImpl.VERIFY_OOP;
 import static org.graalvm.compiler.hotspot.replacements.UnsafeAccess.UNSAFE;
-import static jdk.vm.ci.hotspot.HotSpotJVMCIRuntimeProvider.getArrayBaseOffset;
-import static jdk.vm.ci.hotspot.HotSpotJVMCIRuntimeProvider.getArrayIndexScale;
 
 import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.compiler.api.replacements.Fold.InjectedParameter;
@@ -40,19 +40,17 @@ import org.graalvm.compiler.graph.Node.ConstantNodeParameter;
 import org.graalvm.compiler.graph.Node.NodeIntrinsic;
 import org.graalvm.compiler.graph.spi.CanonicalizerTool;
 import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
-import org.graalvm.compiler.hotspot.nodes.CompressionNode;
 import org.graalvm.compiler.hotspot.nodes.ComputeObjectAddressNode;
-import org.graalvm.compiler.hotspot.nodes.SnippetAnchorNode;
 import org.graalvm.compiler.hotspot.word.KlassPointer;
 import org.graalvm.compiler.nodes.CanonicalizableLocation;
+import org.graalvm.compiler.nodes.CompressionNode;
 import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.NamedLocationIdentity;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.extended.ForeignCallNode;
-import org.graalvm.compiler.nodes.extended.GuardingNode;
 import org.graalvm.compiler.nodes.extended.LoadHubNode;
+import org.graalvm.compiler.nodes.extended.RawLoadNode;
 import org.graalvm.compiler.nodes.extended.StoreHubNode;
-import org.graalvm.compiler.nodes.extended.UnsafeLoadNode;
 import org.graalvm.compiler.nodes.memory.Access;
 import org.graalvm.compiler.nodes.memory.address.AddressNode;
 import org.graalvm.compiler.nodes.memory.address.OffsetAddressNode;
@@ -389,32 +387,23 @@ public class HotSpotReplacementsUtil {
         return config.klassLayoutHelperOffset;
     }
 
-    public static int readLayoutHelper(KlassPointer hub) {
-        // return hub.readInt(klassLayoutHelperOffset(), KLASS_LAYOUT_HELPER_LOCATION);
-        GuardingNode anchorNode = SnippetAnchorNode.anchor();
-        return loadKlassLayoutHelperIntrinsic(hub, anchorNode);
-    }
-
     @NodeIntrinsic(value = KlassLayoutHelperNode.class)
-    public static native int loadKlassLayoutHelperIntrinsic(KlassPointer object, GuardingNode anchor);
-
-    @NodeIntrinsic(value = KlassLayoutHelperNode.class)
-    public static native int loadKlassLayoutHelperIntrinsic(KlassPointer object);
+    public static native int readLayoutHelper(KlassPointer object);
 
     /**
      * Checks if class {@code klass} is an array.
      *
      * See: Klass::layout_helper_is_array
      *
-     * @param klass the class to be checked
-     * @return true if klass is an array, false otherwise
+     * @param klassNonNull the class to be checked
+     * @return true if klassNonNull is an array, false otherwise
      */
-    public static boolean klassIsArray(KlassPointer klass) {
+    public static boolean klassIsArray(KlassPointer klassNonNull) {
         /*
          * The less-than check only works if both values are ints. We use local variables to make
          * sure these are still ints and haven't changed.
          */
-        final int layoutHelper = readLayoutHelper(klass);
+        final int layoutHelper = readLayoutHelper(klassNonNull);
         final int layoutHelperNeutralValue = config(INJECTED_VMCONFIG).klassLayoutHelperNeutralValue;
         return (layoutHelper < layoutHelperNeutralValue);
     }
@@ -713,17 +702,17 @@ public class HotSpotReplacementsUtil {
 
     public static Word loadWordFromObject(Object object, int offset) {
         ReplacementsUtil.staticAssert(offset != hubOffset(INJECTED_VMCONFIG), "Use loadHubIntrinsic instead of loadWordFromObject");
-        return loadWordFromObjectIntrinsic(object, offset, getWordKind(), LocationIdentity.any());
+        return loadWordFromObjectIntrinsic(object, offset, LocationIdentity.any(), getWordKind());
     }
 
     public static Word loadWordFromObject(Object object, int offset, LocationIdentity identity) {
         ReplacementsUtil.staticAssert(offset != hubOffset(INJECTED_VMCONFIG), "Use loadHubIntrinsic instead of loadWordFromObject");
-        return loadWordFromObjectIntrinsic(object, offset, getWordKind(), identity);
+        return loadWordFromObjectIntrinsic(object, offset, identity, getWordKind());
     }
 
     public static KlassPointer loadKlassFromObject(Object object, int offset, LocationIdentity identity) {
         ReplacementsUtil.staticAssert(offset != hubOffset(INJECTED_VMCONFIG), "Use loadHubIntrinsic instead of loadWordFromObject");
-        return loadKlassFromObjectIntrinsic(object, offset, getWordKind(), identity);
+        return loadKlassFromObjectIntrinsic(object, offset, identity, getWordKind());
     }
 
     /**
@@ -736,17 +725,17 @@ public class HotSpotReplacementsUtil {
         return registerAsWord(register, true, false);
     }
 
-    @NodeIntrinsic(value = ReadRegisterNode.class, setStampFromReturnType = true)
+    @NodeIntrinsic(value = ReadRegisterNode.class)
     public static native Word registerAsWord(@ConstantNodeParameter Register register, @ConstantNodeParameter boolean directUse, @ConstantNodeParameter boolean incoming);
 
-    @NodeIntrinsic(value = WriteRegisterNode.class, setStampFromReturnType = true)
+    @NodeIntrinsic(value = WriteRegisterNode.class)
     public static native void writeRegisterAsWord(@ConstantNodeParameter Register register, Word value);
 
-    @NodeIntrinsic(value = UnsafeLoadNode.class, setStampFromReturnType = true)
-    private static native Word loadWordFromObjectIntrinsic(Object object, long offset, @ConstantNodeParameter JavaKind wordKind, @ConstantNodeParameter LocationIdentity locationIdentity);
+    @NodeIntrinsic(value = RawLoadNode.class)
+    private static native Word loadWordFromObjectIntrinsic(Object object, long offset, @ConstantNodeParameter LocationIdentity locationIdentity, @ConstantNodeParameter JavaKind wordKind);
 
-    @NodeIntrinsic(value = UnsafeLoadNode.class, setStampFromReturnType = true)
-    private static native KlassPointer loadKlassFromObjectIntrinsic(Object object, long offset, @ConstantNodeParameter JavaKind wordKind, @ConstantNodeParameter LocationIdentity locationIdentity);
+    @NodeIntrinsic(value = RawLoadNode.class)
+    private static native KlassPointer loadKlassFromObjectIntrinsic(Object object, long offset, @ConstantNodeParameter LocationIdentity locationIdentity, @ConstantNodeParameter JavaKind wordKind);
 
     @NodeIntrinsic(value = LoadHubNode.class)
     public static native KlassPointer loadHubIntrinsic(Object object);
@@ -813,6 +802,8 @@ public class HotSpotReplacementsUtil {
     }
 
     public static final LocationIdentity CLASS_MIRROR_LOCATION = NamedLocationIdentity.immutable("Klass::_java_mirror");
+
+    public static final LocationIdentity CLASS_MIRROR_HANDLE_LOCATION = NamedLocationIdentity.immutable("Klass::_java_mirror handle");
 
     public static final LocationIdentity HEAP_TOP_LOCATION = NamedLocationIdentity.mutable("HeapTop");
 

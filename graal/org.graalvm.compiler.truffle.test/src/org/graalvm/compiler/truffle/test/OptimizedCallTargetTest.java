@@ -22,38 +22,39 @@
  */
 package org.graalvm.compiler.truffle.test;
 
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleCompilationThreshold;
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleCompileOnly;
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleFunctionInlining;
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleOSRCompilationThreshold;
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleReplaceReprofileCount;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.lang.reflect.Field;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import org.junit.Ignore;
-import org.junit.Test;
-
-import org.graalvm.compiler.options.OptionValue;
-import org.graalvm.compiler.options.OptionValue.OverrideScope;
+import org.graalvm.compiler.core.common.util.Util;
 import org.graalvm.compiler.truffle.GraalTruffleRuntime;
 import org.graalvm.compiler.truffle.OptimizedCallTarget;
 import org.graalvm.compiler.truffle.OptimizedOSRLoopNode;
 import org.graalvm.compiler.truffle.TruffleCompilerOptions;
+import org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleOptionsOverrideScope;
 import org.graalvm.compiler.truffle.test.nodes.AbstractTestNode;
 import org.graalvm.compiler.truffle.test.nodes.ConstantTestNode;
 import org.graalvm.compiler.truffle.test.nodes.RootTestNode;
+import org.junit.Ignore;
+import org.junit.Test;
+
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.Truffle;
-import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
@@ -63,13 +64,13 @@ import com.oracle.truffle.api.nodes.RepeatingNode;
 import com.oracle.truffle.api.nodes.RootNode;
 
 @SuppressWarnings("try")
-public class OptimizedCallTargetTest {
+public class OptimizedCallTargetTest extends TestWithSynchronousCompiling {
     private static final GraalTruffleRuntime runtime = (GraalTruffleRuntime) Truffle.getRuntime();
     private static final Field nodeRewritingAssumptionField;
     static {
         try {
             nodeRewritingAssumptionField = OptimizedCallTarget.class.getDeclaredField("nodeRewritingAssumption");
-            nodeRewritingAssumptionField.setAccessible(true);
+            Util.setAccessible(nodeRewritingAssumptionField, true);
         } catch (NoSuchFieldException | SecurityException e) {
             throw new AssertionError(e);
         }
@@ -83,22 +84,6 @@ public class OptimizedCallTargetTest {
         }
     }
 
-    private static void assertCompiled(OptimizedCallTarget target) {
-        assertNotNull(target);
-        try {
-            runtime.waitForCompilation(target, 10000);
-        } catch (ExecutionException | TimeoutException e) {
-            fail("timeout");
-        }
-        assertTrue(target.isValid());
-    }
-
-    private static void assertNotCompiled(OptimizedCallTarget target) {
-        assertNotNull(target);
-        assertFalse(target.isValid());
-        assertFalse(target.isCompiling());
-    }
-
     private static final class CallTestNode extends AbstractTestNode {
         @Child private DirectCallNode callNode;
 
@@ -108,7 +93,7 @@ public class OptimizedCallTargetTest {
 
         @Override
         public int execute(VirtualFrame frame) {
-            return (int) callNode.call(frame, frame.getArguments());
+            return (int) callNode.call(frame.getArguments());
         }
     }
 
@@ -125,7 +110,7 @@ public class OptimizedCallTargetTest {
         testInvalidationCounterCompiled = 0;
         testInvalidationCounterInterpreted = 0;
         doInvalidate = false;
-        OptimizedCallTarget target = (OptimizedCallTarget) runtime.createCallTarget(new RootNode(TruffleLanguage.class, null, null) {
+        OptimizedCallTarget target = (OptimizedCallTarget) runtime.createCallTarget(new RootNode(null) {
             @Override
             public Object execute(VirtualFrame frame) {
                 if (CompilerDirectives.inInterpreter()) {
@@ -140,8 +125,8 @@ public class OptimizedCallTargetTest {
                 return null;
             }
         });
-        final int compilationThreshold = TruffleCompilerOptions.TruffleCompilationThreshold.getValue();
-        final int reprofileCount = TruffleCompilerOptions.TruffleReplaceReprofileCount.getValue();
+        final int compilationThreshold = TruffleCompilerOptions.getValue(TruffleCompilationThreshold);
+        final int reprofileCount = TruffleCompilerOptions.getValue(TruffleReplaceReprofileCount);
         assertTrue(compilationThreshold >= 2);
 
         int expectedCompiledCount = 0;
@@ -202,58 +187,61 @@ public class OptimizedCallTargetTest {
     @Test
     public void testRewriteAssumption() {
         String testName = "testRewriteAssumption";
-        final int compilationThreshold = TruffleCompilerOptions.TruffleCompilationThreshold.getValue();
+        final int compilationThreshold = TruffleCompilerOptions.getValue(TruffleCompilationThreshold);
         assertTrue(compilationThreshold >= 2);
-        assertTrue("test only works with inlining enabled", TruffleCompilerOptions.TruffleFunctionInlining.getValue());
+        assertTrue("test only works with inlining enabled", TruffleCompilerOptions.getValue(TruffleFunctionInlining));
 
         IntStream.range(0, 8).parallel().forEach(i -> {
-            OptimizedCallTarget innermostCallTarget = (OptimizedCallTarget) runtime.createCallTarget(new RootTestNode(new FrameDescriptor(), testName + 0, new AbstractTestNode() {
-                @Child private AbstractTestNode child = new ConstantTestNode(42);
-                @Child private AbstractTestNode dummy = new ConstantTestNode(17);
+            // We need to restate the option override for each thread individually.
+            try (TruffleOptionsOverrideScope s = TruffleCompilerOptions.overrideOptions(TruffleCompilerOptions.TruffleBackgroundCompilation, false)) {
+                OptimizedCallTarget innermostCallTarget = (OptimizedCallTarget) runtime.createCallTarget(new RootTestNode(new FrameDescriptor(), testName + 0, new AbstractTestNode() {
+                    @Child private AbstractTestNode child = new ConstantTestNode(42);
+                    @Child private AbstractTestNode dummy = new ConstantTestNode(17);
 
-                @Override
-                public int execute(VirtualFrame frame) {
-                    int k = (int) frame.getArguments()[0];
-                    if (k > compilationThreshold) {
-                        CompilerDirectives.transferToInterpreter();
-                        dummy.replace(new ConstantTestNode(k));
+                    @Override
+                    public int execute(VirtualFrame frame) {
+                        int k = (int) frame.getArguments()[0];
+                        if (k > compilationThreshold) {
+                            CompilerDirectives.transferToInterpreter();
+                            dummy.replace(new ConstantTestNode(k));
+                        }
+                        return child.execute(frame);
                     }
-                    return child.execute(frame);
-                }
-            }));
-            OptimizedCallTarget ct = innermostCallTarget;
-            ct = (OptimizedCallTarget) runtime.createCallTarget(new RootTestNode(new FrameDescriptor(), testName + 1, new CallTestNode(ct)));
-            ct = (OptimizedCallTarget) runtime.createCallTarget(new RootTestNode(new FrameDescriptor(), testName + 2, new CallTestNode(ct)));
-            final OptimizedCallTarget outermostCallTarget = ct;
+                }));
+                OptimizedCallTarget ct = innermostCallTarget;
+                ct = (OptimizedCallTarget) runtime.createCallTarget(new RootTestNode(new FrameDescriptor(), testName + 1, new CallTestNode(ct)));
+                ct = (OptimizedCallTarget) runtime.createCallTarget(new RootTestNode(new FrameDescriptor(), testName + 2, new CallTestNode(ct)));
+                final OptimizedCallTarget outermostCallTarget = ct;
 
-            assertNull("assumption is initially null", getRewriteAssumption(innermostCallTarget));
+                assertNull("assumption is initially null", getRewriteAssumption(innermostCallTarget));
 
-            IntStream.range(0, compilationThreshold / 2).parallel().forEach(k -> {
-                assertEquals(42, outermostCallTarget.call(k));
-                assertNull("assumption stays null in the interpreter", getRewriteAssumption(innermostCallTarget));
-            });
+                IntStream.range(0, compilationThreshold / 2).parallel().forEach(k -> {
+                    assertEquals(42, outermostCallTarget.call(k));
+                    assertNull("assumption stays null in the interpreter", getRewriteAssumption(innermostCallTarget));
+                });
 
-            outermostCallTarget.compile();
-            assertCompiled(outermostCallTarget);
-            Assumption firstRewriteAssumption = getRewriteAssumption(innermostCallTarget);
-            assertNotNull("assumption must not be null after compilation", firstRewriteAssumption);
-            assertTrue(firstRewriteAssumption.isValid());
+                outermostCallTarget.compile();
+                assertCompiled(outermostCallTarget);
+                Assumption firstRewriteAssumption = getRewriteAssumption(innermostCallTarget);
+                assertNotNull("assumption must not be null after compilation", firstRewriteAssumption);
+                assertTrue(firstRewriteAssumption.isValid());
 
-            List<Assumption> rewriteAssumptions = IntStream.range(0, 2 * compilationThreshold).parallel().mapToObj(k -> {
-                assertEquals(42, outermostCallTarget.call(k));
+                List<Assumption> rewriteAssumptions = IntStream.range(0, 2 * compilationThreshold).parallel().mapToObj(k -> {
+                    assertEquals(42, outermostCallTarget.call(k));
 
-                Assumption rewriteAssumptionAfter = getRewriteAssumption(innermostCallTarget);
-                assertNotNull("assumption must not be null after compilation", rewriteAssumptionAfter);
-                return rewriteAssumptionAfter;
-            }).collect(Collectors.toList());
+                    Assumption rewriteAssumptionAfter = getRewriteAssumption(innermostCallTarget);
+                    assertNotNull("assumption must not be null after compilation", rewriteAssumptionAfter);
+                    return rewriteAssumptionAfter;
+                }).collect(Collectors.toList());
 
-            Assumption finalRewriteAssumption = getRewriteAssumption(innermostCallTarget);
-            assertNotNull("assumption must not be null after compilation", finalRewriteAssumption);
-            assertNotSame(firstRewriteAssumption, finalRewriteAssumption);
-            assertFalse(firstRewriteAssumption.isValid());
-            assertTrue(finalRewriteAssumption.isValid());
+                Assumption finalRewriteAssumption = getRewriteAssumption(innermostCallTarget);
+                assertNotNull("assumption must not be null after compilation", finalRewriteAssumption);
+                assertNotSame(firstRewriteAssumption, finalRewriteAssumption);
+                assertFalse(firstRewriteAssumption.isValid());
+                assertTrue(finalRewriteAssumption.isValid());
 
-            assertFalse(rewriteAssumptions.stream().filter(a -> a != finalRewriteAssumption).anyMatch(Assumption::isValid));
+                assertFalse(rewriteAssumptions.stream().filter(a -> a != finalRewriteAssumption).anyMatch(Assumption::isValid));
+            }
         });
     }
 
@@ -262,7 +250,7 @@ public class OptimizedCallTargetTest {
         private String name;
 
         NamedRootNode(String name) {
-            super(TruffleLanguage.class, null, null);
+            super(null);
             this.name = name;
         }
 
@@ -279,10 +267,11 @@ public class OptimizedCallTargetTest {
 
     @Test
     public void testCompileOnly1() {
-        final int compilationThreshold = TruffleCompilerOptions.TruffleCompilationThreshold.getValue();
+        final int compilationThreshold = TruffleCompilerOptions.getValue(TruffleCompilationThreshold);
 
         // test single include
-        try (OverrideScope scope = OptionValue.override(TruffleCompilerOptions.TruffleCompileOnly, "foobar")) {
+
+        try (TruffleOptionsOverrideScope scope = TruffleCompilerOptions.overrideOptions(TruffleCompileOnly, "foobar")) {
             OptimizedCallTarget target = (OptimizedCallTarget) runtime.createCallTarget(new NamedRootNode("foobar"));
             for (int i = 0; i < compilationThreshold; i++) {
                 assertNotCompiled(target);
@@ -301,9 +290,9 @@ public class OptimizedCallTargetTest {
 
     @Test
     public void testCompileOnly2() {
-        final int compilationThreshold = TruffleCompilerOptions.TruffleCompilationThreshold.getValue();
+        final int compilationThreshold = TruffleCompilerOptions.getValue(TruffleCompilationThreshold);
         // test single exclude
-        try (OverrideScope scope = OptionValue.override(TruffleCompilerOptions.TruffleCompileOnly, "~foobar")) {
+        try (TruffleOptionsOverrideScope scope = TruffleCompilerOptions.overrideOptions(TruffleCompileOnly, "~foobar")) {
             OptimizedCallTarget target = (OptimizedCallTarget) runtime.createCallTarget(new NamedRootNode("foobar"));
             for (int i = 0; i < compilationThreshold; i++) {
                 assertNotCompiled(target);
@@ -321,9 +310,9 @@ public class OptimizedCallTargetTest {
 
     @Test
     public void testCompileOnly3() {
-        final int compilationThreshold = TruffleCompilerOptions.TruffleCompilationThreshold.getValue();
+        final int compilationThreshold = TruffleCompilerOptions.getValue(TruffleCompilationThreshold);
         // test two includes/excludes
-        try (OverrideScope scope = OptionValue.override(TruffleCompilerOptions.TruffleCompileOnly, "foo,baz")) {
+        try (TruffleOptionsOverrideScope scope = TruffleCompilerOptions.overrideOptions(TruffleCompileOnly, "foo,baz")) {
             OptimizedCallTarget target = (OptimizedCallTarget) runtime.createCallTarget(new NamedRootNode("foobar"));
             for (int i = 0; i < compilationThreshold; i++) {
                 assertNotCompiled(target);
@@ -341,19 +330,24 @@ public class OptimizedCallTargetTest {
 
     private static class OSRRepeatingNode extends Node implements RepeatingNode {
         int count = 0;
+        final int osrCompilationThreshold;
+
+        OSRRepeatingNode(int osrCompilationThreshold) {
+            this.osrCompilationThreshold = osrCompilationThreshold;
+        }
 
         @Override
         public boolean executeRepeating(VirtualFrame frame) {
             count++;
-            return count < (TruffleCompilerOptions.TruffleOSRCompilationThreshold.getValue() + 10);
+            return count < (osrCompilationThreshold + 10);
         }
     }
 
     @Test
     public void testCompileOnly4() {
         // OSR should not trigger for compile-only includes
-        try (OverrideScope scope = OptionValue.override(TruffleCompilerOptions.TruffleCompileOnly, "foobar")) {
-            final OSRRepeatingNode repeating = new OSRRepeatingNode();
+        try (TruffleOptionsOverrideScope scope = TruffleCompilerOptions.overrideOptions(TruffleCompileOnly, "foobar")) {
+            final OSRRepeatingNode repeating = new OSRRepeatingNode(TruffleCompilerOptions.getValue(TruffleOSRCompilationThreshold));
             final LoopNode loop = runtime.createLoopNode(repeating);
             OptimizedCallTarget target = (OptimizedCallTarget) runtime.createCallTarget(new NamedRootNode("foobar") {
 
@@ -392,8 +386,8 @@ public class OptimizedCallTargetTest {
     @Test
     public void testCompileOnly5() {
         // OSR should trigger if compile-only with excludes
-        try (OverrideScope scope = OptionValue.override(TruffleCompilerOptions.TruffleCompileOnly, "~foobar")) {
-            final OSRRepeatingNode repeating = new OSRRepeatingNode();
+        try (TruffleOptionsOverrideScope scope = TruffleCompilerOptions.overrideOptions(TruffleCompileOnly, "~foobar")) {
+            final OSRRepeatingNode repeating = new OSRRepeatingNode(TruffleCompilerOptions.getValue(TruffleOSRCompilationThreshold));
             final LoopNode loop = runtime.createLoopNode(repeating);
             OptimizedCallTarget target = (OptimizedCallTarget) runtime.createCallTarget(new NamedRootNode("foobar") {
 

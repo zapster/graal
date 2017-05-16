@@ -28,8 +28,6 @@ import static org.graalvm.compiler.nodes.graphbuilderconf.InlineInvokePlugin.Inl
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.junit.Assert.assertThat;
 
-import org.junit.Test;
-
 import org.graalvm.compiler.core.test.GraalCompilerTest;
 import org.graalvm.compiler.graph.iterators.NodeIterable;
 import org.graalvm.compiler.nodes.BeginNode;
@@ -38,7 +36,7 @@ import org.graalvm.compiler.nodes.IfNode;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.StructuredGraph.AllowAssumptions;
 import org.graalvm.compiler.nodes.ValueNode;
-import org.graalvm.compiler.nodes.extended.UnsafeLoadNode;
+import org.graalvm.compiler.nodes.extended.RawLoadNode;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderContext;
 import org.graalvm.compiler.nodes.graphbuilderconf.InlineInvokePlugin;
@@ -53,6 +51,7 @@ import org.graalvm.compiler.phases.common.LoweringPhase;
 import org.graalvm.compiler.phases.tiers.PhaseContext;
 import org.graalvm.compiler.truffle.nodes.ObjectLocationIdentity;
 import org.graalvm.compiler.truffle.substitutions.TruffleGraphBuilderPlugins;
+import org.junit.Test;
 
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
@@ -106,7 +105,7 @@ public class ConditionAnchoringTest extends GraalCompilerTest {
     public void test(String name, int ids) {
         StructuredGraph graph = parseEager(name, AllowAssumptions.YES);
 
-        NodeIterable<UnsafeLoadNode> unsafeNodes = graph.getNodes().filter(UnsafeLoadNode.class);
+        NodeIterable<RawLoadNode> unsafeNodes = graph.getNodes().filter(RawLoadNode.class);
         assertThat(unsafeNodes, hasCount(1));
 
         // lower unsafe load
@@ -114,7 +113,7 @@ public class ConditionAnchoringTest extends GraalCompilerTest {
         LoweringPhase lowering = new LoweringPhase(new CanonicalizerPhase(), StandardLoweringStage.HIGH_TIER);
         lowering.apply(graph, context);
 
-        unsafeNodes = graph.getNodes().filter(UnsafeLoadNode.class);
+        unsafeNodes = graph.getNodes().filter(RawLoadNode.class);
         NodeIterable<ConditionAnchorNode> conditionAnchors = graph.getNodes().filter(ConditionAnchorNode.class);
         NodeIterable<ReadNode> reads = graph.getNodes().filter(ReadNode.class);
         assertThat(unsafeNodes, isEmpty());
@@ -131,8 +130,7 @@ public class ConditionAnchoringTest extends GraalCompilerTest {
         assertThat(floatingReads, hasCount(ids + 1)); // 1 id read, 1 'field' access
 
         // apply DominatorConditionalEliminationPhase
-        DominatorConditionalEliminationPhase conditionalElimination = new DominatorConditionalEliminationPhase(false);
-        conditionalElimination.apply(graph, context);
+        DominatorConditionalEliminationPhase.create(false).apply(graph, context);
 
         floatingReads = graph.getNodes().filter(FloatingReadNode.class).filter(n -> ((FloatingReadNode) n).getLocationIdentity() instanceof ObjectLocationIdentity);
         conditionAnchors = graph.getNodes().filter(ConditionAnchorNode.class);
@@ -147,7 +145,7 @@ public class ConditionAnchoringTest extends GraalCompilerTest {
     protected GraphBuilderConfiguration editGraphBuilderConfiguration(GraphBuilderConfiguration conf) {
         // get UnsafeAccessImpl.unsafeGetInt intrinsified
         Registration r = new Registration(conf.getPlugins().getInvocationPlugins(), MyUnsafeAccess.class);
-        TruffleGraphBuilderPlugins.registerUnsafeLoadStorePlugins(r, JavaKind.Int);
+        TruffleGraphBuilderPlugins.registerUnsafeLoadStorePlugins(r, null, JavaKind.Int);
         // get UnsafeAccess.getInt inlined
         conf.getPlugins().appendInlineInvokePlugin(new InlineEverythingPlugin());
         return super.editGraphBuilderConfiguration(conf);

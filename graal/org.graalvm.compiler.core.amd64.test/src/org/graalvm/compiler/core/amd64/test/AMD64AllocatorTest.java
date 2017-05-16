@@ -39,9 +39,11 @@ public class AMD64AllocatorTest extends AllocatorTest {
     @Before
     public void checkAMD64() {
         assumeTrue("skipping AMD64 specific test", getTarget().arch instanceof AMD64);
-        assumeTrue("RegisterPressure is set -> skip", RegisterPressure.getValue() == null);
-        assumeTrue("TraceRA is set -> skip", !TraceRA.getValue());
-        assumeTrue("Graphcoloring is enabled -> skip", !GraphColoringPhase.Options.LIROptGraphColoringPhase.getValue());
+
+        assumeTrue("RegisterPressure is set -> skip", RegisterPressure.getValue(getInitialOptions()) == null);
+        assumeTrue("TraceRA is set -> skip", !TraceRA.getValue(getInitialOptions()));
+        assumeTrue("Graphcoloring is enabled -> skip", !GraphColoringPhase.Options.LIROptGraphColoringPhase.getValue(getInitialOptions()));
+
     }
 
     @Test

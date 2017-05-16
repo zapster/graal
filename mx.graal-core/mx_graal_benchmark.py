@@ -121,23 +121,28 @@ class JvmciJdkVm(mx_benchmark.OutputCapturingJavaVm):
 mx_benchmark.add_java_vm(JvmciJdkVm('server', 'default', ['-server', '-XX:-EnableJVMCI']), _suite, 2)
 mx_benchmark.add_java_vm(JvmciJdkVm('server', 'hosted', ['-server', '-XX:+EnableJVMCI']), _suite, 3)
 
-
 def build_jvmci_vm_variants(raw_name, raw_config_name, extra_args, variants, include_default=True, suite=None, priority=0):
-    if include_default:
-        mx_benchmark.add_java_vm(JvmciJdkVm(raw_name, raw_config_name, extra_args), suite, priority)
-    for variant in variants:
-        if len(variant) == 2:
-            var_name, var_args = variant
-            var_priority = priority
-        else:
-            var_name, var_args, var_priority = variant
-        mx_benchmark.add_java_vm(JvmciJdkVm(raw_name, raw_config_name + '-' + var_name, extra_args + var_args), suite, var_priority)
+    for prefix, args in [('', ['-XX:+UseJVMCICompiler']), ('hosted-', [])]:
+        extended_raw_config_name = prefix + raw_config_name
+        extended_extra_args = extra_args + args
+        if include_default:
+            mx_benchmark.add_java_vm(
+                JvmciJdkVm(raw_name, extended_raw_config_name, extended_extra_args), suite, priority)
+        for variant in variants:
+            if len(variant) == 2:
+                var_name, var_args = variant
+                var_priority = priority
+            else:
+                var_name, var_args, var_priority = variant
+            mx_benchmark.add_java_vm(
+                JvmciJdkVm(raw_name, extended_raw_config_name + '-' + var_name, extended_extra_args + var_args), suite, var_priority)
 
 _graal_variants = [
     ('tracera', ['-Dgraal.TraceRA=true'], 11),
     ('tracera-bu', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=BottomUpOnly'], 10),
+    ('g1gc', ['-XX:+UseG1GC'], 12)
 ]
-build_jvmci_vm_variants('server', 'graal-core', ['-server', '-XX:+EnableJVMCI', '-XX:+UseJVMCICompiler', '-Djvmci.Compiler=graal'], _graal_variants, suite=_suite, priority=15)
+build_jvmci_vm_variants('server', 'graal-core', ['-server', '-XX:+EnableJVMCI', '-Dgraal.CompilerConfiguration=core', '-Djvmci.Compiler=graal'], _graal_variants, suite=_suite, priority=15)
 
 # On 64 bit systems -client is not supported. Nevertheless, when running with -server, we can
 # force the VM to just compile code with C1 but not with C2 by adding option -XX:TieredStopAtLevel=1.
@@ -148,10 +153,28 @@ mx_benchmark.add_java_vm(JvmciJdkVm('client', 'hosted', ['-server', '-XX:+Enable
 
 class TimingBenchmarkMixin(object):
     debug_values_file = 'debug-values.csv'
-    name_re = re.compile(r"(?P<name>GraalCompiler|BackEnd|FrontEnd|LIRPhaseTime_\w+)_Accm")
+    timers = [
+        "BackEnd",
+        "FrontEnd",
+        "GraalCompiler",
+        # LIR stages
+        "LIRPhaseTime_AllocationStage",
+        "LIRPhaseTime_PostAllocationOptimizationStage",
+        "LIRPhaseTime_PreAllocationOptimizationStage",
+        # RA phases
+        "LIRPhaseTime_LinearScanPhase",
+        "LIRPhaseTime_GlobalLivenessAnalysisPhase",
+        "LIRPhaseTime_TraceBuilderPhase",
+        "LIRPhaseTime_TraceRegisterAllocationPhase",
+    ]
+    name_re = re.compile(r"(?P<name>\w+)_Accm")
+
+    @staticmethod
+    def timerArgs():
+        return ["-Dgraaldebug.timer.{0}=true".format(timer) for timer in TimingBenchmarkMixin.timers]
 
     def vmArgs(self, bmSuiteArgs):
-        vmArgs = ['-Dgraal.Time=', '-Dgraal.DebugValueHumanReadable=false', '-Dgraal.DebugValueSummary=Name',
+        vmArgs = TimingBenchmarkMixin.timerArgs() + ['-Dgraal.DebugValueHumanReadable=false', '-Dgraal.DebugValueSummary=Name',
                   '-Dgraal.DebugValueFile=' + TimingBenchmarkMixin.debug_values_file] + super(TimingBenchmarkMixin, self).vmArgs(bmSuiteArgs)
         return vmArgs
 
@@ -174,6 +197,12 @@ class TimingBenchmarkMixin(object):
     def get_csv_filename(self, benchmarks, bmSuiteArgs):
         return TimingBenchmarkMixin.debug_values_file
 
+    @staticmethod
+    def shorten_vm_flags(args):
+        # not need fo timer names
+        filtered_args = [x for x in args if not x.startswith("-Dgraaldebug.timer")]
+        return mx_benchmark.Rule.crop_back("...")(' '.join(filtered_args))
+
     def rules(self, out, benchmarks, bmSuiteArgs):
         return [
           mx_benchmark.CSVFixedFileRule(
@@ -184,7 +213,8 @@ class TimingBenchmarkMixin(object):
               "bench-suite": self.benchSuiteName(),
               "vm": "jvmci",
               "config.name": "default",
-              "extra.value.name": ("<name>", str),
+              "config.vm-flags": TimingBenchmarkMixin.shorten_vm_flags(self.vmArgs(bmSuiteArgs)),
+              "metric.object": ("<name>", str),
               "metric.name": ("compile-time", str),
               "metric.value": ("<value>", int),
               "metric.unit": ("<unit>", str),
@@ -264,7 +294,7 @@ class MoveProfilingBenchmarkMixin(object):
               "vm": "jvmci",
               "config.name": "default",
               "config.vm-flags": self.shorten_flags(self.vmArgs(bmSuiteArgs)),
-              "extra.value.name": ("<name>", str),
+              "metric.object": ("<name>", str),
               "metric.name": ("dynamic-moves", str),
               "metric.value": ("<value>", int),
               "metric.unit": "#",
@@ -297,8 +327,41 @@ class DaCapoMoveProfilingBenchmarkMixin(MoveProfilingBenchmarkMixin):
         return self.currentBenchname
 
 
+class AveragingBenchmarkMixin(object):
+    """Provides utilities for computing the average time of the latest warmup runs.
 
-class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
+    Note that this mixin expects that the main benchmark class produces a sequence of
+    datapoints that have the metric.name dimension set to "warmup".
+    To add the average, this mixin appends a new datapoint whose metric.name dimension
+    is set to "time".
+
+    Benchmarks that mix in this class must manually invoke methods for computing extra
+    iteration counts and averaging, usually in their run method.
+    """
+
+    def getExtraIterationCount(self, iterations):
+        # Uses the number of warmup iterations to calculate the number of extra
+        # iterations needed by the benchmark to compute a more stable average result.
+        return min(20, iterations, max(6, int(iterations * 0.4)))
+
+    def addAverageAcrossLatestResults(self, results):
+        # Postprocess results to compute the resulting time by taking the average of last N runs,
+        # where N is 20% of the maximum number of iterations, at least 5 and at most 10.
+        warmupResults = [result for result in results if result["metric.name"] == "warmup"]
+        if warmupResults:
+            lastIteration = max((result["metric.iteration"] for result in warmupResults))
+            resultIterations = self.getExtraIterationCount(lastIteration + 1)
+            totalTimeForAverage = 0.0
+            for i in range(lastIteration - resultIterations + 1, lastIteration + 1):
+                result = next(result for result in warmupResults if result["metric.iteration"] == i)
+                totalTimeForAverage += result["metric.value"]
+            averageResult = next(result for result in warmupResults if result["metric.iteration"] == 0).copy()
+            averageResult["metric.value"] = totalTimeForAverage / resultIterations
+            averageResult["metric.name"] = "time"
+            results.append(averageResult)
+
+
+class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchmarkMixin):
     """Base benchmark suite for DaCapo-based benchmarks.
 
     This suite can only run a single benchmark in one VM invocation.
@@ -314,10 +377,13 @@ class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
         bmArgs, _ = parser.parse_known_args(bmSuiteArgs)
         self.keepScratchDir = bmArgs.keep_scratch
         if not bmArgs.no_scratch:
-            self.workdir = mkdtemp(prefix='dacapo-work.', dir='.')
+            self._create_tmp_workdir()
         else:
             mx.warn("NO scratch directory created! (--no-scratch)")
             self.workdir = None
+
+    def _create_tmp_workdir(self):
+        self.workdir = mkdtemp(prefix='dacapo-work.', dir='.')
 
     def workingDirectory(self, benchmarks, bmSuiteArgs):
         return self.workdir
@@ -327,6 +393,15 @@ class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
             mx.warn("Scratch directory NOT deleted (--keep-scratch): {0}".format(self.workdir))
         elif self.workdir:
             rmtree(self.workdir)
+
+    def repairDatapointsAndFail(self, benchmarks, bmSuiteArgs, partialResults, message):
+        try:
+            super(BaseDaCapoBenchmarkSuite, self).repairDatapointsAndFail(benchmarks, bmSuiteArgs, partialResults, message)
+        finally:
+            if self.workdir:
+                # keep old workdir for investigation, create a new one for further benchmarking
+                mx.warn("Keeping scratch directory after failed benchmark: {0}".format(self.workdir))
+                self._create_tmp_workdir()
 
     def daCapoClasspathEnvVarName(self):
         raise NotImplementedError()
@@ -372,6 +447,7 @@ class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
             if iterations == -1:
                 return None
             else:
+                iterations = iterations + self.getExtraIterationCount(iterations)
                 return ["-n", str(iterations)] + remaining
 
     def vmArgs(self, bmSuiteArgs):
@@ -393,6 +469,44 @@ class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
         return (
             self.vmArgs(bmSuiteArgs) + ["-jar"] + [self.daCapoPath()] +
             [benchmarks[0]] + runArgs)
+
+    def repairDatapoints(self, benchmarks, bmSuiteArgs, partialResults):
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("-n", default=None)
+        args, _ = parser.parse_known_args(self.runArgs(bmSuiteArgs))
+        if args.n and args.n.isdigit():
+            iterations = int(args.n)
+        else:
+            iterations = self.daCapoIterations()[benchmarks[0]]
+            iterations = iterations + self.getExtraIterationCount(iterations)
+        for i in range(0, iterations):
+            if next((p for p in partialResults if p["metric.iteration"] == i), None) is None:
+                datapoint = {
+                    "benchmark": benchmarks[0],
+                    "vm": "jvmci",
+                    "config.name": "default",
+                    "metric.name": "warmup",
+                    "metric.value": -1,
+                    "metric.unit": "ms",
+                    "metric.type": "numeric",
+                    "metric.score-function":  "id",
+                    "metric.better": "lower",
+                    "metric.iteration": i
+                }
+                partialResults.append(datapoint)
+        datapoint = {
+            "benchmark": benchmarks[0],
+            "vm": "jvmci",
+            "config.name": "default",
+            "metric.name": "time",
+            "metric.value": -1,
+            "metric.unit": "ms",
+            "metric.type": "numeric",
+            "metric.score-function": "id",
+            "metric.better": "lower",
+            "metric.iteration": 0
+        }
+        partialResults.append(datapoint)
 
     def benchmarkList(self, bmSuiteArgs):
         return [key for key, value in self.daCapoIterations().iteritems() if value != -1]
@@ -427,7 +541,7 @@ class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
               "benchmark": ("<benchmark>", str),
               "vm": "jvmci",
               "config.name": "default",
-              "metric.name": "time",
+              "metric.name": "final-time",
               "metric.value": ("<time>", int),
               "metric.unit": "ms",
               "metric.type": "numeric",
@@ -468,22 +582,27 @@ class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
           )
         ]
 
+    def run(self, benchmarks, bmSuiteArgs):
+        results = super(BaseDaCapoBenchmarkSuite, self).run(benchmarks, bmSuiteArgs)
+        self.addAverageAcrossLatestResults(results)
+        return results
+
 
 _daCapoIterations = {
     "avrora"     : 20,
     "batik"      : 40,
     "eclipse"    : -1,
     "fop"        : 40,
-    "h2"         : 20,
+    "h2"         : 25,
     "jython"     : 40,
     "luindex"    : 15,
     "lusearch"   : 40,
     "pmd"        : 30,
-    "sunflow"    : 30,
+    "sunflow"    : 35,
     "tomcat"     : -1, # Stopped working as of 8u92
     "tradebeans" : -1,
     "tradesoap"  : -1,
-    "xalan"      : 20,
+    "xalan"      : 30,
 }
 
 
@@ -542,14 +661,14 @@ mx_benchmark.add_bm_suite(DaCapoMoveProfilingBenchmarkSuite())
 _daCapoScalaConfig = {
     "actors"      : 10,
     "apparat"     : 5,
-    "factorie"    : 5,
+    "factorie"    : 6,
     "kiama"       : 40,
-    "scalac"      : 20,
-    "scaladoc"    : 15,
+    "scalac"      : 30,
+    "scaladoc"    : 20,
     "scalap"      : 120,
     "scalariform" : 30,
-    "scalatest"   : 50,
-    "scalaxb"     : 35,
+    "scalatest"   : 60,
+    "scalaxb"     : 60,
     "specs"       : 20,
     "tmt"         : 12
 }
@@ -1060,7 +1179,7 @@ class JMHJarGraalCoreBenchmarkSuite(mx_benchmark.JMHJarBenchmarkSuite):
 mx_benchmark.add_bm_suite(JMHJarGraalCoreBenchmarkSuite())
 
 
-class RenaissanceBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
+class RenaissanceBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchmarkMixin):
     """Renaissance benchmark suite implementation.
     """
     def name(self):
@@ -1151,7 +1270,7 @@ class RenaissanceBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
               "benchmark": ("<benchmark>", str),
               "vm": "jvmci",
               "config.name": "default",
-              "metric.name": "time",
+              "metric.name": "final-time",
               "metric.value": ("<value>", float),
               "metric.unit": "ms",
               "metric.type": "numeric",
@@ -1161,6 +1280,11 @@ class RenaissanceBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
             }
           )
         ]
+
+    def run(self, benchmarks, bmSuiteArgs):
+        results = super(RenaissanceBenchmarkSuite, self).run(benchmarks, bmSuiteArgs)
+        self.addAverageAcrossLatestResults(results)
+        return results
 
 
 mx_benchmark.add_bm_suite(RenaissanceBenchmarkSuite())

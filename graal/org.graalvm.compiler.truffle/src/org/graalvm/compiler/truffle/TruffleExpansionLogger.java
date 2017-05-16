@@ -22,16 +22,14 @@
  */
 package org.graalvm.compiler.truffle;
 
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TraceTruffleExpansionSource;
+
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-
-import org.graalvm.compiler.graph.Node;
-import org.graalvm.compiler.graph.NodeMap;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.java.MethodCallTargetNode;
 import org.graalvm.compiler.phases.util.Providers;
@@ -67,26 +65,6 @@ public class TruffleExpansionLogger {
             callToParentTree.remove(callTarget);
             ExpansionTree tree = new ExpansionTree(parent, targetReceiverType, targetMethod, sourceMethodBci);
             registerParentInCalls(tree, inliningGraph);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    public void postExpand(Map<Node, Node> states) {
-        Iterable<Entry<Node, Node>> entries;
-        if (states instanceof NodeMap) {
-            entries = ((NodeMap<Node>) states).entries();
-        } else {
-            entries = states.entrySet();
-        }
-
-        for (Entry<Node, Node> entry : entries) {
-            Node key = entry.getKey();
-            Node value = entry.getValue();
-
-            if (value instanceof MethodCallTargetNode && callToParentTree.containsKey(key)) {
-                callToParentTree.put((MethodCallTargetNode) value, callToParentTree.get(key));
-                callToParentTree.remove(key);
-            }
         }
     }
 
@@ -161,7 +139,7 @@ public class TruffleExpansionLogger {
 
             String sourceSource = "";
             String targetSource = "";
-            if (TruffleCompilerOptions.TraceTruffleExpansionSource.getValue()) {
+            if (TruffleCompilerOptions.getValue(TraceTruffleExpansionSource)) {
                 sourceSource = formatSource(sourceElement);
                 targetSource = formatSource(targetElement);
             }

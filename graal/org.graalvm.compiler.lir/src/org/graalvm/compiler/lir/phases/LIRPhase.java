@@ -32,8 +32,8 @@ import org.graalvm.compiler.debug.DebugTimer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.options.Option;
+import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionType;
-import org.graalvm.compiler.options.OptionValue;
 
 import jdk.vm.ci.code.TargetDescription;
 
@@ -46,7 +46,7 @@ public abstract class LIRPhase<C> {
     public static class Options {
         // @formatter:off
         @Option(help = "Enable LIR level optimiztations.", type = OptionType.Debug)
-        public static final OptionValue<Boolean> LIROptimization = new OptionValue<>(true);
+        public static final OptionKey<Boolean> LIROptimization = new OptionKey<>(true);
         // @formatter:on
     }
 
@@ -113,12 +113,21 @@ public abstract class LIRPhase<C> {
         try (Scope s = Debug.scope(getName(), this)) {
             try (DebugCloseable a = timer.start(); DebugCloseable c = memUseTracker.start()) {
                 run(target, lirGenRes, context);
-                if (dumpLIR && Debug.isDumpEnabled(Debug.BASIC_LOG_LEVEL)) {
-                    Debug.dump(Debug.BASIC_LOG_LEVEL, lirGenRes.getLIR(), "%s", getName());
+                if (dumpLIR && Debug.isEnabled()) {
+                    dumpAfter(lirGenRes);
                 }
             }
         } catch (Throwable e) {
             throw Debug.handle(e);
+        }
+    }
+
+    private void dumpAfter(LIRGenerationResult lirGenRes) {
+        boolean isStage = this instanceof LIRPhaseSuite;
+        if (!isStage) {
+            if (Debug.isDumpEnabled(Debug.INFO_LEVEL)) {
+                Debug.dump(Debug.INFO_LEVEL, lirGenRes.getLIR(), "After %s", getName());
+            }
         }
     }
 
