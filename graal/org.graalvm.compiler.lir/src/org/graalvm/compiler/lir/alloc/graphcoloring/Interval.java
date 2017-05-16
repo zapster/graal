@@ -166,49 +166,94 @@ public class Interval {
         return opId;
     }
 
-    public boolean hasInterference(LifeRange currentRange, boolean spilledRange) {
-        for (LifeRange temp : lifeRanges) {
+    private static boolean checkInterference(LifeRange a, LifeRange b) {
+        int aFrom = a.getFrom();
+        int aTo = a.getTo();
+        int bFrom = b.getFrom();
+        int bTo = b.getTo();
 
-            int tempFrom = temp.getFrom();
-            int tempTo = temp.getTo();
-            int curFrom = currentRange.getFrom();
-            int curTo = currentRange.getTo();
+        if (aFrom < bFrom) {
 
-            if (isSpilled() && spilledRange) { // both spilled
+            // lower = a;
+            // higher = b;
 
-                if (tempFrom == curFrom) {
-                    return true;
-                }
+            if (bFrom == bTo && bTo == aTo) {
+                return true;
             }
-            if (isSpilled()) {
-
-                if (curFrom < tempFrom && tempFrom <= curTo) { // a between x and y
-                    return true;
-                }
-            }
-            if (spilledRange) {
-                if (tempFrom < curFrom && curFrom <= tempTo) { // x between a and b
-                    return true;
-                }
+            if (aTo > bFrom) {
+                return true;
             } else {
-
-// if (!isSpilled() && !spilledRange) {
-                if (tempFrom <= curFrom && curFrom <= tempTo) { // x between a and b
-// Debug.log("true");
-                    return true;
-                } else if (tempFrom <= curTo && curTo <= tempTo) { // y between a and b
-// Debug.log("true");
-                    return true;
-                } else if (curFrom <= tempFrom && tempFrom <= curTo) { // a between x and y
-// Debug.log("true");
-                    return true;
-                } else if (curFrom <= tempTo && tempTo <= curTo) { // b between x and y
-// Debug.log("true");
-                    return true;
-
-                }
+                return false;
             }
+
+        } else if (bFrom < aFrom) {
+            // lower = b;
+            // higher = a;
+            if (aFrom == aTo && aTo == bTo) {
+                return true;
+            }
+            if (bTo > aFrom) {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            return !((aFrom == aTo && bFrom != bTo) || (bFrom == bTo && aFrom != aTo));
         }
+    }
+
+    public boolean hasInterference(LifeRange currentRange, boolean spilledRange) {
+
+        for (LifeRange tempRange : lifeRanges) {
+
+            if (checkInterference(tempRange, currentRange)) {
+                return true;
+            }
+
+        }
+
+// for (LifeRange temp : lifeRanges) {
+//
+// int tempFrom = temp.getFrom();
+// int tempTo = temp.getTo();
+// int curFrom = currentRange.getFrom();
+// int curTo = currentRange.getTo();
+//
+// if (isSpilled() && spilledRange) { // both spilled
+//
+// if (tempFrom == curFrom) {
+// return true;
+// }
+// }
+// if (isSpilled()) {
+//
+// if (curFrom < tempFrom && tempFrom <= curTo) { // a between x and y
+// return true;
+// }
+// }
+// if (spilledRange) {
+// if (tempFrom < curFrom && curFrom <= tempTo) { // x between a and b
+// return true;
+// }
+// } else {
+//
+//// if (!isSpilled() && !spilledRange) {
+// if (tempFrom <= curFrom && curFrom <= tempTo) { // x between a and b
+//// Debug.log("true");
+// return true;
+// } else if (tempFrom <= curTo && curTo <= tempTo) { // y between a and b
+//// Debug.log("true");
+// return true;
+// } else if (curFrom <= tempFrom && tempFrom <= curTo) { // a between x and y
+//// Debug.log("true");
+// return true;
+// } else if (curFrom <= tempTo && tempTo <= curTo) { // b between x and y
+//// Debug.log("true");
+// return true;
+//
+// }
+// }
+// }
 
         return false;
     }

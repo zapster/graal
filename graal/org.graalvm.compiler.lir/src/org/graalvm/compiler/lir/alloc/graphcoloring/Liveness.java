@@ -384,7 +384,7 @@ public class Liveness {
                         for (Register r : callerSaveRegs) {
                             if (allocator.attributes(r).isAllocatable()) {
                                 int catNum = getCategoryNumber(r.asValue());
-                                addTemp(r.asValue(), inst.id() + 1, inst.id() + 1, catNum, RegisterPriority.None);
+                                addTemp(r.asValue(), inst.id(), inst.id() + 1, catNum, RegisterPriority.None);
 
                             }
                         }
@@ -393,10 +393,10 @@ public class Liveness {
                         }
                     }
 
-                    inst.visitEachInput(useConsumer);
-                    inst.visitEachAlive(aliveConsumer);
                     inst.visitEachOutput(defConsumer);
                     inst.visitEachTemp(tempConsumer);
+                    inst.visitEachAlive(aliveConsumer);
+                    inst.visitEachInput(useConsumer);
                     inst.visitEachState(stateConsumer);
                 }
 

@@ -66,9 +66,14 @@ public class GraphColoringPhase extends AllocationPhase {
     }
 
     private static boolean useGC(LIRGenerationResult lirGenRes) {
-        if (lirGenRes == null) {
+
+        if (lirGenRes.getCompilationUnitName().contains("Conditional01")) {
             return true;
         }
+
+// if (lirGenRes.getCompilationUnitName().contains("AMD64MathStub")) {
+// return true;
+// }
 
         return true;
     }

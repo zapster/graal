@@ -767,6 +767,7 @@ public class Chaitin implements IntervalDumper {
                             insertionBuffer.init(lir.getLIRforBlock(spillBlock));
                             insertionBuffer.append(spillPos, spillMoveFactory.createMove((AllocatableValue) spilledInterval.getOperand(), slot));
                             insertionBuffer.finish();
+// System.out.println(spilledInterval.toString() + " pos: " + pos.getPos());
                             lifeTimeAnalysis.addTemp(spilledInterval, pos.getPos());
 
                         }
@@ -1061,6 +1062,7 @@ public class Chaitin implements IntervalDumper {
     }
 
     private void select() {
+
         for (int i = 0; i < graphArr.length; i++) {
             Interferencegraph graph = graphArr[i];
             ArrayDeque<StackObject> stack = stackArr.get(i);
@@ -1398,10 +1400,11 @@ public class Chaitin implements IntervalDumper {
         Value hint = null;
         Value operand = interval.getOperand();
         String type = isRegister(operand) ? "fixed" : operand.getValueKind().getPlatformKind().toString();
+        Value location = interval.getLocation();
         // char typeChar = operand.getPlatformKind().getTypeChar();
         // TODO: look again at visitMethod old: visitIntervalStart(operand, operand, null, hint,
         // type, typeChar);
-        visitor.visitIntervalStart(operand, operand, null, hint, type);
+        visitor.visitIntervalStart(operand, operand, location, hint, type);
 
         // print ranges
 
@@ -1411,7 +1414,7 @@ public class Chaitin implements IntervalDumper {
             int from = range.getFrom();
             int to = range.getTo();
             if (to - from == 0) { // If live range is spilled, it has a length of 0. We set the
-                                  // length to 1 in order to be shown in the c1 visualizer.
+                // length to 1 in order to be shown in the c1 visualizer.
                 to += 1;
             }
 
