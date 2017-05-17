@@ -37,4 +37,4 @@ include "compiler/ci_includes/m7_eighth-c1.hocon"
 include "compiler/ci_includes/m7_eighth-c2.hocon"
 
 include "jsonnet.json"
-builds : ${builds} ${jsonnet}
+builds = ${builds} ${jsonnet}
