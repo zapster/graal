@@ -31,14 +31,14 @@ local MxBenchmarkBuild = (import "bench-common.libsonnet").MxBenchmarkBuild;
   SPECjvm2008Single: SPECjvm2008Base + {
     bench_suite: "specjvm2008:*",
     bench_suite_name: "specjvm2008-single",
-    cmd+: {
+    bench_cmd_template+: {
       benchmark_args+:["-ikv", "-it", "240s", "-wt", "120s"],
     },
   },
   SPECjvm2008OneVM: SPECjvm2008Base + {
     bench_suite: "specjvm2008",
     bench_suite_name: "specjvm2008-onevm",
-    cmd+: {
+    bench_cmd_template+: {
       benchmark_args+:[ "-it", "240s", "-wt", "120s"],
     },
   },

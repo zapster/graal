@@ -6,7 +6,7 @@
     packages+: {
       hwloc: ">=1.9",
     },
-    cmd+: {
+    bench_cmd_template+: {
         node:: error "no node",
         results_file: "node%d-results-file.json" % [self.node],
         outfile:: "${LOGDIR}/node%s" % self.node,
@@ -17,7 +17,7 @@
       },
     run:
       [["export", "LOGDIR=${PWD}"]] +
-      [self.cmd { node: node }.cmd + ["&"] for node in self.nodes] +
+      [self.bench_cmd_factory({ node: node }) + ["&"] for node in self.nodes] +
       [["wait"]],
     bench_results_files:: [
         "node%s-results-file.json" % [node] for node in self.nodes

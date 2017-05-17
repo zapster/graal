@@ -3,12 +3,18 @@ local CompilerCommonBuild = common.CompilerCommonBuild;
 local target = common.Target;
 
 {
-  #
-  local MxBenchCmd = {
+  # The `MxBenchCmdTemplate` is a template for creating an instance of an `mx benchmark` command line.
+  # It expects a `results_file` as a parameter.
+  # Via the `build` entry it can access properties of its enclosing `MxBenchmarkBuild`.
+  local MxBenchCmdTemplate = {
       results_file: error "no results file",
-      outer:: error "no outer config available",
-      mx_cmd:: ["mx", "--kill-with-sigquit", "benchmark", "--results-file", self.results_file, "--machine-name", self.outer.machine_name, self.outer.bench_suite],
-      suite_args:: ["-Xmx" + self.outer.max_heap_size, "-Xms" + self.outer.init_heap_size, "-XX:+PrintConcurrentLocks", "--jvm-config=" + self.outer.jvm_config, "--jvm=" + self.outer.jvm],
+      build:: error "no build config available",
+      # The mx benchmark argumetns, i.e., everything before the first `--`.
+      mx_cmd:: ["mx", "--kill-with-sigquit", "benchmark", "--results-file", self.results_file, "--machine-name", self.build.machine_name, self.build.bench_suite],
+      # The suite arguments, i.e., all flags after the first and before the second `--`.
+      # This includes for instance flags passed to the virtual machine.
+      suite_args:: ["-Xmx" + self.build.max_heap_size, "-Xms" + self.build.init_heap_size, "-XX:+PrintConcurrentLocks", "--jvm-config=" + self.build.jvm_config, "--jvm=" + self.build.jvm],
+      # Flags passed to the benchmark harness, i.e., everything after the last `--`.
       benchmark_args:: [],
       cmd:: self.mx_cmd + ["--"] + self.suite_args + ["--"] + self.benchmark_args,
   },
@@ -25,14 +31,22 @@ local target = common.Target;
     setup+: [
       ["mx", "build"],
     ],
+    # reference to the top level of the build
     local build = self,
-    cmd:: MxBenchCmd {
-        outer: build,
-      },
+    # The `bench_cmd_template` is a template for creating an instance of an `mx benchmark` command line.
+    # This template can be used by sub-classes to customize the benchmark command.
+    # See `MxBenchCmdTemplate` for more details.
+    bench_cmd_template:: MxBenchCmdTemplate {
+        build: build,
+    },
+    # The `bench_cmd_factory()` used to create an instance of an `mx benchmark` command line using
+    # `bench_cmd_template`. It expects a dictionary as a parameter containing all the arguments needed
+    # by `bench_cmd_template`.
+    bench_cmd_factory(args):: (self.bench_cmd_template + args).cmd,
     run: [
-      self.cmd {
+      self.bench_cmd_factory({
         results_file: build.bench_results_files[0],
-      }.cmd,
+      }),
     ],
     teardown: [["bench-uploader.py", "--url", self.bench_server_url, file] for file in self.bench_results_files],
     name: "bench-%s-%s-%s" % [self.jvm, self.jvm_config, self.bench_suite_name],

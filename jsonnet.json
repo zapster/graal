@@ -143,9 +143,6 @@
          "capabilities": [
             "no_frequency_scaling",
             "tmpfs10g",
-            "linux",
-            "amd64",
-            "x52",
             "no_frequency_scaling",
             "linux",
             "amd64",
@@ -172,7 +169,7 @@
          },
          "environment": { },
          "logs": [ ],
-         "name": "bench-server-graal-core-scala-dacapo-linux-amd64-x52-java8-linux-amd64-x52",
+         "name": "bench-server-graal-core-scala-dacapo-java8-linux-amd64-x52",
          "on_failure": [ ],
          "on_success": [ ],
          "packages": {

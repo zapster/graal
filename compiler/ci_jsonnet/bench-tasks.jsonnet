@@ -12,7 +12,7 @@ local cap = import "capabilities.libsonnet";
 local bench = import "benchmarks.libsonnet";
 
 local DacapoX52 = bench.Dacapo + cap.Tmpfs10G + HwLoc;
-local ScalaDacapoX52 = bench.ScalaDacapo + cap.NoFrequencyScaling + cap.Tmpfs10G + HwLoc + mach.X52;
+local ScalaDacapoX52 = bench.ScalaDacapo + cap.NoFrequencyScaling + cap.Tmpfs10G + HwLoc;
 {
   builds+: [
     # post-merge
