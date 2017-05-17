@@ -4,6 +4,7 @@ local Java8 = common.Java8;
 
 local mach = import "machines.libsonnet";
 local HwLoc = (import "hwloc.libsonnet").HwLoc;
+local ScalaDacapoHwLoc = (import "scala-dacapo-hwloc.libsonnet").ScalaDacapoHwLoc;
 
 local target = common.Target;
 local conf = import "jvmconfig.libsonnet";
@@ -12,7 +13,7 @@ local cap = import "capabilities.libsonnet";
 local bench = import "benchmarks.libsonnet";
 
 local DacapoX52 = bench.Dacapo + cap.Tmpfs10G + HwLoc;
-local ScalaDacapoX52 = bench.ScalaDacapo + cap.NoFrequencyScaling + cap.Tmpfs10G + HwLoc;
+local ScalaDacapoX52 = bench.ScalaDacapo + cap.NoFrequencyScaling + cap.Tmpfs10G + ScalaDacapoHwLoc;
 {
   builds+: [
     # post-merge
