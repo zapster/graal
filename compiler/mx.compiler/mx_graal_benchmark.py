@@ -142,12 +142,12 @@ _graal_variants = [
     ('tracera', ['-Dgraal.TraceRA=true'], 11),
     ('tracera-bu', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=BottomUpOnly'], 10),
     ('g1gc', ['-XX:+UseG1GC'], 12)
-] + [
-    ('tracera-ratio', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=Ratio'], 10),
-    ('tracera-loops', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=Loops'], 10),
-    ('tracera-maxfreq', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=MaxFreq'], 10),
-    ('tracera-freqbudget', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=FreqBudget'], 10),
-]
+] + \
+    [('tracera-loops', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=Loops'], 10)] +\
+    [('tracera-ratio-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=Ratio', '-Dgraal.TraceRAbottomUpRatio=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
+    [('tracera-maxfreq-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=MaxFreq', '-Dgraal.TraceRAprobalilityThreshold=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
+    [('tracera-freqbudget-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=FreqBudget', '-Dgraal.TraceRAsumBudget=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)]
+
 build_jvmci_vm_variants('server', 'graal-core', ['-server', '-XX:+EnableJVMCI', '-Dgraal.CompilerConfiguration=core', '-Djvmci.Compiler=graal'], _graal_variants, suite=_suite, priority=15)
 
 # On 64 bit systems -client is not supported. Nevertheless, when running with -server, we can
