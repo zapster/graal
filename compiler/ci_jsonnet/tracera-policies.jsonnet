@@ -16,7 +16,7 @@ local DacapoHwLocLinux = bench.Dacapo + cap.Tmpfs10G + HwLoc;
 local ScalaDacapoHwLocLinux = bench.ScalaDacapo + cap.NoFrequencyScaling + cap.Tmpfs10G + ScalaDacapoHwLoc;
 {
   tracera_policy_configs::[
-   c {name+: "-tracera-policy-experiment"} for c in [
+   c {name+: "-tracera-policy-experiment", timelimit:"1:00:00"} for c in [
       conf.Graal,
       conf.TraceRA,
       conf.TraceRA + { jvm_config+: "-bu" },
