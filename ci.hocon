@@ -36,5 +36,5 @@ include "compiler/ci_includes/x52-c2.hocon"
 include "compiler/ci_includes/m7_eighth-c1.hocon"
 include "compiler/ci_includes/m7_eighth-c2.hocon"
 
-#include "compiler/ci_jsonnet/hocon_bridge.json"
-#builds : ${builds} ${jsonnet}
+include "jsonnet.json"
+builds : ${builds} ${jsonnet}

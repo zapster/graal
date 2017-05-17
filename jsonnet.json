@@ -1,0 +1,905 @@
+{
+   "jsonnet": [
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x52"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [ ],
+         "name": "bench-server-graal-core-dacapo-java8-linux-amd64-x52",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x52",
+               "dacapo:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx64g",
+               "-Xms64g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x52",
+               "dacapo:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx64g",
+               "-Xms64g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "post-merge"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "30:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "linux",
+            "amd64",
+            "x52",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x52"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [ ],
+         "name": "bench-server-graal-core-scala-dacapo-linux-amd64-x52-java8-linux-amd64-x52",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x52",
+               "scala-dacapo:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx64g",
+               "-Xms64g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x52",
+               "scala-dacapo:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx64g",
+               "-Xms64g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "post-merge"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "30:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x52"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            },
+            "SPECJVM2008": {
+               "name": "specjvm2008",
+               "version": "1.01"
+            }
+         },
+         "environment": { },
+         "logs": [ ],
+         "name": "bench-server-graal-core-specjvm2008-single-java8-linux-amd64-x52",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "bench-results.json",
+               "--machine-name",
+               "x52",
+               "specjvm2008:*",
+               "--",
+               "-Xmx64g",
+               "-Xms64g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core",
+               "--jvm=server",
+               "--",
+               "-ikv",
+               "-it",
+               "240s",
+               "-wt",
+               "120s"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "post-merge"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "bench-results.json"
+            ],
+            [
+               "rm",
+               "-r",
+               "${SPECJVM2008}/results"
+            ]
+         ],
+         "timelimit": "2:50:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs25g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [ ],
+         "name": "bench-server-graal-core-renaissance-java8-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "bench-results.json",
+               "--machine-name",
+               "x32",
+               "renaissance:*",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core",
+               "--jvm=server",
+               "--"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "post-merge"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "bench-results.json"
+            ]
+         ],
+         "timelimit": "30:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "solaris",
+            "sparcv9",
+            "m7_eighth"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [ ],
+         "name": "bench-server-graal-core-dacapo-java8-solaris-sparcv9-m7_eighth",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "bench-results.json",
+               "--machine-name",
+               "m7_eighth",
+               "dacapo:*",
+               "--",
+               "-Xmx16g",
+               "-Xms16g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core",
+               "--jvm=server",
+               "--"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "post-merge"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "bench-results.json"
+            ]
+         ],
+         "timelimit": "30:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "solaris",
+            "sparcv9",
+            "m7_eighth"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [ ],
+         "name": "bench-server-graal-core-scala-dacapo-java8-solaris-sparcv9-m7_eighth",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "bench-results.json",
+               "--machine-name",
+               "m7_eighth",
+               "scala-dacapo:*",
+               "--",
+               "-Xmx16g",
+               "-Xms16g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core",
+               "--jvm=server",
+               "--"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "post-merge"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "bench-results.json"
+            ]
+         ],
+         "timelimit": "30:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "solaris",
+            "sparcv9",
+            "m7_eighth"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            },
+            "SPECJVM2008": {
+               "name": "specjvm2008",
+               "version": "1.01"
+            }
+         },
+         "environment": { },
+         "logs": [ ],
+         "name": "bench-server-graal-core-specjvm2008-single-java8-solaris-sparcv9-m7_eighth",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "bench-results.json",
+               "--machine-name",
+               "m7_eighth",
+               "specjvm2008:*",
+               "--",
+               "-Xmx16g",
+               "-Xms16g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core",
+               "--jvm=server",
+               "--",
+               "-ikv",
+               "-it",
+               "240s",
+               "-wt",
+               "120s"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "post-merge"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "bench-results.json"
+            ],
+            [
+               "rm",
+               "-r",
+               "${SPECJVM2008}/results"
+            ]
+         ],
+         "timelimit": "2:50:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "linux",
+            "amd64"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [ ],
+         "name": "gate-test-java8-linux-amd64",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "mx",
+               "-v",
+               "--kill-with-sigquit",
+               "--strict-compliance",
+               "gate",
+               "--strict-mode",
+               "-Dgraal.PrintGraphFile=true",
+               "--extra-vm-argument=-Dgraal.DumpOnError=true",
+               "--tags",
+               "build,test"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ]
+         ],
+         "targets": [
+            "gate"
+         ],
+         "teardown": [ ],
+         "timelimit": "30:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "darwin",
+            "amd64"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": {
+            "PATH": "/usr/local/bin:$PATH"
+         },
+         "logs": [ ],
+         "name": "gate-test-java8-darwin-amd64",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "mercurial": "",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "mx",
+               "-v",
+               "--kill-with-sigquit",
+               "--strict-compliance",
+               "gate",
+               "--strict-mode",
+               "-Dgraal.PrintGraphFile=true",
+               "--extra-vm-argument=-Dgraal.DumpOnError=true",
+               "--tags",
+               "build,test"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ]
+         ],
+         "targets": [
+            "gate"
+         ],
+         "teardown": [ ],
+         "timelimit": "30:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "solaris",
+            "sparcv9"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [ ],
+         "name": "gate-test-java8-solaris-sparcv9",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "mx",
+               "-v",
+               "--kill-with-sigquit",
+               "--strict-compliance",
+               "gate",
+               "--strict-mode",
+               "-Dgraal.PrintGraphFile=true",
+               "--extra-vm-argument=-Dgraal.DumpOnError=true",
+               "--tags",
+               "build,test"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ]
+         ],
+         "targets": [
+            "gate"
+         ],
+         "teardown": [ ],
+         "timelimit": "30:00",
+         "verbose": false
+      }
+   ]
+}
