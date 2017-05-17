@@ -28,7 +28,9 @@
             }
          },
          "environment": { },
-         "logs": [ ],
+         "logs": [
+            "*output.log"
+         ],
          "name": "bench-server-graal-core-dacapo-java8-linux-amd64-x52",
          "on_failure": [ ],
          "on_success": [ ],
@@ -71,7 +73,7 @@
                "|",
                "tee",
                "-a",
-               "${LOGDIR}/node0",
+               "${LOGDIR}/node0-output.log",
                "&"
             ],
             [
@@ -101,7 +103,7 @@
                "|",
                "tee",
                "-a",
-               "${LOGDIR}/node1",
+               "${LOGDIR}/node1-output.log",
                "&"
             ],
             [
@@ -168,7 +170,9 @@
             }
          },
          "environment": { },
-         "logs": [ ],
+         "logs": [
+            "*output.log"
+         ],
          "name": "bench-server-graal-core-scala-dacapo-java8-linux-amd64-x52",
          "on_failure": [ ],
          "on_success": [ ],
@@ -211,7 +215,7 @@
                "|",
                "tee",
                "-a",
-               "${LOGDIR}/node0",
+               "${LOGDIR}/node0-output.log",
                "&"
             ],
             [
@@ -241,7 +245,7 @@
                "|",
                "tee",
                "-a",
-               "${LOGDIR}/node1",
+               "${LOGDIR}/node1-output.log",
                "&"
             ],
             [
@@ -274,7 +278,7 @@
                "|",
                "tee",
                "-a",
-               "${LOGDIR}/node0"
+               "${LOGDIR}/node0-output.log"
             ],
             [
                "hwloc-bind",
@@ -303,7 +307,7 @@
                "|",
                "tee",
                "-a",
-               "${LOGDIR}/node1"
+               "${LOGDIR}/node1-output.log"
             ]
          ],
          "setup": [
