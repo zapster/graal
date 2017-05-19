@@ -146,7 +146,9 @@ _graal_variants = [
     [('tracera-loops', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=Loops'], 10)] +\
     [('tracera-ratio-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=Ratio', '-Dgraal.TraceRAbottomUpRatio=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
     [('tracera-maxfreq-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=MaxFreq', '-Dgraal.TraceRAprobalilityThreshold=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
-    [('tracera-freqbudget-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=FreqBudget', '-Dgraal.TraceRAsumBudget=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)]
+    [('tracera-freqbudget-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=FreqBudget', '-Dgraal.TraceRAsumBudget=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
+    [('tracera-almosttrivial-{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=AlmostTrivial', '-Dgraal.TraceRAalmostTrivialSize={0}'.format(ratio)], 10) for ratio in range(2, 11, 1)] + \
+    [('tracera-almosttrivial-all', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=AlmostTrivial', '-Dgraal.TraceRAalmostTrivialSize=10000'], 10)]
 
 build_jvmci_vm_variants('server', 'graal-core', ['-server', '-XX:+EnableJVMCI', '-Dgraal.CompilerConfiguration=core', '-Djvmci.Compiler=graal'], _graal_variants, suite=_suite, priority=15)
 
