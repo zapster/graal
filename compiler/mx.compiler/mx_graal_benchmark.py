@@ -147,6 +147,8 @@ _graal_variants = [
     [('tracera-ratio-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=Ratio', '-Dgraal.TraceRAbottomUpRatio=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
     [('tracera-maxfreq-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=MaxFreq', '-Dgraal.TraceRAprobalilityThreshold=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
     [('tracera-freqbudget-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=FreqBudget', '-Dgraal.TraceRAsumBudget=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
+    [('tracera-numvars-{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=NumVariables', '-Dgraal.TraceRAnumVariables={0}'.format(ratio)], 10) for ratio in range(1, 11, 1)] +\
+    [('tracera-numvars-default'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=NumVariables'], 10)] +\
     [('tracera-almosttrivial-{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=AlmostTrivial', '-Dgraal.TraceRAalmostTrivialSize={0}'.format(ratio)], 10) for ratio in range(2, 11, 1)] + \
     [('tracera-almosttrivial-all', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=AlmostTrivial', '-Dgraal.TraceRAalmostTrivialSize=10000'], 10)]
 
