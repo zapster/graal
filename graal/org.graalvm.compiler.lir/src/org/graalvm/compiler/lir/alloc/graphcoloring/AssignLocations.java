@@ -94,9 +94,9 @@ public class AssignLocations {
                         // Register r = getRegisterForValue(inst, operand);
                         return ret; // r.asValue(operand.getLIRKind());
                     } else {
-                        if (Options.LIROptGcIrSpilling.getValue()) {
+                        if (Options.LIROptGcIrSpilling.getValue(allocator.getLIR().getOptions())) {
 
-                            if (inter.isInLiveRange(inst.id())) {
+                            if (!inter.isInLiveRange(inst.id())) {
                                 RegisterPriority priority = findUsePosPriority(inst.id(), inter);
                                 if (inst.id() == -1) { // move from or to stackslot, replace with
                                     // location!

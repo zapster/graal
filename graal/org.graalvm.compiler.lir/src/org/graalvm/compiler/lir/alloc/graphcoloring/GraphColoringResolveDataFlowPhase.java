@@ -118,7 +118,7 @@ public class GraphColoringResolveDataFlowPhase {
                 Debug.log("inserting moves at beginning of toBlock B%d", toBlock.getId());
             }
 
-            if (DetailedAsserts.getValue()) {
+            if (DetailedAsserts.getValue(allocator.getLIR().getOptions())) {
                 assert allocator.getLIR().getLIRforBlock(fromBlock).get(0) instanceof StandardOp.LabelOp : "block does not start with a label";
 
                 /*
@@ -142,7 +142,7 @@ public class GraphColoringResolveDataFlowPhase {
             int toBlockFirstInstructionId = allocator.getFirstLirInstructionId(toBlock);
             int fromBlockLastInstructionId = allocator.getLastLirInstructionId(fromBlock) + 1;
 
-            if (Options.LIROptGcIrSpilling.getValue()) {
+            if (Options.LIROptGcIrSpilling.getValue(allocator.getLIR().getOptions())) {
                 Interval[] intervals = allocator.getIntervals();
                 for (int i = 0; i < intervals.length; i++) {
                     if (intervals[i] != null) {

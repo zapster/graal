@@ -2,7 +2,9 @@ package org.graalvm.compiler.lir.test;
 
 import org.graalvm.compiler.core.common.LIRKind;
 import org.graalvm.compiler.lir.Variable;
+import org.graalvm.compiler.lir.alloc.graphcoloring.Chaitin;
 import org.graalvm.compiler.lir.alloc.graphcoloring.Interval;
+import org.graalvm.compiler.lir.alloc.graphcoloring.Interval.RegisterPriority;
 import org.graalvm.compiler.lir.alloc.graphcoloring.LifeRange;
 import org.junit.Assert;
 import org.junit.Test;
@@ -66,6 +68,29 @@ public class GraphColoringIntervalTest {
         LifeRange range = new LifeRange(0, 30, 31, LifeRange.EndMarker);
 
         Assert.assertFalse(inter.hasInterference(range, false));
+    }
+
+    @Test
+    public void testNewLiveRanges() {
+// [1258 MustHaveRegister, 1252 MustHaveRegister, 1130 MustHaveRegister, 1130 ShouldHaveRegister,
+// 1128 MustHaveRegister]
+//// [from: 1128 to: 1130, from: 1252 to: 1258]
+// spilled Regions: [from: 1256 to: 1257]
+// def: 1128
+        LifeRange spilledRegion = new LifeRange(0, 1256, 1257, null);
+        Interval inter = new Interval(new Variable(null, 1), 1);
+        inter.addUse(1158, RegisterPriority.MustHaveRegister);
+        inter.addUse(1252, RegisterPriority.MustHaveRegister);
+        inter.addUse(1130, RegisterPriority.MustHaveRegister);
+        inter.addUse(1130, RegisterPriority.ShouldHaveRegister);
+        inter.addUse(1128, RegisterPriority.MustHaveRegister);
+
+        inter.addLiveRange(1252, 1258);
+        inter.addLiveRange(1128, 1130);
+
+        inter.addDef(1128);
+// Chaitin allocator = new Chaitin(target, lirGenRes, spillMoveFactory, registerAllocationConfig)
+
     }
 
 }

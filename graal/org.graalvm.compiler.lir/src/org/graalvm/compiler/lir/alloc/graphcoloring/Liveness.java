@@ -32,7 +32,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 
-import org.graalvm.compiler.common.PermanentBailoutException;
+import org.graalvm.compiler.core.common.PermanentBailoutException;
 import org.graalvm.compiler.core.common.alloc.RegisterAllocationConfig;
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.core.common.cfg.AbstractControlFlowGraph;
@@ -610,10 +610,10 @@ public class Liveness {
                 // System.out.println("Instruction: " + inst);
                 // try (Indent ident1 = Debug.logAndIndent("inst: %s", inst)) {
 
-                inst.visitEachInput(useConsumer);
-                inst.visitEachAlive(useConsumer);
                 inst.visitEachOutput(defConsumer);
                 inst.visitEachTemp(defConsumer);
+                inst.visitEachAlive(useConsumer);
+                inst.visitEachInput(useConsumer);
                 inst.visitEachState(stateConsumer);
 
                 // }

@@ -141,11 +141,11 @@ public class Interval {
     }
 
     public void addLiveRange(int from, int to) {
-        if (Options.LIROptGcIrSpilling.getValue()) {
-            assert from <= to : "invalid range";
-        } else {
-            assert from < to : "invalid range";
-        }
+//        if (Options.LIROptGcIrSpilling.getValue()) {
+//            assert from <= to : "invalid range";
+//        } else {
+//            assert from < to : "invalid range";
+//        }
         if (first.getFrom() <= to) {
 
             first.setFrom((from < first.getFrom()) ? from : first.getFrom());
