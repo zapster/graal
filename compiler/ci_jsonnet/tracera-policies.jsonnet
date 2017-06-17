@@ -30,6 +30,12 @@ local ScalaDacapoHwLocLinux = bench.ScalaDacapo + cap.NoFrequencyScaling + cap.T
     ] + [
       conf.TraceRA + { jvm_config+: "-almosttrivial-%s" % ratio } for ratio in std.range(2,10) + ["all"]
     ] + [
+      conf.TraceRA + { jvm_config+: "-loopratio-0.%d" % ratio } for ratio in std.range(1,9)
+    ] + [
+      conf.TraceRA + { jvm_config+: "-loopmaxfreq-0.%d" % ratio } for ratio in std.range(1,9)
+    ] + [
+      conf.TraceRA + { jvm_config+: "-loopbudget-0.%d" % ratio } for ratio in std.range(1,9)
+    ] + [
       conf.TraceRA + { jvm_config+: "-numvars-%s" % ratio } for ratio in std.range(1,10) + ["default"]
     ]
   ],
