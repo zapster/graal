@@ -146,8 +146,8 @@ _graal_variants = [
     [('tracera-loops', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=Loops'], 10)] +\
     [('tracera-ratio-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=Ratio', '-Dgraal.TraceRAbottomUpRatio=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
     [('tracera-maxfreq-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=MaxFreq', '-Dgraal.TraceRAprobalilityThreshold=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
-    [('tracera-freqbudget-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=FreqBudget', '-Dgraal.TraceRAsumBudget=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1) + [999995]] +\
-    [('tracera-numvars-{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=NumVariables', '-Dgraal.TraceRAnumVariables={0}'.format(ratio)], 10) for ratio in range(1, 11, 1)] +\
+    [('tracera-freqbudget-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=FreqBudget', '-Dgraal.TraceRAsumBudget=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1) + [98, 999995]] +\
+    [('tracera-numvars-{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=NumVariables', '-Dgraal.TraceRAnumVariables={0}'.format(ratio)], 10) for ratio in range(1, 21, 1)] +\
     [('tracera-numvars-default'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=NumVariables'], 10)] +\
     [('tracera-loopratio-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=LoopRatio', '-Dgraal.TraceRAbottomUpRatio=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\
     [('tracera-loopmaxfreq-0.{0}'.format(ratio), ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=LoopMaxFreq', '-Dgraal.TraceRAprobalilityThreshold=0.{0}'.format(ratio)], 10) for ratio in range(1, 10, 1)] +\

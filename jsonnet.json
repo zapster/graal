@@ -5374,6 +5374,147 @@
          "logs": [
             "*output.log"
          ],
+         "name": "bench-server-graal-core-tracera-freqbudget-0.98-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-freqbudget-0.98",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-freqbudget-0.98",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
          "name": "bench-server-graal-core-tracera-freqbudget-0.999995-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
          "on_failure": [ ],
          "on_success": [ ],
@@ -12142,6 +12283,1416 @@
          "logs": [
             "*output.log"
          ],
+         "name": "bench-server-graal-core-tracera-numvars-11-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-11",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-11",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-12-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-12",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-12",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-13-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-13",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-13",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-14-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-14",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-14",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-15-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-15",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-15",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-16-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-16",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-16",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-17-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-17",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-17",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-18-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-18",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-18",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-19-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-19",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-19",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-20-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-20",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "dacapo-timing:*",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-20",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
          "name": "bench-server-graal-core-tracera-numvars-default-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
          "on_failure": [ ],
          "on_success": [ ],
@@ -18773,6 +20324,218 @@
                "-Xms8g",
                "-XX:+PrintConcurrentLocks",
                "--jvm-config=graal-core-tracera-freqbudget-0.9",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-freqbudget-0.98-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-freqbudget-0.98",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-freqbudget-0.98",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-freqbudget-0.98",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-freqbudget-0.98",
                "--jvm=server",
                "--",
                "|",
@@ -28949,6 +30712,2126 @@
                "-Xms8g",
                "-XX:+PrintConcurrentLocks",
                "--jvm-config=graal-core-tracera-numvars-10",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-11-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-11",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-11",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-11",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-11",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-12-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-12",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-12",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-12",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-12",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-13-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-13",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-13",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-13",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-13",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-14-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-14",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-14",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-14",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-14",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-15-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-15",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-15",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-15",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-15",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-16-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-16",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-16",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-16",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-16",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-17-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-17",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-17",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-17",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-17",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-18-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-18",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-18",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-18",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-18",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-19-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-19",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-19",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-19",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-19",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log"
+            ]
+         ],
+         "setup": [
+            [
+               "cd",
+               "./compiler"
+            ],
+            [
+               "mx",
+               "build"
+            ]
+         ],
+         "targets": [
+            "bench",
+            "bench"
+         ],
+         "teardown": [
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "node1-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node0-results-file.json"
+            ],
+            [
+               "bench-uploader.py",
+               "--url",
+               "${BENCH_SERVER_URL}",
+               "serial-node1-results-file.json"
+            ]
+         ],
+         "timelimit": "1:00:00",
+         "verbose": false
+      },
+      {
+         "capabilities": [
+            "no_frequency_scaling",
+            "tmpfs10g",
+            "no_frequency_scaling",
+            "linux",
+            "amd64",
+            "x32"
+         ],
+         "catch_files": [
+            "Graal diagnostic output saved in (?P<filename>.+\\.zip)"
+         ],
+         "downloads": {
+            "EXTRA_JAVA_HOMES": {
+               "pathlist": [
+                  {
+                     "name": "oraclejdk",
+                     "platformspecific": true,
+                     "version": "7"
+                  }
+               ]
+            },
+            "JAVA_HOME": {
+               "name": "labsjdk",
+               "platformspecific": true,
+               "version": "8u121-jvmci-0.26"
+            }
+         },
+         "environment": { },
+         "logs": [
+            "*output.log"
+         ],
+         "name": "bench-server-graal-core-tracera-numvars-20-scala-dacapo-timing-java8-tracera-policy-experiment-linux-amd64-x32",
+         "on_failure": [ ],
+         "on_success": [ ],
+         "packages": {
+            "git": ">=1.8.3",
+            "hwloc": ">=1.9",
+            "mercurial": ">=2.2",
+            "pip:astroid": "==1.1.0",
+            "pip:pylint": "==1.1.0"
+         },
+         "run": [
+            [
+               "export",
+               "LOGDIR=${PWD}"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-20",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log",
+               "&"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:~actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-20",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node1-output.log",
+               "&"
+            ],
+            [
+               "wait"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:0",
+               "--membind",
+               "node:0",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node0-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "0",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-20",
+               "--jvm=server",
+               "--",
+               "|",
+               "tee",
+               "-a",
+               "${LOGDIR}/node0-output.log"
+            ],
+            [
+               "hwloc-bind",
+               "--cpubind",
+               "node:1",
+               "--membind",
+               "node:1",
+               "--",
+               "mx",
+               "--kill-with-sigquit",
+               "benchmark",
+               "--results-file",
+               "serial-node1-results-file.json",
+               "--machine-name",
+               "x32",
+               "scala-dacapo-timing:actors",
+               "--machine-node",
+               "1",
+               "--",
+               "-Xmx8g",
+               "-Xms8g",
+               "-XX:+PrintConcurrentLocks",
+               "--jvm-config=graal-core-tracera-numvars-20",
                "--jvm=server",
                "--",
                "|",
