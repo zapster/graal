@@ -80,7 +80,8 @@ public class Liveness {
         this.allocator = allocator;
 
         cfg = lir.getControlFlowGraph();
-        blocks = cfg.getBlocks();
+        blocks = lirGenRes.getLIR().linearScanOrder();
+// blocks = cfg.getBlocks();
 
         regCatToRegCatNum = new HashMap<>();
         operandRegCatNum = new int[1];
@@ -122,7 +123,7 @@ public class Liveness {
 
         // Assign IDs to LIR nodes and build a mapping, lirOps, from ID to LIRInstruction node.
         int numInstructions = 0;
-        for (AbstractBlockBase<?> block : cfg.getBlocks()) {
+        for (AbstractBlockBase<?> block : blocks) {
             numInstructions += allocator.getLIR().getLIRforBlock(block).size();
         }
 
@@ -131,7 +132,7 @@ public class Liveness {
 
         int opId = 0;
         int index = 0;
-        for (AbstractBlockBase<?> block : cfg.getBlocks()) {
+        for (AbstractBlockBase<?> block : blocks) {
 
             List<LIRInstruction> instructions = allocator.getLIR().getLIRforBlock(block);
 
@@ -369,10 +370,10 @@ public class Liveness {
 // * anywhere inside this loop. It's possible that the block was part of a
 // * non-natural loop, so it might have an invalid loop index.
 // */
-// if (block.isLoopEnd() && block.getLoop() != null && isIntervalInLoop(operandNum,
-// block.getLoop().getIndex())) {
-// allocator.intervalFor(operandNum).addUse(blockTo);
-// }
+                    if (block.isLoopEnd() && block.getLoop() != null && isIntervalInLoop(operandNum,
+                                    block.getLoop().getIndex())) {
+                        allocator.intervalFor(operandNum).addUse(blockTo + 1, RegisterPriority.LiveAtLoopEnd);
+                    }
                 }
 
                 lirInstructuions = lir.getLIRforBlock(block);
@@ -436,7 +437,7 @@ public class Liveness {
         Interval inter = allocator.addValue(operand, operandNum);
 // Debug.log(1, "Add Live Range id:%d State from: %d to %d", inter.getOpId(), from, to);
         inter.addLiveRange(from, to);
-        // inter.addUse(to);
+        inter.addUse(to, RegisterPriority.ShouldHaveRegister);
         inter.setCatNum(catNum);
         inter.setKind(operand.getValueKind());
         inter.setPriority(priority);
@@ -557,7 +558,7 @@ public class Liveness {
     private void buildLiveSets() {
         intervalInLoop = new BitMap2D(allocator.operandSize(), allocator.numLoops());
 
-        for (AbstractBlockBase<?> block : cfg.getBlocks()) {
+        for (AbstractBlockBase<?> block : blocks) {
 
             final BitSet liveGen = new BitSet();
             final BitSet liveKill = new BitSet();

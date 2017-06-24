@@ -81,6 +81,7 @@ public class Chaitin implements IntervalDumper {
     private int[][] colorArr;
     private int firstVariableNumber;
     private LIR lir;
+    private AbstractBlockBase<?>[] blocks;
 // private ArrayList<Interval> ValueList;
     private Interval[] intervals;
     private LIRInstruction[] opIdToInstructionMap;
@@ -95,6 +96,7 @@ public class Chaitin implements IntervalDumper {
 
         this.lirGenRes = lirGenRes;
         this.lir = lirGenRes.getLIR();
+        blocks = lirGenRes.getLIR().linearScanOrder();
 
         this.spillMoveFactory = spillMoveFactory;
         this.registerAllocationConfig = registerAllocationConfig;
@@ -109,7 +111,6 @@ public class Chaitin implements IntervalDumper {
         this.graphArr = lifeTimeAnalysis.getInterferencegraph();
         this.colorArr = new int[graphArr.length][];
         this.insertionBuffer = new LIRInsertionBuffer();
-
         initStack();
         fillAllocRegs();
         this.regCatToRegCatNum = lifeTimeAnalysis.getRegCatToRegCatNum();
@@ -362,7 +363,7 @@ public class Chaitin implements IntervalDumper {
         UsePosition currentPos;
         LifeRange currentRange;
         LifeRange currentSpilledRegion;
-        UsePosition markedForRestore = null;
+
         int rangeEnd = 0;
 
         loop: for (int i = usePositions.get(0).getPos(); i >= usePositions.get(usePositions.size() - 1).getPos(); i--) {
@@ -375,6 +376,8 @@ public class Chaitin implements IntervalDumper {
             while (currentSpilledRegion.getFrom() > currentRange.getTo() || currentSpilledRegion.getFrom() >= currentPos.getPos()) {
                 spilledRegionPointer++;
                 if (spilledRegionPointer >= spilledRegions.size()) {
+                    spilledInterval.addLiveRange(currentRange.getFrom(), currentRange.getTo());
+                    lifeRangePointer++;
                     break loop;
                 }
 
@@ -383,7 +386,7 @@ public class Chaitin implements IntervalDumper {
             }
             if (currentRange.getFrom() >= currentSpilledRegion.getTo()) { // SpilledRegion not in
                                                                           // lifeRange
-                spilledInterval.addLiveRange(currentRange.getTo(), currentRange.getFrom());
+                spilledInterval.addLiveRange(currentRange.getFrom(), currentRange.getTo());
                 lifeRangePointer++;
                 continue;
             }
@@ -411,7 +414,10 @@ public class Chaitin implements IntervalDumper {
             if (currentPos.getPos() > currentRange.getTo()) {
                 // no use pos in current life range, do nothing
             } else {
-                spilledInterval.addLiveRange(currentPos.getPos(), rangeEnd);
+                if (currentPos.getPriority() == RegisterPriority.MustHaveRegister) {
+                    spilledInterval.addLiveRange(currentPos.getPos(), rangeEnd);
+                } // if only shouldHaveRegister remains, every Position after spill is
+                  // shoudHaveRegister
                 spillPosition(spilledInterval, currentPos);
             }
             // find usePos before spilled region but closest to it.
@@ -923,7 +929,7 @@ public class Chaitin implements IntervalDumper {
         int first = -1;
         int last = -1;
 
-        for (AbstractBlockBase<?> block : lir.getControlFlowGraph().getBlocks()) {
+        for (AbstractBlockBase<?> block : blocks) {
             first = getFirstLirInstructionId(block);
             last = getLastLirInstructionId(block);
 
@@ -1341,7 +1347,7 @@ public class Chaitin implements IntervalDumper {
 
     public int blockCount() {
 
-        return lir.getControlFlowGraph().getBlocks().length;
+        return blocks.length;
     }
 
     public MoveFactory getSpillMoveFactory() {
@@ -1541,9 +1547,9 @@ public class Chaitin implements IntervalDumper {
 //
 // }
 
-// for (UsePosition pos : usePosList) {
-// visitor.visitUsePos(pos.getPos(), pos.getPriority().name());
-// }
+        for (UsePosition pos : interval.getUsePositions()) {
+            visitor.visitUsePos(pos.getPos(), pos.getPriority().name());
+        }
 // for (int i = usePosList.size() - 1; i >= 0; --i) {
 // assert prev < usePosList.usePos(i) : "use positions not sorted";
 // visitor.visitUsePos(usePosList.usePos(i), usePosList.registerPriority(i));
