@@ -35,7 +35,6 @@ import java.util.List;
 import org.graalvm.compiler.core.common.PermanentBailoutException;
 import org.graalvm.compiler.core.common.alloc.RegisterAllocationConfig;
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
-import org.graalvm.compiler.core.common.cfg.AbstractControlFlowGraph;
 import org.graalvm.compiler.core.common.util.BitMap2D;
 import org.graalvm.compiler.debug.Debug;
 import org.graalvm.compiler.debug.Debug.Scope;
@@ -62,7 +61,6 @@ public class Liveness {
     private RegisterAllocationConfig registerAllocationConfig;
     private AbstractBlockBase<?>[] blocks;
     private LIR lir;
-    private AbstractControlFlowGraph<?> cfg;
     private BlockData[] blocksets;
     private HashMap<RegisterCategory, Number> regCatToRegCatNum;
     private int[] operandRegCatNum;
@@ -79,7 +77,6 @@ public class Liveness {
         this.lir = lirGenRes.getLIR();
         this.allocator = allocator;
 
-        cfg = lir.getControlFlowGraph();
         blocks = lirGenRes.getLIR().linearScanOrder();
 // blocks = cfg.getBlocks();
 
@@ -357,12 +354,10 @@ public class Liveness {
                         Debug.log("live out %d: %s", operandNum, operand);
                     }
 
-                    // addUse(operand, operandNum, blockFrom, blockTo + 2,
-                    // getCategoryNumber(operand), RegisterPriority.None);
                     Interval inter = allocator.addValue(operand, operandNum);
 
                     inter.addLiveRange(blockFrom, blockTo + 2);
-// Debug.log(1, "Add Live Range id:%d Use from: %d to %d", inter.getOpId(), blockFrom, blockTo + 2);
+                    Debug.log(1, "Add Live Range id:%d Use from: %d to %d", inter.getOpId(), blockFrom, blockTo + 2);
 // addUse(operand, operandNum, blockFrom, blockTo + 2, inter.getCatNum(), RegisterPriority.None);
 
 // /*
@@ -407,7 +402,7 @@ public class Liveness {
                 Interval interval = allocator.intervalFor(i);
                 if (interval != null && isRegister(interval.getOperand())) {
                     interval.addLiveRange(0, 1);
-// Debug.log(1, "Add Live Range id:%d start from: %d to %d", interval.getOpId(), 0, 1);
+                    Debug.log(1, "Add Live Range id:%d start from: %d to %d", interval.getOpId(), 0, 1);
                     int regCatNum = getCategoryNumber(interval.getOperand());
                     interval.setCatNum(regCatNum);
                 }
@@ -421,7 +416,7 @@ public class Liveness {
             return;
         }
         Interval inter = allocator.addValue(operand, operandNum);
-// Debug.log(1, "Add Live Range id:%d Use from: %d to %d", inter.getOpId(), from, to);
+        Debug.log(1, "Add Live Range id:%d Use from: %d to %d", inter.getOpId(), from, to);
         inter.addLiveRange(from, to);
         inter.addUse(to & ~1, priority);
         inter.setCatNum(catNum);
@@ -435,7 +430,7 @@ public class Liveness {
             return;
         }
         Interval inter = allocator.addValue(operand, operandNum);
-// Debug.log(1, "Add Live Range id:%d State from: %d to %d", inter.getOpId(), from, to);
+        Debug.log(1, "Add Live Range id:%d State from: %d to %d", inter.getOpId(), from, to);
         inter.addLiveRange(from, to);
         inter.addUse(to, RegisterPriority.ShouldHaveRegister);
         inter.setCatNum(catNum);
@@ -449,7 +444,7 @@ public class Liveness {
             return;
         }
         Interval inter = allocator.addValue(operand, operandNum);
-// Debug.log(1, "Add Live Range id:%d Alive from: %d to %d", inter.getOpId(), from, to);
+        Debug.log(1, "Add Live Range id:%d Alive from: %d to %d", inter.getOpId(), from, to);
         inter.addLiveRange(from, to);
         inter.addUse(to, priority);
         inter.setCatNum(catNum);
@@ -458,7 +453,6 @@ public class Liveness {
 
     }
 
-    // addDef(operand, operandNum, inst.id(), inst, catNum, registerPriorityOfOutputOperand(inst));
     private void addDef(Value operand, int operandNum, LIRInstruction inst, int catNum, RegisterPriority priority) {
         if (!allocator.isProcessed(operand)) {
             return;
@@ -478,17 +472,12 @@ public class Liveness {
             inter.setKind(operand.getValueKind());
             inter.addDef(defPos);
             inter.setPriority(priority);
-// Debug.log(1, "Life Range of: %d altered at def: from:%d to:%d", inter.getOpId(),
-// inter.first().getFrom(), inter.first().getTo());
 
         } else {
             /*
              * Dead value - make vacuous interval also add register priority for dead intervals
              */
             inter.addLiveRange(defPos, defPos + 1);
-// Debug.log(1, "Add Live Range id:%d Def (deadValue)from: %d to %d", inter.getOpId(), defPos,
-// defPos + 1);
-// inter.addUse(defPos);
             inter.setCatNum(catNum);
             inter.addDef(defPos);
             inter.setKind(operand.getValueKind());
@@ -510,7 +499,6 @@ public class Liveness {
         }
         Interval inter = allocator.addValue(operand, operandNumber(operand));
         inter.addTempRange(pos, to);
-// Debug.log(1, "Add Live Range id:%d Temp from: %d to %d", inter.getOpId(), pos, to);
         inter.setCatNum(catNum);
         inter.setKind(operand.getValueKind());
         inter.setPriority(priority);
@@ -544,16 +532,6 @@ public class Liveness {
         // all other operands require a register
         return RegisterPriority.MustHaveRegister;
     }
-
-// private static boolean optimizeMethodArgument(Value value) {
-// /*
-// * Object method arguments that are passed on the stack are currently not optimized because
-// * this requires that the runtime visits method arguments during stack walking.
-// */
-// // TODO: revisit old: return isStackSlot(value) && asStackSlot(value).isInCallerFrame() &&
-// // value.getLIRKind().isValue();
-// return isStackSlot(value) && asStackSlot(value).isInCallerFrame();
-// }
 
     private void buildLiveSets() {
         intervalInLoop = new BitMap2D(allocator.operandSize(), allocator.numLoops());
@@ -608,8 +586,6 @@ public class Liveness {
             };
 
             for (LIRInstruction inst : lir.getLIRforBlock(block)) {
-                // System.out.println("Instruction: " + inst);
-                // try (Indent ident1 = Debug.logAndIndent("inst: %s", inst)) {
 
                 inst.visitEachOutput(defConsumer);
                 inst.visitEachTemp(defConsumer);
@@ -617,11 +593,8 @@ public class Liveness {
                 inst.visitEachInput(useConsumer);
                 inst.visitEachState(stateConsumer);
 
-                // }
             }
             BlockData data = new BlockData();
-
-            // System.out.println("Block id: " + block.getId() + "\n");
 
             data.liveGen = liveGen;
             data.liveKill = liveKill;
@@ -695,7 +668,7 @@ public class Liveness {
                     liveIn.or(liveSets.liveGen);
 
                     if (Debug.isLogEnabled()) {
-// Debug.log("block %d: livein = %s, liveout = %s", block.getId(), liveIn, liveSets.liveOut);
+                        Debug.log("block %d: livein = %s, liveout = %s", block.getId(), liveIn, liveSets.liveOut);
 
                     }
 
@@ -770,17 +743,6 @@ public class Liveness {
         }
 
     }
-
-// private String printBitset(BitSet set) {
-// String ret = "{";
-//
-// for (int i = set.nextSetBit(0); i >= 0; i = set.nextSetBit(i + 1)) {
-// ret = ret + toString(i) + ", ";
-//
-// }
-//
-// return ret + "}";
-// }
 
     private class BlockData {
         /**

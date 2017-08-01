@@ -91,8 +91,7 @@ public class AssignLocations {
                             assert false;
                         }
 
-                        // Register r = getRegisterForValue(inst, operand);
-                        return ret; // r.asValue(operand.getLIRKind());
+                        return ret;
                     } else {
                         if (Options.LIROptGcIrSpilling.getValue(allocator.getLIR().getOptions())) {
 
@@ -151,8 +150,7 @@ public class AssignLocations {
                         assert false;
                     }
 
-                    // Register r = getRegisterForValue(inst, operand);
-                    return ret; // r.asValue(operand.getLIRKind());
+                    return ret;
                 }
 
                 return operand;

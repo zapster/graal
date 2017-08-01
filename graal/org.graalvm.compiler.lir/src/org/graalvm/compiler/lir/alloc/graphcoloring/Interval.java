@@ -26,8 +26,8 @@ import java.util.ArrayList;
 import java.util.BitSet;
 
 import org.graalvm.compiler.core.common.util.IntList;
+import org.graalvm.compiler.debug.Debug;
 import org.graalvm.compiler.lir.VirtualStackSlot;
-import org.graalvm.compiler.lir.alloc.graphcoloring.GraphColoringPhase.Options;
 
 import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
@@ -108,10 +108,6 @@ public class Interval {
     public IntList getUsePositions1() {
         return usePositions1;
     }
-// public void addTemp(int pos) {
-// usePositions.add(pos);
-//
-// }
 
     public void delRanges() {
         lifeRanges = new ArrayList<>();
@@ -119,7 +115,7 @@ public class Interval {
     }
 
     public void addDef(int id) {
-        // assert defPos == -1;
+
         defPos = id;
 
     }
@@ -137,27 +133,23 @@ public class Interval {
         LifeRange last = first();
         first = new LifeRange(last.getId() + 1, from, to, last);
         lifeRanges.add(first);
-// Debug.log(1, "Temp Range of: %d added from:%d to:%d", opId, from, to);
+        Debug.log(1, "Temp Range of: %d added from:%d to:%d", opId, from, to);
     }
 
     public void addLiveRange(int from, int to) {
-//        if (Options.LIROptGcIrSpilling.getValue()) {
-//            assert from <= to : "invalid range";
-//        } else {
-//            assert from < to : "invalid range";
-//        }
+
         if (first.getFrom() <= to) {
 
             first.setFrom((from < first.getFrom()) ? from : first.getFrom());
 
             first.setTo((to > first.getTo()) ? to : first.getTo());
-// Debug.log(1, "Life Range of: %d added from:%d to:%d", opId, first.getFrom(), first.getTo());
+            Debug.log(1, "Life Range of: %d added from:%d to:%d", opId, first.getFrom(), first.getTo());
 
         } else {
             LifeRange last = first();
             first = new LifeRange(last.getId() + 1, from, to, last);
             lifeRanges.add(first);
-// Debug.log(1, "Life Range of: %d added from:%d to:%d", opId, first.getFrom(), first.getTo());
+            Debug.log(1, "Life Range of: %d added from:%d to:%d", opId, first.getFrom(), first.getTo());
         }
 
     }
@@ -202,6 +194,9 @@ public class Interval {
         }
     }
 
+    /**
+     * @param spilledRange
+     */
     public boolean hasInterference(LifeRange currentRange, boolean spilledRange) {
 
         for (LifeRange tempRange : lifeRanges) {
@@ -211,49 +206,6 @@ public class Interval {
             }
 
         }
-
-// for (LifeRange temp : lifeRanges) {
-//
-// int tempFrom = temp.getFrom();
-// int tempTo = temp.getTo();
-// int curFrom = currentRange.getFrom();
-// int curTo = currentRange.getTo();
-//
-// if (isSpilled() && spilledRange) { // both spilled
-//
-// if (tempFrom == curFrom) {
-// return true;
-// }
-// }
-// if (isSpilled()) {
-//
-// if (curFrom < tempFrom && tempFrom <= curTo) { // a between x and y
-// return true;
-// }
-// }
-// if (spilledRange) {
-// if (tempFrom < curFrom && curFrom <= tempTo) { // x between a and b
-// return true;
-// }
-// } else {
-//
-//// if (!isSpilled() && !spilledRange) {
-// if (tempFrom <= curFrom && curFrom <= tempTo) { // x between a and b
-//// Debug.log("true");
-// return true;
-// } else if (tempFrom <= curTo && curTo <= tempTo) { // y between a and b
-//// Debug.log("true");
-// return true;
-// } else if (curFrom <= tempFrom && tempFrom <= curTo) { // a between x and y
-//// Debug.log("true");
-// return true;
-// } else if (curFrom <= tempTo && tempTo <= curTo) { // b between x and y
-//// Debug.log("true");
-// return true;
-//
-// }
-// }
-// }
 
         return false;
     }

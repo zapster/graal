@@ -2,7 +2,6 @@ package org.graalvm.compiler.lir.test;
 
 import org.graalvm.compiler.core.common.LIRKind;
 import org.graalvm.compiler.lir.Variable;
-import org.graalvm.compiler.lir.alloc.graphcoloring.Chaitin;
 import org.graalvm.compiler.lir.alloc.graphcoloring.Interval;
 import org.graalvm.compiler.lir.alloc.graphcoloring.Interval.RegisterPriority;
 import org.graalvm.compiler.lir.alloc.graphcoloring.LifeRange;
@@ -77,7 +76,7 @@ public class GraphColoringIntervalTest {
 //// [from: 1128 to: 1130, from: 1252 to: 1258]
 // spilled Regions: [from: 1256 to: 1257]
 // def: 1128
-        LifeRange spilledRegion = new LifeRange(0, 1256, 1257, null);
+// LifeRange spilledRegion = new LifeRange(0, 1256, 1257, null);
         Interval inter = new Interval(new Variable(null, 1), 1);
         inter.addUse(1158, RegisterPriority.MustHaveRegister);
         inter.addUse(1252, RegisterPriority.MustHaveRegister);
