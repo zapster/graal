@@ -51,7 +51,7 @@ The next category are *normal* JMH benchmarks that are located in the Graal repo
 *Normal* in the sense that they do not depend on Graal internals.
 The `ArrayListBenchmark`, for example, benchmarks the performance of array lists.
 Although it targets a specific optimization in Graal, it does not know about Graal internals.
-I does make sense to run it on any other JVM.
+I is possible to run it on any JVM.
 It could also be in an external jar file, but for convenience it is located next to the Graal code.
 
 Creating such an in-repo benchmark is a two-step procedure.
@@ -114,7 +114,7 @@ To do so, these *benchmark projects* depend on compiler projects.
 In order to make those projects visible in the [JMH] forks we need to execute the JVM with the `-XX:-UseJVMCIClassLoader` flag.
 From the setup perspective this is the only difference to *blackbox benchmarks*.
 
-It does no make sense to run a *whitebox* benchmark in a non-Graal JVM.
+It does not make sense to run a *whitebox* benchmark in a non-Graal JVM.
 Although, comparing different modes (`hosted`, `jvmci` without `C1-only`) could be interesting,
 the common mode is `jvcmi`, i.e., JVMCI is enabled and Graal is the optimizing compiler.
 Also, the remark about package prefixes for *blackbox benchmarks* does not really apply.
@@ -129,7 +129,7 @@ That are all benchmark distributions that have either a dependency on a `GRAAL*`
 or include projects starting with `org.graalvm.compiler` in their distribution jar.
 
 
-Refer to the [mx documentation][mx in-repo] for more infos.
+Refer to the [mx documentation][mx in-repo] for further information.
 
 [JMH]: http://openjdk.java.net/projects/code-tools/jmh/
 [mx JMH]: https://github.com/graalvm/mx/blob/master/docs/JMH.md
