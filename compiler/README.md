@@ -1,6 +1,29 @@
 Graal is a dynamic compiler written in Java that integrates with the HotSpot JVM. It has a focus on high performance and extensibility.
 In addition, it provides optimized performance for [Truffle](https://github.com/graalvm/truffle)-based languages running on the JVM.
 
+## Getting Started on JDK 9
+
+Graal works out of the box with JDK 9.
+
+```bash
+# download and extract JDK 9 from http://www.oracle.com/technetwork/java/javase/downloads/index.html
+export JAVA_HOME=path/to/jdk-9
+# get mx
+git clone https://github.com/graalvm/mx
+# get graal
+git clone https://github.com/graalvm/graal
+# build graal jars
+cd graal/compiler
+path/to/mx build
+# run using mx (and print compilations to verify that graal is really used)
+path/to/mx vm -XX:+UseJVMCICompiler -Dgraal.PrintCompilation=true -jar scala-dacapo.jar scalac -n 40
+# without mx (a bit verbose; best way to for finding the required flags is to run mx with the -v option, e.g, `mx -v vm -version`)
+path/to/jdk-9/bin/java -server -XX:+UnlockExperimentalVMOptions -XX:+EnableJVMCI -XX:+UseJVMCICompiler \
+--module-path=path/to/graal/sdk/mxbuild/modules/org.graalvm.graal_sdk.jar:path/to/graal/truffle/mxbuild/modules/com.oracle.truffle.truffle_api.jar \
+--upgrade-module-path=path/to/graal/compiler/mxbuild/modules/jdk.internal.vm.compiler.jar \
+-Dgraal.PrintCompilation=true -jar scala-dacapo.jar scalac -n 40
+```
+
 ## Setup
 
 Working with Graal will mean cloning more than one repository and so it's
