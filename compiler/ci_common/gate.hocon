@@ -1,0 +1,116 @@
+gateCmdSuffix : ["-v", "--kill-with-sigquit", "gate", "--strict-mode", "--extra-vm-argument=-Dgraal.DumpOnError=true -Dgraal.PrintGraphFile=true", "--extra-vm-argument=${EXTRA_VM_ARGS}", "--tags"]
+gateCmd : ["mx", "--strict-compliance"] ${gateCmdSuffix}
+
+gateTest : {
+  environment : {
+    EXTRA_VM_ARGS : ""
+  }
+  run : [
+    ${gateCmd} ["build,test"]
+  ]
+}
+
+gateTestCTW : {
+  environment : {
+    EXTRA_VM_ARGS : ""
+  }
+  run : [
+    # At least one gate build should run without strict
+    # compliance as that's how Travis runs on JDK9
+    ["mx"] ${gateCmdSuffix} ["build,ctw"]
+  ]
+}
+
+gateTestBenchmark : {
+  environment : {
+    EXTRA_VM_ARGS : ""
+    JVM_CONFIG    : ${jvm-config.default}
+    JVM           : "server"
+  }
+  run : [
+    ${gateCmd} ["build,benchmarktest"]
+    # blackbox jmh test
+    ["mx", "benchmark", "jmh-dist:*", "--", "--jvm-config=${JVM_CONFIG}", "--jvm=${JVM}", "--", ".*TestJMH.*" ]
+    # whitebox jmh test
+    ["mx", "benchmark", "jmh-whitebox:*", "--", "--jvm-config=${JVM_CONFIG}", "--jvm=${JVM}", "--", ".*TestJMH.*" ]
+  ]
+}
+
+gateBootstrap : {
+  environment : {
+    EXTRA_VM_ARGS : ""
+  }
+  run : [
+    ${gateCmd} ["build,bootstrap"]
+  ]
+}
+
+gateBootstrapLite : {
+  environment : {
+    EXTRA_VM_ARGS : ""
+  }
+  run : [
+    ${gateCmd} ["build,bootstraplite"]
+  ]
+}
+
+gateBootstrapFullVerify : {
+  environment : {
+    EXTRA_VM_ARGS : ""
+  }
+  run : [
+    ${gateCmd} ["build,bootstrapfullverify"]
+  ]
+}
+
+gateStyle : ${eclipse} ${jdt} {
+  downloads : {
+    JDT : {name: ecj, version: "4.5.1", platformspecific: false}
+    ECLIPSE : {name: eclipse, version: "4.5.2", platformspecific: true}
+  }
+  environment : {
+    ECLIPSE_EXE : "$ECLIPSE/eclipse"
+    EXTRA_VM_ARGS : ""
+  }
+  run : [
+    ${gateCmd} ["style,fullbuild,javadoc"]
+  ]
+}
+
+gateCommon : ${compilerCommon} {
+  targets : [gate]
+  logs: ${logPatterns}
+}
+
+gateLinuxAMD64 : ${linux-amd64} ${gateCommon}
+
+gateDarwinAMD64 : ${darwin-amd64} ${gateCommon}
+
+gateSolarisSPARC : ${solaris-sparcv9} ${gateCommon}
+
+gateLinuxSPARC : ${linux-sparcv9} ${gateCommon}
+
+gateLinuxAMD64TraceRA : ${gateLinuxAMD64} {
+  environment : {
+    EXTRA_VM_ARGS : "-Dgraal.TraceRA=true"
+  }
+}
+
+gateLinuxAMD64TraceRABU : ${gateLinuxAMD64} {
+  environment : {
+    EXTRA_VM_ARGS : "-Dgraal.TraceRA=true -Dgraal.TraceRAPolicy=BottomUpOnly"
+  }
+}
+
+gateLinuxAMD64TraceRASingleBlock : ${gateLinuxAMD64} {
+  environment : {
+    EXTRA_VM_ARGS : "-Dgraal.TraceRA=true -Dgraal.TraceRAPolicy=BottomUpOnly -Dgraal.TraceBuilding=SingleBlock"
+  }
+}
+
+gateLinuxAMD64Bootstrap : ${gateLinuxAMD64} { capabilities : ${gateLinuxAMD64.capabilities} [manycores] }
+gateDarwinAMD64Bootstrap : ${gateDarwinAMD64}
+gateSolarisSPARCBootstrap : ${gateSolarisSPARC} { capabilities : ${gateSolarisSPARC.capabilities} [manycores] }
+gateLinuxSPARCBootstrap : ${gateLinuxSPARC} # No manycore
+gateLinuxAMD64TraceRABootstrap : ${gateLinuxAMD64TraceRA} { capabilities : ${gateLinuxAMD64TraceRA.capabilities} [manycores] }
+gateLinuxAMD64TraceRABUBootstrap : ${gateLinuxAMD64TraceRABU} { capabilities : ${gateLinuxAMD64TraceRABU.capabilities} [manycores] }

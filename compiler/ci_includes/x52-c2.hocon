@@ -1,0 +1,24 @@
+
+x52.c2 : ${labsjdk8} {
+  capabilities: [linux, x52, no_frequency_scaling]
+  environment : {
+    XMX          : "64g"
+    XMS          : "64g"
+    JVM_CONFIG :  "default"
+    JVM        :  "server"
+    MACHINE_NAME: "x52"
+  }
+}
+
+x52.c2-tmpfs10g : ${x52.c2} {
+  capabilities: [linux, x52, no_frequency_scaling, tmpfs10g]
+}
+
+builds += [
+  ${x52.c2-tmpfs10g} ${bench-dacapo-hwloc}              { targets: [weekly], name: "bench-compiler-dacapo-linux-x52-c2" }
+  ${x52.c2-tmpfs10g} ${bench-scala-dacapo-hwloc}        { targets: [weekly], name: "bench-compiler-scala-dacapo-linux-x52-c2" }
+  ${x52.c2} ${bench-specjvm2008-Single}           { targets: [weekly], name: "bench-compiler-specjvm2008-Single-linux-x52-c2" }
+  ${x52.c2} ${bench-specjvm2008-OneVM}            { targets: [weekly], name: "bench-compiler-specjvm2008-OneVM-linux-x52-c2" }
+  ${x52.c2} ${bench-specjbb2015}                  { targets: [weekly], name: "bench-compiler-specjbb2015-linux-x52-c2" }
+#  ${x52.c2} ${bench-micros-graal-dist}                 { targets: [weekly], name: "bench-compiler-jmh-micros-graal-dist-linux-x52-c2" }
+]
