@@ -23,7 +23,7 @@
 package org.graalvm.compiler.lir.alloc.graphcoloring;
 
 import org.graalvm.compiler.core.common.alloc.RegisterAllocationConfig;
-import org.graalvm.compiler.debug.Debug;
+import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.lir.alloc.lsra.LinearScanPhase;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.gen.LIRGeneratorTool.MoveFactory;
@@ -56,8 +56,9 @@ public class GraphColoringPhase extends AllocationPhase {
 
             Chaitin allocation = new Chaitin(target, lirGenRes, spillMoveFactory, registerAllocationConfig);
 
-            Debug.dump(1, lirGenRes.getLIR(), "After Graphcoloring Register Alloction");
-            Debug.dump(1, allocation, "After Graphcoloring Register Alloction");
+            DebugContext debug = lirGenRes.getLIR().getDebug();
+            debug.dump(1, lirGenRes.getLIR(), "After Graphcoloring Register Alloction");
+            debug.dump(1, allocation, "After Graphcoloring Register Alloction");
         } else {
 
             phase.apply(target, lirGenRes, context);

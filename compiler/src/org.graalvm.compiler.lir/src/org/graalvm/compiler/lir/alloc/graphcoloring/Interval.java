@@ -26,7 +26,7 @@ import java.util.ArrayList;
 import java.util.BitSet;
 
 import org.graalvm.compiler.core.common.util.IntList;
-import org.graalvm.compiler.debug.Debug;
+import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.lir.VirtualStackSlot;
 
 import jdk.vm.ci.meta.Value;
@@ -129,27 +129,27 @@ public class Interval {
         return first;
     }
 
-    public void addTempRange(int from, int to) {
+    public void addTempRange(int from, int to, DebugContext debug) {
         LifeRange last = first();
         first = new LifeRange(last.getId() + 1, from, to, last);
         lifeRanges.add(first);
-        Debug.log(1, "Temp Range of: %d added from:%d to:%d", opId, from, to);
+        debug.log(1, "Temp Range of: %d added from:%d to:%d", opId, from, to);
     }
 
-    public void addLiveRange(int from, int to) {
+    public void addLiveRange(int from, int to, DebugContext debug) {
 
         if (first.getFrom() <= to) {
 
             first.setFrom((from < first.getFrom()) ? from : first.getFrom());
 
             first.setTo((to > first.getTo()) ? to : first.getTo());
-            Debug.log(1, "Life Range of: %d added from:%d to:%d", opId, first.getFrom(), first.getTo());
+            debug.log(1, "Life Range of: %d added from:%d to:%d", opId, first.getFrom(), first.getTo());
 
         } else {
             LifeRange last = first();
             first = new LifeRange(last.getId() + 1, from, to, last);
             lifeRanges.add(first);
-            Debug.log(1, "Life Range of: %d added from:%d to:%d", opId, first.getFrom(), first.getTo());
+            debug.log(1, "Life Range of: %d added from:%d to:%d", opId, first.getFrom(), first.getTo());
         }
 
     }

@@ -22,7 +22,6 @@
  */
 package org.graalvm.compiler.lir.alloc.graphcoloring;
 
-import static org.graalvm.compiler.core.common.GraalOptions.DetailedAsserts;
 import static org.graalvm.compiler.lir.LIRValueUtil.asConstant;
 import static org.graalvm.compiler.lir.LIRValueUtil.isConstantValue;
 import static org.graalvm.compiler.lir.LIRValueUtil.isStackSlotValue;
@@ -31,9 +30,9 @@ import java.util.BitSet;
 import java.util.List;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
-import org.graalvm.compiler.debug.Debug;
-import org.graalvm.compiler.debug.Debug.Scope;
-import org.graalvm.compiler.debug.DebugCounter;
+import org.graalvm.compiler.debug.CounterKey;
+import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.StandardOp;
 import org.graalvm.compiler.lir.alloc.graphcoloring.GraphColoringPhase.Options;
@@ -44,16 +43,18 @@ import jdk.vm.ci.meta.Value;
 
 public class GraphColoringResolveDataFlowPhase {
 
-    private static final DebugCounter numPhiResolutionMoves = Debug.counter("SSA LSRA[numPhiResolutionMoves]");
-    private static final DebugCounter numStackToStackMoves = Debug.counter("SSA LSRA[numStackToStackMoves]");
+    private static final CounterKey numPhiResolutionMoves = DebugContext.counter("GCRA[numPhiResolutionMoves]");
+    private static final CounterKey numStackToStackMoves = DebugContext.counter("GCRA[numStackToStackMoves]");
     private Chaitin allocator;
+    private final DebugContext debug;
 
     GraphColoringResolveDataFlowPhase(Chaitin allocator) {
         this.allocator = allocator;
+        this.debug = allocator.debug;
     }
 
     protected void resolveDataFlow() {
-        try (Scope s = Debug.scope("GraphColoringMoveResolver")) {
+        try (Scope s = debug.scope("GraphColoringMoveResolver")) {
 
             GraphColoringMoveResolver moveResolver = new GraphColoringMoveResolver(allocator);
             BitSet blockCompleted = new BitSet(allocator.blockCount());
@@ -79,8 +80,8 @@ public class GraphColoringResolveDataFlowPhase {
                      * blocks).
                      */
                     if (!alreadyResolved.get(toBlock.getId())) {
-                        if (Debug.isLogEnabled()) {
-                            Debug.log("processing edge between B%d and B%d", fromBlock.getId(), toBlock.getId());
+                        if (debug.isLogEnabled()) {
+                            debug.log("processing edge between B%d and B%d", fromBlock.getId(), toBlock.getId());
                         }
 
                         alreadyResolved.set(toBlock.getLinearScanNumber());
@@ -100,8 +101,8 @@ public class GraphColoringResolveDataFlowPhase {
 
     private void resolveFindInsertPos(AbstractBlockBase<?> fromBlock, AbstractBlockBase<?> toBlock, GraphColoringMoveResolver moveResolver) {
         if (fromBlock.getSuccessorCount() <= 1) {
-            if (Debug.isLogEnabled()) {
-                Debug.log("inserting moves at end of fromBlock B%d", fromBlock.getId());
+            if (debug.isLogEnabled()) {
+                debug.log("inserting moves at end of fromBlock B%d", fromBlock.getId());
             }
 
             List<LIRInstruction> instructions = allocator.getLIR().getLIRforBlock(fromBlock);
@@ -114,26 +115,29 @@ public class GraphColoringResolveDataFlowPhase {
             }
 
         } else {
-            if (Debug.isLogEnabled()) {
-                Debug.log("inserting moves at beginning of toBlock B%d", toBlock.getId());
+            if (debug.isLogEnabled()) {
+                debug.log("inserting moves at beginning of toBlock B%d", toBlock.getId());
             }
 
-            if (DetailedAsserts.getValue(allocator.getLIR().getOptions())) {
-                assert allocator.getLIR().getLIRforBlock(fromBlock).get(0) instanceof StandardOp.LabelOp : "block does not start with a label";
-
-                /*
-                 * Because the number of predecessor edges matches the number of successor edges,
-                 * blocks which are reached by switch statements may have be more than one
-                 * predecessor but it will be guaranteed that all predecessors will be the same.
-                 */
-                for (AbstractBlockBase<?> predecessor : toBlock.getPredecessors()) {
-                    assert fromBlock == predecessor : "all critical edges must be broken";
-                }
-            }
+            assert verifyEdge(fromBlock, toBlock);
 
             moveResolver.setInsertPosition(allocator.getLIR().getLIRforBlock(toBlock), 1);
         }
 
+    }
+
+    private boolean verifyEdge(AbstractBlockBase<?> fromBlock, AbstractBlockBase<?> toBlock) {
+        assert allocator.getLIR().getLIRforBlock(fromBlock).get(0) instanceof StandardOp.LabelOp : "block does not start with a label";
+
+        /*
+         * Because the number of predecessor edges matches the number of successor edges, blocks
+         * which are reached by switch statements may have be more than one predecessor but it will
+         * be guaranteed that all predecessors will be the same.
+         */
+        for (AbstractBlockBase<?> predecessor : toBlock.getPredecessors()) {
+            assert fromBlock == predecessor : "all critical edges must be broken";
+        }
+        return true;
     }
 
     protected void resolveCollectMappings(AbstractBlockBase<?> fromBlock, AbstractBlockBase<?> toBlock, AbstractBlockBase<?> midBlock, GraphColoringMoveResolver moveResolver) {
@@ -170,16 +174,16 @@ public class GraphColoringResolveDataFlowPhase {
                     // assert isRegister(phiIn) : "phiIn is a register: " + phiIn;
 
                     if (isConstantValue(phiOut)) {
-                        numPhiResolutionMoves.increment();
+                        numPhiResolutionMoves.increment(debug);
                         moveResolver.addMapping(asConstant(phiOut), phiIn);
                     } else {
 
                         if (!phiOut.equals(phiIn)) {
-                            numPhiResolutionMoves.increment();
+                            numPhiResolutionMoves.increment(debug);
                             if (!(isStackSlotValue(phiIn) && isStackSlotValue(phiOut))) {
                                 moveResolver.addMapping(phiOut, phiIn);
                             } else {
-                                numStackToStackMoves.increment();
+                                numStackToStackMoves.increment(debug);
                                 moveResolver.addMapping(phiOut, phiIn);
                             }
                         }

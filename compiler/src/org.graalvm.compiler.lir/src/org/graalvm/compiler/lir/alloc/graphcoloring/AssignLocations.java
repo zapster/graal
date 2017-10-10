@@ -30,7 +30,7 @@ import java.util.HashMap;
 import org.graalvm.compiler.core.common.alloc.RegisterAllocationConfig;
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.core.common.cfg.AbstractControlFlowGraph;
-import org.graalvm.compiler.debug.Debug;
+import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.lir.InstructionValueProcedure;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -40,8 +40,8 @@ import org.graalvm.compiler.lir.alloc.graphcoloring.Interval.UsePosition;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 
 import jdk.vm.ci.code.Register;
-import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.code.Register.RegisterCategory;
+import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.meta.Value;
 
 public class AssignLocations {
@@ -54,6 +54,7 @@ public class AssignLocations {
     private Liveness life;
     private HashMap<RegisterCategory, Number> regCatToRegCatNum; // Integer statt number
     private Chaitin allocator;
+    private final DebugContext debug;
 
     public AssignLocations(RegisterAllocationConfig registerAllocationConfig, int[][] colorArr, RegisterArray[] allocRegs, LIRGenerationResult lirGenRes, Liveness life, Chaitin allocator) {
         this.registerAllocationConfig = registerAllocationConfig;
@@ -63,6 +64,7 @@ public class AssignLocations {
         this.lir = lirGenRes.getLIR();
         this.life = life;
         this.allocator = allocator;
+        this.debug = lir.getDebug();
 
         cfg = lir.getControlFlowGraph();
         cfg.getBlocks();
@@ -71,9 +73,9 @@ public class AssignLocations {
     }
 
     public void run() {
-        Debug.log(1, "\nBegin Assignment");
+        debug.log(1, "\nBegin Assignment");
         assignRegs();
-        Debug.log(1, "End Assignment");
+        debug.log(1, "End Assignment");
     }
 
     private void assignRegs() {
@@ -169,16 +171,16 @@ public class AssignLocations {
 
     private RegisterPriority findUsePosPriority(int id, Interval inter) {
         ArrayList<UsePosition> usePositions = inter.getUsePositions();
-        Debug.log(1, "Instruction id: %d %s", id, allocator.getVarName(inter.getOpId()));
+        debug.log(1, "Instruction id: %d %s", id, allocator.getVarName(inter.getOpId()));
         for (UsePosition pos : usePositions) {
             if (pos.getPos() == id || pos.getPos() == id + 1) {
 
-                Debug.log(1, "Priority: %s", pos.getPriority());
+                debug.log(1, "Priority: %s", pos.getPriority());
                 return pos.getPriority();
 
             }
         }
-        Debug.log(1, "Priority: None");
+        debug.log(1, "Priority: None");
 
         return RegisterPriority.None;
 
@@ -193,7 +195,7 @@ public class AssignLocations {
         int n = colors[opId];
         System.out.println("asssign location: " + life.toString(opId) + " ColorArr[?] " + regCatNum + " Color: " + n);
         Register r = allocregs.get(n);
-        Debug.log("AssignLoc: %s RegCatNum: %d colors size: %d Color: %s", life.toStringGraph(opId), regCatNum, colors.length, r);
+        debug.log("AssignLoc: %s RegCatNum: %d colors size: %d Color: %s", life.toStringGraph(opId), regCatNum, colors.length, r);
         return r;
     }
 

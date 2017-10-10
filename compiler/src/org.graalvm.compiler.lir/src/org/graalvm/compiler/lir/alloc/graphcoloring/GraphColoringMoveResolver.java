@@ -30,8 +30,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.graalvm.compiler.core.common.LIRKind;
-import org.graalvm.compiler.debug.Debug;
-import org.graalvm.compiler.debug.DebugCounter;
+import org.graalvm.compiler.debug.CounterKey;
+import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.LIRInsertionBuffer;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -42,7 +42,7 @@ import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.Value;
 
 public class GraphColoringMoveResolver {
-    private static final DebugCounter cycleBreakingSlotsAllocated = Debug.counter("LSRA[cycleBreakingSlotsAllocated]");
+    private static final CounterKey cycleBreakingSlotsAllocated = DebugContext.counter("GCRA[cycleBreakingSlotsAllocated]");
 
     private final List<Value> mappingFrom;
     private final List<Constant> mappingFromOpr;
@@ -51,6 +51,7 @@ public class GraphColoringMoveResolver {
     private int insertIdx;
     private LIRInsertionBuffer insertionBuffer;
     private final int[] registerBlocked;
+    private final DebugContext debug;
 
     protected GraphColoringMoveResolver(Chaitin allocator) {
         this.allocator = allocator;
@@ -60,12 +61,13 @@ public class GraphColoringMoveResolver {
         this.insertIdx = -1;
         this.insertionBuffer = new LIRInsertionBuffer();
         this.registerBlocked = new int[allocator.getRegisters().size()];
+        this.debug = allocator.debug;
     }
 
     public void addMapping(Value phiOut, Value phiIn) {
 
-        if (Debug.isLogEnabled()) {
-            Debug.log("add move mapping from %s to %s", phiOut, phiIn);
+        if (debug.isLogEnabled()) {
+            debug.log("add move mapping from %s to %s", phiOut, phiIn);
         }
         mappingFrom.add(phiOut);
         mappingFromOpr.add(null);
@@ -74,8 +76,8 @@ public class GraphColoringMoveResolver {
     }
 
     public void addMapping(Constant fromOpr, Value phiIn) {
-        if (Debug.isLogEnabled()) {
-            Debug.log("add move mapping from %s to %s", fromOpr, phiIn);
+        if (debug.isLogEnabled()) {
+            debug.log("add move mapping from %s to %s", fromOpr, phiIn);
         }
 
         mappingFrom.add(null);
@@ -85,8 +87,8 @@ public class GraphColoringMoveResolver {
 
     private void resolveMappings() {
 
-        try (Indent indent = Debug.logAndIndent("resolveMapping")) {
-            if (Debug.isLogEnabled()) {
+        try (Indent indent = debug.logAndIndent("resolveMapping")) {
+            if (debug.isLogEnabled()) {
                 printMapping();
             }
 
@@ -119,15 +121,15 @@ public class GraphColoringMoveResolver {
 
                     } else {
                         spillCandidate = i;
-                        Debug.log("Try from: %s to: %s again, cannot be processed now! Candidate: %d", fromValue, toValue, spillCandidate);
+                        debug.log("Try from: %s to: %s again, cannot be processed now! Candidate: %d", fromValue, toValue, spillCandidate);
                     }
                 }
                 if (!processedValue) {
                     breakCycle(spillCandidate);
-                    Debug.log("CycleBreakNeeded! Candidate: %d", spillCandidate);
+                    debug.log("CycleBreakNeeded! Candidate: %d", spillCandidate);
                     Value fromValue = mappingFrom.get(spillCandidate);
                     Value toValue = mappingTo.get(spillCandidate);
-                    Debug.log("Mapping from: %s to: %s", fromValue, toValue);
+                    debug.log("Mapping from: %s to: %s", fromValue, toValue);
 
                 }
 
@@ -142,7 +144,7 @@ public class GraphColoringMoveResolver {
 
         AllocatableValue spillSlot = allocator.getFrameMapBuilder().allocateSpillSlot(fromValue.getValueKind());
 
-        cycleBreakingSlotsAllocated.increment();
+        cycleBreakingSlotsAllocated.increment(debug);
 
         spillValue(spillCandidate, fromValue, spillSlot);
 
@@ -185,7 +187,7 @@ public class GraphColoringMoveResolver {
             return true;
         }
         if (from != null && isRegister(from) && isRegister(to) && asRegister(from).equals(asRegister(to))) {
-            assert LIRKind.verifyMoveKinds(to.getValueKind(), from.getValueKind()) : String.format("Same register but Kind mismatch %s <- %s", to, from);
+            assert LIRKind.verifyMoveKinds(to.getValueKind(), from.getValueKind(), allocator.registerAllocationConfig) : String.format("Same register but Kind mismatch %s <- %s", to, from);
             return true;
         }
         return false;
@@ -202,14 +204,14 @@ public class GraphColoringMoveResolver {
     }
 
     private void insertMove(Constant constant, Value toValue) {
-        Debug.log("insertIdx: %d", insertIdx);
+        debug.log("insertIdx: %d", insertIdx);
         assert insertIdx != -1 : "must setup insert position first";
         AllocatableValue toOpr = (AllocatableValue) toValue;
         LIRInstruction move = allocator.getSpillMoveFactory().createLoad(toOpr, constant);
         insertionBuffer.append(insertIdx, move);
 
-        if (Debug.isLogEnabled()) {
-            Debug.log("insert move from value %s to %s at %d", constant, toOpr, insertIdx);
+        if (debug.isLogEnabled()) {
+            debug.log("insert move from value %s to %s at %d", constant, toOpr, insertIdx);
         }
 
     }
@@ -221,14 +223,14 @@ public class GraphColoringMoveResolver {
         AllocatableValue fromOpr = (AllocatableValue) fromValue;
         if (!isRegister(toOpr) && !isRegister(fromOpr)) {
             insertionBuffer.append(insertIdx, allocator.getSpillMoveFactory().createStackMove(toOpr, fromOpr));
-            if (Debug.isLogEnabled()) {
-                Debug.log("insert Stack move from %s to %s at %d", fromOpr, toOpr, insertIdx);
+            if (debug.isLogEnabled()) {
+                debug.log("insert Stack move from %s to %s at %d", fromOpr, toOpr, insertIdx);
             }
         } else {
 
             insertionBuffer.append(insertIdx, allocator.getSpillMoveFactory().createMove(toOpr, fromOpr));
-            if (Debug.isLogEnabled()) {
-                Debug.log("insert move from %s to %s at %d", fromOpr, toOpr, insertIdx);
+            if (debug.isLogEnabled()) {
+                debug.log("insert move from %s to %s at %d", fromOpr, toOpr, insertIdx);
             }
         }
     }
@@ -261,12 +263,12 @@ public class GraphColoringMoveResolver {
 
     @SuppressWarnings("try")
     private void printMapping() {
-        try (Indent indent = Debug.logAndIndent("Mapping")) {
+        try (Indent indent = debug.logAndIndent("Mapping")) {
             for (int i = mappingFrom.size() - 1; i >= 0; i--) {
                 Value fromInterval = mappingFrom.get(i);
                 Value toInterval = mappingTo.get(i);
 
-                Debug.log("move %s <- %s", toInterval, fromInterval);
+                debug.log("move %s <- %s", toInterval, fromInterval);
             }
         }
     }
@@ -278,7 +280,7 @@ public class GraphColoringMoveResolver {
             // assert valueBlocked(value) == 0 : "location already marked as used: " + value;
             int direction = 1;
             setValueBlocked(value, direction);
-            Debug.log("block %s", value);
+            debug.log("block %s", value);
         }
     }
 
@@ -288,7 +290,7 @@ public class GraphColoringMoveResolver {
         if (mightBeBlocked(value)) {
             assert valueBlocked(value) > 0 : "location already marked as unused: " + value;
             setValueBlocked(value, -1);
-            Debug.log("unblock %s", value);
+            debug.log("unblock %s", value);
         }
     }
 

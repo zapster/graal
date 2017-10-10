@@ -1,6 +1,7 @@
 package org.graalvm.compiler.lir.test;
 
 import org.graalvm.compiler.core.common.LIRKind;
+import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.alloc.graphcoloring.Interval;
 import org.graalvm.compiler.lir.alloc.graphcoloring.Interval.RegisterPriority;
@@ -10,12 +11,14 @@ import org.junit.Test;
 
 public class GraphColoringIntervalTest {
 
+    private DebugContext debug = DebugContext.forCurrentThread();
+
     @Test
     public void testHasInterference() {
         Interval inter = new Interval(new Variable(LIRKind.Illegal, 0), 0);
 
-        inter.addLiveRange(2, 24);
-        inter.addLiveRange(26, 32);
+        inter.addLiveRange(2, 24, debug);
+        inter.addLiveRange(26, 32, debug);
         LifeRange range = new LifeRange(0, 20, 22, LifeRange.EndMarker);
 
         Assert.assertTrue(inter.hasInterference(range, false));
@@ -25,7 +28,7 @@ public class GraphColoringIntervalTest {
     public void testHasInterference1() {
         Interval inter = new Interval(new Variable(LIRKind.Illegal, 0), 0);
 
-        inter.addLiveRange(20, 22);
+        inter.addLiveRange(20, 22, debug);
 
         LifeRange range = new LifeRange(0, 2, 24, LifeRange.EndMarker);
 
@@ -36,7 +39,7 @@ public class GraphColoringIntervalTest {
     public void testHasInterference2() {
         Interval inter = new Interval(new Variable(LIRKind.Illegal, 0), 0);
 
-        inter.addLiveRange(20, 22);
+        inter.addLiveRange(20, 22, debug);
 
         LifeRange range = new LifeRange(0, 26, 32, LifeRange.EndMarker);
 
@@ -47,7 +50,7 @@ public class GraphColoringIntervalTest {
     public void testHasInterference3() {
         Interval inter = new Interval(new Variable(LIRKind.Illegal, 0), 0);
 
-        inter.addLiveRange(32, 36);
+        inter.addLiveRange(32, 36, debug);
 
         LifeRange range = new LifeRange(0, 36, 36, LifeRange.EndMarker);
 
@@ -61,7 +64,7 @@ public class GraphColoringIntervalTest {
         // inter.addTempRange(6, 6);
 // inter.addTempRange(18, 18);
 // inter.addTempRange(24, 24);
-        inter.addTempRange(32, 32);
+        inter.addTempRange(32, 32, debug);
 // inter.addTempRange(34, 34);
 
         LifeRange range = new LifeRange(0, 30, 31, LifeRange.EndMarker);
@@ -84,8 +87,8 @@ public class GraphColoringIntervalTest {
         inter.addUse(1130, RegisterPriority.ShouldHaveRegister);
         inter.addUse(1128, RegisterPriority.MustHaveRegister);
 
-        inter.addLiveRange(1252, 1258);
-        inter.addLiveRange(1128, 1130);
+        inter.addLiveRange(1252, 1258, debug);
+        inter.addLiveRange(1128, 1130, debug);
 
         inter.addDef(1128);
 // Chaitin allocator = new Chaitin(target, lirGenRes, spillMoveFactory, registerAllocationConfig)
