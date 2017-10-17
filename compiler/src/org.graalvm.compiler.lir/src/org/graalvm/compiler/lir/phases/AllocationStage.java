@@ -33,6 +33,7 @@ import org.graalvm.compiler.lir.alloc.trace.TraceRegisterAllocationPhase;
 import org.graalvm.compiler.lir.dfa.LocationMarkerPhase;
 import org.graalvm.compiler.lir.dfa.MarkBasePointersPhase;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
+import org.graalvm.compiler.lir.saraverify.RegisterAllocationVerificationPhase;
 import org.graalvm.compiler.lir.stackslotalloc.LSStackSlotAllocator;
 import org.graalvm.compiler.lir.stackslotalloc.SimpleStackSlotAllocator;
 import org.graalvm.compiler.options.OptionValues;
@@ -41,6 +42,9 @@ public class AllocationStage extends LIRPhaseSuite<AllocationContext> {
 
     public AllocationStage(OptionValues options) {
         appendPhase(new MarkBasePointersPhase());
+        if (RegisterAllocationVerificationPhase.Options.SARAVerify.getValue(options)) {
+            appendPhase(new RegisterAllocationVerificationPhase());
+        }
         if (TraceRA.getValue(options)) {
             appendPhase(new TraceBuilderPhase());
             appendPhase(new GlobalLivenessAnalysisPhase());
