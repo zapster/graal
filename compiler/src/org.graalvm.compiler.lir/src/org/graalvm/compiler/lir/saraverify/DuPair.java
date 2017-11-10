@@ -39,4 +39,19 @@ public class DuPair {
     public String toString() {
         return "\nValue: " + value + "\nDef: " + defInstruction + "\nUse: " + useInstruction + "\nUse Operand Pos: " + operandUsePosition;
     }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof DuPair) {
+            DuPair duPair = (DuPair) obj;
+            return this.value.equals(duPair.value) && this.defInstruction.equals(duPair.defInstruction) && this.useInstruction.equals(duPair.useInstruction) &&
+                            (this.operandUsePosition == duPair.operandUsePosition);
+        }
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
 }
