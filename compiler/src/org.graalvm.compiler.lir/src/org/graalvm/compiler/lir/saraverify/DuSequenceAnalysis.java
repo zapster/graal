@@ -3,9 +3,9 @@ package org.graalvm.compiler.lir.saraverify;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -20,7 +20,7 @@ public class DuSequenceAnalysis {
 
     public static List<DuPair> determineDuPairs(ArrayList<LIRInstruction> instructions) {
         ArrayList<DuPair> duPairs = new ArrayList<>();
-        HashMap<Value, LinkedList<ValUsage>> valUseInstructions = new HashMap<>();
+        Map<Value, ArrayList<ValUsage>> valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
 
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions, duPairs);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(valUseInstructions);
@@ -31,7 +31,7 @@ public class DuSequenceAnalysis {
         for (LIRInstruction inst : reverseInstructions) {
             System.out.println(inst);
             inst.visitEachOutput(defConsumer);
-            useConsumer.setOperandUsePosition(1);
+            useConsumer.resetOperandUsePosition();
             inst.visitEachInput(useConsumer);
         }
 
@@ -60,10 +60,10 @@ class ValUsage {
 
 class DefInstructionValueConsumer implements InstructionValueConsumer {
 
-    private HashMap<Value, LinkedList<ValUsage>> valUseInstructions;
+    private Map<Value, ArrayList<ValUsage>> valUseInstructions;
     private ArrayList<DuPair> duPairs;
 
-    public DefInstructionValueConsumer(HashMap<Value, LinkedList<ValUsage>> valUseInstructions, ArrayList<DuPair> duPairs) {
+    public DefInstructionValueConsumer(Map<Value, ArrayList<ValUsage>> valUseInstructions, ArrayList<DuPair> duPairs) {
         this.valUseInstructions = valUseInstructions;
         this.duPairs = duPairs;
     }
@@ -72,7 +72,7 @@ class DefInstructionValueConsumer implements InstructionValueConsumer {
     public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
         System.out.println("Def of value: " + value);
 
-        LinkedList<ValUsage> useInstructions = valUseInstructions.get(value);
+        ArrayList<ValUsage> useInstructions = valUseInstructions.get(value);
         if (useInstructions == null) {
             return;
         }
@@ -87,12 +87,12 @@ class DefInstructionValueConsumer implements InstructionValueConsumer {
 
 class UseInstructionValueConsumer implements InstructionValueConsumer {
 
-    private HashMap<Value, LinkedList<ValUsage>> valUseInstructions;
+    private Map<Value, ArrayList<ValUsage>> valUseInstructions;
     private int operandUsePosition;
 
-    public UseInstructionValueConsumer(HashMap<Value, LinkedList<ValUsage>> valUseInstructions) {
+    public UseInstructionValueConsumer(Map<Value, ArrayList<ValUsage>> valUseInstructions) {
         this.valUseInstructions = valUseInstructions;
-        this.operandUsePosition = 1;
+        resetOperandUsePosition();
     }
 
     @Override
@@ -100,10 +100,10 @@ class UseInstructionValueConsumer implements InstructionValueConsumer {
         System.out.println(value);
         System.out.println("Use Operand Position: " + operandUsePosition);
 
-        LinkedList<ValUsage> useInstructions = valUseInstructions.get(value);
+        ArrayList<ValUsage> useInstructions = valUseInstructions.get(value);
 
         if (useInstructions == null) {
-            useInstructions = new LinkedList<>();
+            useInstructions = new ArrayList<>();
         }
         useInstructions.add(new ValUsage(instruction, operandUsePosition));
         valUseInstructions.put(value, useInstructions);
@@ -111,7 +111,7 @@ class UseInstructionValueConsumer implements InstructionValueConsumer {
         operandUsePosition++;
     }
 
-    public void setOperandUsePosition(int operandUsePosition) {
-        this.operandUsePosition = operandUsePosition;
+    public void resetOperandUsePosition() {
+        this.operandUsePosition = 0;
     }
 }
