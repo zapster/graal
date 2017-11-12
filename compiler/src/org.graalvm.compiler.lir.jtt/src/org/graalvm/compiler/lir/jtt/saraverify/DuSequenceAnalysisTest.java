@@ -41,12 +41,12 @@ public class DuSequenceAnalysisTest {
         instructions.add(returnOp);
 
         List<DuPair> expected = new ArrayList<>();
-        expected.add(new DuPair(rbp.asValue(), instructions.get(0), instructions.get(4), 0));
-        expected.add(new DuPair(r0.asValue(), instructions.get(0), instructions.get(1), 0));
-        expected.add(new DuPair(r1.asValue(), instructions.get(0), instructions.get(1), 1));
-        expected.add(new DuPair(r2.asValue(), instructions.get(1), instructions.get(2), 1));
-        expected.add(new DuPair(r2.asValue(), instructions.get(2), instructions.get(4), 1));
-        expected.add(new DuPair(r1.asValue(), instructions.get(0), instructions.get(2), 0));
+        expected.add(new DuPair(rbp.asValue(), instructions.get(0), instructions.get(4), 2, 0));
+        expected.add(new DuPair(r0.asValue(), instructions.get(0), instructions.get(1), 0, 0));
+        expected.add(new DuPair(r1.asValue(), instructions.get(0), instructions.get(1), 1, 1));
+        expected.add(new DuPair(r2.asValue(), instructions.get(1), instructions.get(2), 0, 1));
+        expected.add(new DuPair(r2.asValue(), instructions.get(2), instructions.get(4), 0, 1));
+        expected.add(new DuPair(r1.asValue(), instructions.get(0), instructions.get(2), 1, 0));
 
         List<DuPair> actual = DuSequenceAnalysis.determineDuPairs(instructions);
 
@@ -56,18 +56,31 @@ public class DuSequenceAnalysisTest {
     @Test
     public void testDuPairEquals() {
         LabelOp labelOp = new LabelOp(null, true);
-        DuPair duPair = new DuPair(r0.asValue(), labelOp, labelOp, 1);
+        LabelOp labelOp2 = new LabelOp(null, true);
+        DuPair duPair = new DuPair(r0.asValue(), labelOp, labelOp2, 0, 0);
         assertEquals(duPair, duPair);
 
-        DuPair duPair2 = new DuPair(r1.asValue(), labelOp, labelOp, 1);
+        DuPair duPair2 = new DuPair(r1.asValue(), labelOp, labelOp2, 0, 0);
         assertNotEquals(duPair, duPair2);
+
+        DuPair duPair3 = new DuPair(r0.asValue(), labelOp, null, 0, 0);
+        assertNotEquals(duPair, duPair3);
+
+        DuPair duPair4 = new DuPair(r0.asValue(), null, labelOp2, 0, 0);
+        assertNotEquals(duPair, duPair4);
+
+        DuPair duPair5 = new DuPair(r0.asValue(), labelOp, labelOp2, 1, 0);
+        assertNotEquals(duPair, duPair5);
+
+        DuPair duPair6 = new DuPair(r0.asValue(), labelOp, labelOp2, 0, 1);
+        assertNotEquals(duPair, duPair6);
     }
 
     private static void assertEqualsDuPairs(List<DuPair> expected, List<DuPair> actual) {
         assertEquals("The number of DuPairs do not match.", expected.size(), actual.size());
 
         for (DuPair duPair : expected) {
-            assert actual.stream().anyMatch(x -> x.equals(duPair));
+            assert actual.remove(duPair);
         }
     }
 }
