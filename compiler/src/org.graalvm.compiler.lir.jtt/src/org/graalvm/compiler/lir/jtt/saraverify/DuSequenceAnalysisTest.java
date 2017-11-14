@@ -54,6 +54,45 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
+    public void testDetermineDuPairs2() {
+        ArrayList<LIRInstruction> instructions = new ArrayList<>();
+
+        LabelOp labelOp = new LabelOp(null, true);
+        labelOp.addIncomingValues(new Value[]{r0.asValue(), r1.asValue(), rbp.asValue()});
+        TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
+
+        instructions.add(labelOp);
+        instructions.add(returnOp);
+
+        List<DuPair> expected = new ArrayList<>();
+        expected.add(new DuPair(rbp.asValue(), instructions.get(0), instructions.get(1), 2, 0));
+        expected.add(new DuPair(r0.asValue(), instructions.get(0), instructions.get(1), 0, 1));
+
+        List<DuPair> actual = DuSequenceAnalysis.determineDuPairs(instructions);
+
+        assertEqualsDuPairs(expected, actual);
+    }
+
+    @Test
+    public void testDetermineDuPairs3() {
+        ArrayList<LIRInstruction> instructions = new ArrayList<>();
+
+        LabelOp labelOp = new LabelOp(null, true);
+        labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
+        TestReturn returnOp = new TestReturn(rbp.asValue(), r2.asValue());
+
+        instructions.add(labelOp);
+        instructions.add(returnOp);
+
+        List<DuPair> expected = new ArrayList<>();
+        expected.add(new DuPair(rbp.asValue(), instructions.get(0), instructions.get(1), 1, 0));
+
+        List<DuPair> actual = DuSequenceAnalysis.determineDuPairs(instructions);
+
+        assertEqualsDuPairs(expected, actual);
+    }
+
+    @Test
     public void testDuPairEquals() {
         LabelOp labelOp = new LabelOp(null, true);
         LabelOp labelOp2 = new LabelOp(null, true);

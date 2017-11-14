@@ -68,6 +68,7 @@ public class DuSequenceAnalysis {
         public DefInstructionValueConsumer(Map<Value, ArrayList<ValUsage>> valUseInstructions, ArrayList<DuPair> duPairs) {
             this.valUseInstructions = valUseInstructions;
             this.duPairs = duPairs;
+            resetOperandDefPosition();
         }
 
         @Override
@@ -77,6 +78,7 @@ public class DuSequenceAnalysis {
             ArrayList<ValUsage> useInstructions = valUseInstructions.get(value);
             if (useInstructions == null) {
                 // definition of a value, which is not used
+                operandDefPosition++;
                 return;
             }
 
