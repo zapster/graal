@@ -17,6 +17,7 @@ import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
 import org.graalvm.compiler.lir.saraverify.DuPair;
 import org.graalvm.compiler.lir.saraverify.DuSequence;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
+import org.graalvm.compiler.lir.saraverify.SARAVerifyValueComparator;
 import org.junit.Test;
 
 import jdk.vm.ci.code.Register;
@@ -235,6 +236,27 @@ public class DuSequenceAnalysisTest {
         duSequence.addFirst(duPair3);
         duSequence.addFirst(duPair2);
         assertNotEquals(duSequence, duSequence3);
+    }
+
+    @Test
+    public void testSARAVerifyValue() {
+        SARAVerifyValueComparator comparator = new SARAVerifyValueComparator();
+
+        assertEquals(0, comparator.compare(r1.asValue(), r1.asValue()));
+        assertEquals(-1, comparator.compare(r0.asValue(), r1.asValue()));
+        assertEquals(1, comparator.compare(r1.asValue(), r0.asValue()));
+        assertEquals(2, comparator.compare(r2.asValue(), r0.asValue()));
+        assertEquals(-2, comparator.compare(r0.asValue(), r2.asValue()));
+
+        assertEquals(0, comparator.compare(v1, v1));
+        assertEquals(-1, comparator.compare(v1, v2));
+        assertEquals(1, comparator.compare(v2, v1));
+        assertEquals(2, comparator.compare(v3, v1));
+        assertEquals(3, comparator.compare(v3, v0));
+        assertEquals(-3, comparator.compare(v0, v3));
+
+        assertEquals(-1, comparator.compare(r0.asValue(), v1));
+        assertEquals(1, comparator.compare(v0, r2.asValue()));
     }
 
     private static void assertEqualsDuPairs(List<DuPair> expected, List<DuPair> actual) {
