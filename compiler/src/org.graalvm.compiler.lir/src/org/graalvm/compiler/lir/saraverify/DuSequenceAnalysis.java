@@ -18,12 +18,20 @@ import jdk.vm.ci.meta.Value;
 
 public class DuSequenceAnalysis {
 
-    public static List<DuPair> determineDuPairs(ArrayList<LIRInstruction> instructions) {
-        ArrayList<DuPair> duPairs = new ArrayList<>();
-        Map<Value, ArrayList<ValUsage>> valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
+    private int operandDefPosition;
+    private int operandUsePosition;
 
-        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions, duPairs);
-        UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(valUseInstructions);
+    private ArrayList<DuPair> duPairs;
+    private ArrayList<DuSequence> duSequences;
+    private Map<Value, ArrayList<ValUsage>> valUseInstructions;
+
+    public List<DuSequence> determineDuSequences(ArrayList<LIRInstruction> instructions) {
+        valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
+        duPairs = new ArrayList<>();
+        duSequences = new ArrayList<>();
+
+        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer();
+        UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer();
 
         List<LIRInstruction> reverseInstructions = new ArrayList<>(instructions);
         Collections.reverse(reverseInstructions);
@@ -31,13 +39,17 @@ public class DuSequenceAnalysis {
         for (LIRInstruction inst : reverseInstructions) {
             System.out.println(inst);
 
-            defConsumer.resetOperandDefPosition();
+            operandDefPosition = 0;
             inst.visitEachOutput(defConsumer);
 
-            useConsumer.resetOperandUsePosition();
+            operandUsePosition = 0;
             inst.visitEachInput(useConsumer);
         }
 
+        return duSequences;
+    }
+
+    public ArrayList<DuPair> getDuPairs() {
         return duPairs;
     }
 
@@ -59,17 +71,7 @@ public class DuSequenceAnalysis {
         }
     }
 
-    static class DefInstructionValueConsumer implements InstructionValueConsumer {
-
-        private Map<Value, ArrayList<ValUsage>> valUseInstructions;
-        private ArrayList<DuPair> duPairs;
-        private int operandDefPosition;
-
-        public DefInstructionValueConsumer(Map<Value, ArrayList<ValUsage>> valUseInstructions, ArrayList<DuPair> duPairs) {
-            this.valUseInstructions = valUseInstructions;
-            this.duPairs = duPairs;
-            resetOperandDefPosition();
-        }
+    class DefInstructionValueConsumer implements InstructionValueConsumer {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
@@ -83,28 +85,28 @@ public class DuSequenceAnalysis {
             }
 
             AllocatableValue allocatableValue = ValueUtil.asAllocatableValue(value);
-            useInstructions.stream().forEach(usage -> duPairs.add(new DuPair(allocatableValue, instruction, usage.getUseInstruction(), operandDefPosition, usage.getOperandPosition())));
+
+            for (ValUsage valUsage : useInstructions) {
+                DuPair duPair = new DuPair(allocatableValue, instruction, valUsage.getUseInstruction(), operandDefPosition, valUsage.getOperandPosition());
+                duPairs.add(duPair);
+
+                if (valUsage.getUseInstruction().isValueMoveOp()) {
+                    // copy use instruction
+                    duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(valUsage.getUseInstruction())).forEach(x -> x.addFirst(duPair));
+                } else {
+                    // non copy use instruction
+                    duSequences.add(new DuSequence(duPair));
+                }
+            }
 
             valUseInstructions.remove(value);
 
             operandDefPosition++;
         }
 
-        public void resetOperandDefPosition() {
-            operandDefPosition = 0;
-        }
-
     }
 
-    static class UseInstructionValueConsumer implements InstructionValueConsumer {
-
-        private Map<Value, ArrayList<ValUsage>> valUseInstructions;
-        private int operandUsePosition;
-
-        public UseInstructionValueConsumer(Map<Value, ArrayList<ValUsage>> valUseInstructions) {
-            this.valUseInstructions = valUseInstructions;
-            resetOperandUsePosition();
-        }
+    class UseInstructionValueConsumer implements InstructionValueConsumer {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
@@ -122,9 +124,6 @@ public class DuSequenceAnalysis {
             operandUsePosition++;
         }
 
-        public void resetOperandUsePosition() {
-            this.operandUsePosition = 0;
-        }
     }
 
 }

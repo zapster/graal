@@ -42,7 +42,8 @@ public class DuPair {
 
     @Override
     public String toString() {
-        return "\nValue: " + value + "\nDef: " + defInstruction + "\nUse: " + useInstruction + "\nDef Operand Pos: " + operandDefPosition + "\nUse Operand Pos: " + operandUsePosition;
+        return "\nValue: " + value + "\nDef: " + defInstruction + " Pos: " + operandDefPosition + "\nUse: " + useInstruction + " Pos: " + operandUsePosition;
+
     }
 
     @Override

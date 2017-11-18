@@ -61,6 +61,34 @@ public class TestOp {
         }
     }
 
+    public static class TestMoveToReg extends LIRInstruction implements ValueMoveOp {
+        public static final LIRInstructionClass<TestMoveToReg> TYPE = LIRInstructionClass.create(TestMoveToReg.class);
+
+        @Def({REG, HINT}) protected AllocatableValue result;
+        @Use({REG, STACK}) protected AllocatableValue input;
+
+        public TestMoveToReg(AllocatableValue result, AllocatableValue input) {
+            super(TYPE);
+            this.result = result;
+            this.input = input;
+        }
+
+        @Override
+        public AllocatableValue getResult() {
+            return result;
+        }
+
+        @Override
+        public AllocatableValue getInput() {
+            return input;
+        }
+
+        @Override
+        public void emitCode(CompilationResultBuilder crb) {
+        }
+
+    }
+
     public static class TestBinary extends LIRInstruction {
         public enum ArithmeticOpcode {
             ADD,
