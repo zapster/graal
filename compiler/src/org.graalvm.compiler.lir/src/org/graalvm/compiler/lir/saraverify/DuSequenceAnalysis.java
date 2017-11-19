@@ -23,12 +23,14 @@ public class DuSequenceAnalysis {
 
     private ArrayList<DuPair> duPairs;
     private ArrayList<DuSequence> duSequences;
+    private ArrayList<DuSequenceWeb> duSequenceWebs;
     private Map<Value, ArrayList<ValUsage>> valUseInstructions;
 
-    public List<DuSequence> determineDuSequences(ArrayList<LIRInstruction> instructions) {
+    public List<DuSequenceWeb> determineDuSequenceWebs(ArrayList<LIRInstruction> instructions) {
         valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
         duPairs = new ArrayList<>();
         duSequences = new ArrayList<>();
+        duSequenceWebs = new ArrayList<>();
 
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer();
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer();
@@ -46,11 +48,15 @@ public class DuSequenceAnalysis {
             inst.visitEachInput(useConsumer);
         }
 
-        return duSequences;
+        return duSequenceWebs;
     }
 
     public ArrayList<DuPair> getDuPairs() {
         return duPairs;
+    }
+
+    public ArrayList<DuSequence> getDuSequences() {
+        return duSequences;
     }
 
     static class ValUsage {
@@ -85,6 +91,7 @@ public class DuSequenceAnalysis {
             }
 
             AllocatableValue allocatableValue = ValueUtil.asAllocatableValue(value);
+            DuSequenceWeb duSequenceWeb = new DuSequenceWeb();
 
             for (ValUsage valUsage : useInstructions) {
                 DuPair duPair = new DuPair(allocatableValue, instruction, valUsage.getUseInstruction(), operandDefPosition, valUsage.getOperandPosition());
@@ -95,8 +102,14 @@ public class DuSequenceAnalysis {
                     duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(valUsage.getUseInstruction())).forEach(x -> x.addFirst(duPair));
                 } else {
                     // non copy use instruction
-                    duSequences.add(new DuSequence(duPair));
+                    DuSequence duSequence = new DuSequence(duPair);
+                    duSequences.add(duSequence);
+                    duSequenceWeb.add(duSequence);
                 }
+            }
+
+            if (duSequenceWeb.size() > 0) {
+                duSequenceWebs.add(duSequenceWeb);
             }
 
             valUseInstructions.remove(value);
