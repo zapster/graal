@@ -6,11 +6,16 @@ import static org.junit.Assert.assertNotEquals;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.graalvm.compiler.debug.GraalError;
+import org.graalvm.compiler.lir.ConstantValue;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
+import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinaryConsumerConst;
+import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestCondMove;
+import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromConst;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveToReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
@@ -21,7 +26,13 @@ import org.graalvm.compiler.lir.saraverify.DuSequenceWeb;
 import org.graalvm.compiler.lir.saraverify.SARAVerifyValueComparator;
 import org.junit.Test;
 
+import com.sun.corba.se.impl.io.ValueUtility;
+
 import jdk.vm.ci.code.Register;
+import jdk.vm.ci.code.ValueUtil;
+import jdk.vm.ci.meta.JavaConstant;
+import jdk.vm.ci.meta.PrimitiveConstant;
+import jdk.vm.ci.meta.RawConstant;
 import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
 
@@ -275,6 +286,35 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
+    public void testDetermineDuPairsConditionalMove() {
+        ArrayList<LIRInstruction> instructions = new ArrayList<>();
+
+        LabelOp labelOp = new LabelOp(null, false);
+        labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
+        TestMoveFromReg moveFromRegOp = new TestMoveFromReg(v0, r0.asValue());
+        TestBinaryConsumerConst compareOp = new TestBinaryConsumerConst(v0, 11);
+        TestMoveFromConst moveFromConstOp = new TestMoveFromConst(v2, JavaConstant.forInt(10));
+        TestCondMove condMoveOp = new TestCondMove(v1, v2, new ConstantValue(ValueKind.Illegal, JavaConstant.forInt(5)));
+        TestMoveFromReg moveFromRegOp2 = new TestMoveFromReg(rax.asValue(), v1);
+        TestReturn returnOp = new TestReturn(rbp.asValue(), rax.asValue());
+
+        instructions.add(labelOp);
+        instructions.add(moveFromRegOp);
+        instructions.add(compareOp);
+        instructions.add(moveFromConstOp);
+        instructions.add(condMoveOp);
+        instructions.add(moveFromRegOp2);
+        instructions.add(returnOp);
+
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+        List<DuSequenceWeb> duSequenceWebs = duSequenceAnalysis.determineDuSequenceWebs(instructions);
+        List<DuPair> duPairs = duSequenceAnalysis.getDuPairs();
+        List<DuSequence> duSequences = duSequenceAnalysis.getDuSequences();
+
+        throw GraalError.unimplemented();
+    }
+
+    @Test
     public void testDuPairEquals() {
         LabelOp labelOp = new LabelOp(null, true);
         TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
@@ -334,12 +374,14 @@ public class DuSequenceAnalysisTest {
     public void testSARAVerifyValue() {
         SARAVerifyValueComparator comparator = new SARAVerifyValueComparator();
 
+        // register
         assertEquals(0, comparator.compare(r1.asValue(), r1.asValue()));
         assertEquals(-1, comparator.compare(r0.asValue(), r1.asValue()));
         assertEquals(1, comparator.compare(r1.asValue(), r0.asValue()));
         assertEquals(2, comparator.compare(r2.asValue(), r0.asValue()));
         assertEquals(-2, comparator.compare(r0.asValue(), r2.asValue()));
 
+        // variable
         assertEquals(0, comparator.compare(v1, v1));
         assertEquals(-1, comparator.compare(v1, v2));
         assertEquals(1, comparator.compare(v2, v1));
@@ -347,8 +389,23 @@ public class DuSequenceAnalysisTest {
         assertEquals(3, comparator.compare(v3, v0));
         assertEquals(-3, comparator.compare(v0, v3));
 
+        // constant value
+        ConstantValue c0 = new ConstantValue(ValueKind.Illegal, JavaConstant.INT_0);
+        ConstantValue c1 = new ConstantValue(ValueKind.Illegal, JavaConstant.INT_1);
+        ConstantValue c5 = new ConstantValue(ValueKind.Illegal, JavaConstant.forInt(5));
+        assertEquals(0, comparator.compare(c1, c1));
+        assertEquals(1, comparator.compare(c1, c0));
+        assertEquals(-1, comparator.compare(c0, c1));
+        assertEquals(4, comparator.compare(c5, c1));
+        assertEquals(-4, comparator.compare(c1, c5));
+
+        // mixed types
         assertEquals(-1, comparator.compare(r0.asValue(), v1));
         assertEquals(1, comparator.compare(v0, r2.asValue()));
+        assertEquals(-2, comparator.compare(r0.asValue(), c1));
+        assertEquals(2, comparator.compare(c1, r0.asValue()));
+        assertEquals(-1, comparator.compare(v0, c1));
+        assertEquals(1, comparator.compare(c1, v0));
     }
 
     private static void test(ArrayList<LIRInstruction> instructions, List<DuPair> expectedDuPairs, List<DuSequence> expectedDuSequences, List<DuSequenceWeb> expectedDuSequenceWebs) {
