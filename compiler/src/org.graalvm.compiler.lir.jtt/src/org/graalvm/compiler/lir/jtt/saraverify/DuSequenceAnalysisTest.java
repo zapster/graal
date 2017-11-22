@@ -26,13 +26,8 @@ import org.graalvm.compiler.lir.saraverify.DuSequenceWeb;
 import org.graalvm.compiler.lir.saraverify.SARAVerifyValueComparator;
 import org.junit.Test;
 
-import com.sun.corba.se.impl.io.ValueUtility;
-
 import jdk.vm.ci.code.Register;
-import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.JavaConstant;
-import jdk.vm.ci.meta.PrimitiveConstant;
-import jdk.vm.ci.meta.RawConstant;
 import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
 
@@ -393,11 +388,60 @@ public class DuSequenceAnalysisTest {
         ConstantValue c0 = new ConstantValue(ValueKind.Illegal, JavaConstant.INT_0);
         ConstantValue c1 = new ConstantValue(ValueKind.Illegal, JavaConstant.INT_1);
         ConstantValue c5 = new ConstantValue(ValueKind.Illegal, JavaConstant.forInt(5));
+        ConstantValue cMinus1 = new ConstantValue(ValueKind.Illegal, JavaConstant.INT_MINUS_1);
         assertEquals(0, comparator.compare(c1, c1));
         assertEquals(1, comparator.compare(c1, c0));
         assertEquals(-1, comparator.compare(c0, c1));
         assertEquals(4, comparator.compare(c5, c1));
         assertEquals(-4, comparator.compare(c1, c5));
+        assertEquals(-2, comparator.compare(cMinus1, c1));
+        assertEquals(2, comparator.compare(c1, cMinus1));
+
+        ConstantValue cTrue = new ConstantValue(ValueKind.Illegal, JavaConstant.TRUE);
+        ConstantValue cFalse = new ConstantValue(ValueKind.Illegal, JavaConstant.FALSE);
+        assertEquals(0, comparator.compare(cTrue, cTrue));
+        assertEquals(0, comparator.compare(cFalse, cFalse));
+        assertEquals(1, comparator.compare(cTrue, cFalse));
+        assertEquals(-1, comparator.compare(cFalse, cTrue));
+
+        ConstantValue cNull1 = new ConstantValue(ValueKind.Illegal, JavaConstant.NULL_POINTER);
+        ConstantValue cNull2 = new ConstantValue(ValueKind.Illegal, JavaConstant.NULL_POINTER);
+        assertEquals(0, comparator.compare(cNull1, cNull2));
+
+        ConstantValue c0L = new ConstantValue(ValueKind.Illegal, JavaConstant.LONG_0);
+        ConstantValue c1L = new ConstantValue(ValueKind.Illegal, JavaConstant.LONG_1);
+        ConstantValue c4L = new ConstantValue(ValueKind.Illegal, JavaConstant.forLong(4L));
+        assertEquals(0, comparator.compare(c0L, c0L));
+        assertEquals(0, comparator.compare(c1L, c1L));
+        assertEquals(0, comparator.compare(c4L, c4L));
+        assertEquals(-1, comparator.compare(c0L, c1L));
+        assertEquals(1, comparator.compare(c1L, c0L));
+        assertEquals(1, comparator.compare(c4L, c0L));
+        assertEquals(-1, comparator.compare(c0L, c4L));
+        assertEquals(-1, comparator.compare(c0L, c1L));
+        assertEquals(1, comparator.compare(c1L, c0L));
+
+        ConstantValue c1F = new ConstantValue(ValueKind.Illegal, JavaConstant.FLOAT_1);
+        ConstantValue c5F = new ConstantValue(ValueKind.Illegal, JavaConstant.forFloat(5.0F));
+        ConstantValue c05F = new ConstantValue(ValueKind.Illegal, JavaConstant.forFloat(0.5F));
+        assertEquals(0, comparator.compare(c1F, c1F));
+        assertEquals(0, comparator.compare(c5F, c5F));
+        assertEquals(0, comparator.compare(c05F, c05F));
+        assertEquals(-1, comparator.compare(c1F, c5F));
+        assertEquals(1, comparator.compare(c5F, c1F));
+        assertEquals(-1, comparator.compare(c05F, c1F));
+        assertEquals(1, comparator.compare(c1F, c05F));
+
+        ConstantValue c1D = new ConstantValue(ValueKind.Illegal, JavaConstant.DOUBLE_1);
+        ConstantValue c5D = new ConstantValue(ValueKind.Illegal, JavaConstant.forDouble(5.0D));
+        ConstantValue c05D = new ConstantValue(ValueKind.Illegal, JavaConstant.forDouble(0.5D));
+        assertEquals(0, comparator.compare(c1D, c1D));
+        assertEquals(0, comparator.compare(c5D, c5D));
+        assertEquals(0, comparator.compare(c05D, c05D));
+        assertEquals(-1, comparator.compare(c1D, c5D));
+        assertEquals(1, comparator.compare(c5D, c1D));
+        assertEquals(-1, comparator.compare(c05D, c1D));
+        assertEquals(1, comparator.compare(c1D, c05D));
 
         // mixed types
         assertEquals(-1, comparator.compare(r0.asValue(), v1));

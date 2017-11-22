@@ -68,6 +68,26 @@ public class SARAVerifyValueComparator implements Comparator<Value> {
             return c1.asInt() - c2.asInt();
         }
 
+        if (c1.getJavaKind().equals(JavaKind.Boolean) && c2.getJavaKind().equals(JavaKind.Boolean)) {
+            return Boolean.compare(c1.asBoolean(), c2.asBoolean());
+        }
+
+        if (c1.getJavaKind().equals(JavaKind.Long) && c2.getJavaKind().equals(JavaKind.Long)) {
+            return Long.compare(c1.asLong(), c2.asLong());
+        }
+
+        if (c1.getJavaKind().equals(JavaKind.Float) && c2.getJavaKind().equals(JavaKind.Float)) {
+            return Float.compare(c1.asFloat(), c2.asFloat());
+        }
+
+        if (c1.getJavaKind().equals(JavaKind.Double) && c2.getJavaKind().equals(JavaKind.Double)) {
+            return Double.compare(c1.asDouble(), c2.asDouble());
+        }
+
+        if (c1.equals(JavaConstant.NULL_POINTER) && c2.equals(JavaConstant.NULL_POINTER)) {
+            return 0;
+        }
+
         throw GraalError.unimplemented("JavaConstant compare not implemented for " + c1.getJavaKind() + " and " + c2.getJavaKind());
     }
 
