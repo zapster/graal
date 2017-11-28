@@ -25,12 +25,14 @@ public class DuSequenceAnalysis {
     private ArrayList<DuSequence> duSequences;
     private ArrayList<DuSequenceWeb> duSequenceWebs;
     private Map<Value, ArrayList<ValUsage>> valUseInstructions;
+    private ArrayList<String> output;
 
     public List<DuSequenceWeb> determineDuSequenceWebs(ArrayList<LIRInstruction> instructions) {
         valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
         duPairs = new ArrayList<>();
         duSequences = new ArrayList<>();
         duSequenceWebs = new ArrayList<>();
+        output = new ArrayList<>();
 
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer();
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer();
@@ -39,14 +41,18 @@ public class DuSequenceAnalysis {
         Collections.reverse(reverseInstructions);
 
         for (LIRInstruction inst : reverseInstructions) {
-            System.out.println(inst);
-
             operandDefPosition = 0;
             inst.visitEachOutput(defConsumer);
 
             operandUsePosition = 0;
             inst.visitEachInput(useConsumer);
+            inst.visitEachAlive(useConsumer);
+
+            output.add("\n" + inst);
         }
+
+        Collections.reverse(output);
+        output.stream().forEach(x -> System.out.println(x));
 
         return duSequenceWebs;
     }
@@ -81,7 +87,7 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            System.out.println("Def of value: " + value);
+            output.add(mode + ": " + value + " @ pos: " + operandDefPosition);
 
             ArrayList<ValUsage> useInstructions = valUseInstructions.get(value);
             if (useInstructions == null) {
@@ -123,8 +129,7 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            System.out.println(value);
-            System.out.println("Use Operand Position: " + operandUsePosition);
+            output.add(mode + ": " + value + " @ pos: " + operandUsePosition);
 
             ArrayList<ValUsage> useInstructions = valUseInstructions.get(value);
 
