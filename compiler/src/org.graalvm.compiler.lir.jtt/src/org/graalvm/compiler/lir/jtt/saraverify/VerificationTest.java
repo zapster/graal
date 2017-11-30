@@ -1,51 +1,36 @@
 package org.graalvm.compiler.lir.jtt.saraverify;
 
-import static org.junit.Assert.assertEquals;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r0;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r1;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r2;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.rbp;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v0;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v1;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v2;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v3;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Formatter;
-import java.util.List;
 
 import org.graalvm.compiler.debug.DebugContext;
-import org.graalvm.compiler.debug.DebugDumpHandler;
-import org.graalvm.compiler.debug.DebugHandler;
-import org.graalvm.compiler.debug.DebugHandlersFactory;
-import org.graalvm.compiler.debug.DebugOptions;
-import org.graalvm.compiler.debug.DebugVerifyHandler;
-import org.graalvm.compiler.lir.ConstantValue;
+import org.graalvm.compiler.debug.DebugContext.Scope;
+import org.graalvm.compiler.jtt.JTTTest;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
-import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary.ArithmeticOpcode;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromConst;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromReg;
-import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveToReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
 import org.graalvm.compiler.lir.saraverify.DuSequence;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
 import org.graalvm.compiler.lir.saraverify.VerificationPhase;
-import org.graalvm.compiler.options.OptionValues;
-import org.graalvm.util.EconomicMap;
+import org.junit.Assert;
 import org.junit.Test;
 
-import jdk.vm.ci.code.Register;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.Value;
-import jdk.vm.ci.meta.ValueKind;
 
-public class VerificationTest {
-
-    private Register r0 = new Register(0, 0, "r0", Register.SPECIAL);
-    private Register r1 = new Register(1, 0, "r1", Register.SPECIAL);
-    private Register r2 = new Register(2, 0, "r2", Register.SPECIAL);
-    private Register rbp = new Register(11, 0, "rbp", Register.SPECIAL);
-    private Register rax = new Register(12, 0, "rax", Register.SPECIAL);
-    private Variable v0 = new Variable(ValueKind.Illegal, 0);
-    private Variable v1 = new Variable(ValueKind.Illegal, 1);
-    private Variable v2 = new Variable(ValueKind.Illegal, 2);
-    private Variable v3 = new Variable(ValueKind.Illegal, 3);
+public class VerificationTest extends JTTTest {
 
     @Test
     public void testSimpleAddCorrect() {
@@ -76,11 +61,11 @@ public class VerificationTest {
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
-        assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
     }
 
     @Test
-    public void testSimpleAddSwitchedOperandOrder() {
+    public void testSimpleAddSwitchedOperandOrder1() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
 
@@ -108,7 +93,39 @@ public class VerificationTest {
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
-        assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+    }
+
+    @Test
+    public void testSimpleAddSwitchedOperandOrder2() {
+        ArrayList<LIRInstruction> instructions = new ArrayList<>();
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+
+        LabelOp labelOp = new LabelOp(null, true);
+        labelOp.addIncomingValues(new Value[]{v0, v1, v3});
+        TestBinary addOp = new TestBinary(TestBinary.ArithmeticOpcode.ADD, v2, v0, v1);
+        TestReturn returnOp = new TestReturn(v3, v2);
+
+        instructions.add(labelOp);
+        instructions.add(addOp);
+        instructions.add(returnOp);
+
+        duSequenceAnalysis.determineDuSequenceWebs(instructions);
+        ArrayList<DuSequence> inputDuSequences = duSequenceAnalysis.getDuSequences();
+
+        labelOp.clearIncomingValues();
+        labelOp.addIncomingValues(new Value[]{r0.asValue(), r1.asValue(), rbp.asValue()});
+        addOp.result = r2.asValue();
+        addOp.x = r1.asValue();
+        addOp.y = r0.asValue();
+        returnOp.savedRbp = rbp.asValue();
+        returnOp.value = r2.asValue();
+
+        duSequenceAnalysis.determineDuSequenceWebs(instructions);
+        ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
+
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
     }
 
     @Test
@@ -139,7 +156,7 @@ public class VerificationTest {
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
-        assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
     }
 
     @Test
@@ -170,7 +187,7 @@ public class VerificationTest {
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
-        assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
     }
 
     @Test
@@ -204,7 +221,7 @@ public class VerificationTest {
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
-        assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
     }
 
     @Test
@@ -238,7 +255,7 @@ public class VerificationTest {
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
-        assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
     }
 
     @Test
@@ -274,7 +291,7 @@ public class VerificationTest {
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
-        assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
     }
 
     @Test
@@ -310,7 +327,7 @@ public class VerificationTest {
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
-        assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
     }
 
     @Test
@@ -343,7 +360,22 @@ public class VerificationTest {
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
-        assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
     }
 
+    @Test
+    public void testVerify() {
+        VerificationPhase verificationPhase = new VerificationPhase();
+        ArrayList<DuSequence> duSequences = new ArrayList<>();
+
+        assertTrue(verificationPhase.verifyDataFlow(duSequences, duSequences));
+    }
+
+    @Test
+    public void testDebug() {
+        DebugContext debug = this.getDebugContext();
+        try (Scope s = debug.scope("SARAVerifyTest")) {
+            debug.log(3, "Log Test");
+        }
+    }
 }

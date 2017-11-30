@@ -1,5 +1,14 @@
 package org.graalvm.compiler.lir.jtt.saraverify;
 
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r0;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r1;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r2;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.rax;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.rbp;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v0;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v1;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v2;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v3;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
@@ -11,7 +20,6 @@ import org.graalvm.compiler.lir.ConstantValue;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
-import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinaryConsumerConst;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestCondMove;
@@ -26,23 +34,11 @@ import org.graalvm.compiler.lir.saraverify.DuSequenceWeb;
 import org.graalvm.compiler.lir.saraverify.SARAVerifyValueComparator;
 import org.junit.Test;
 
-import jdk.vm.ci.code.Register;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
 
 public class DuSequenceAnalysisTest {
-
-    private Register r0 = new Register(0, 0, "r0", Register.SPECIAL);
-    private Register r1 = new Register(1, 0, "r1", Register.SPECIAL);
-    private Register r2 = new Register(2, 0, "r2", Register.SPECIAL);
-    private Register rbp = new Register(11, 0, "rbp", Register.SPECIAL);
-    private Register rax = new Register(12, 0, "rax", Register.SPECIAL);
-    private Variable v0 = new Variable(ValueKind.Illegal, 0);
-    private Variable v1 = new Variable(ValueKind.Illegal, 1);
-    private Variable v2 = new Variable(ValueKind.Illegal, 2);
-    private Variable v3 = new Variable(ValueKind.Illegal, 3);
-
     @Test
     public void testDetermineDuPairs() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
