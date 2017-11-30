@@ -1,8 +1,11 @@
 package org.graalvm.compiler.lir.saraverify;
 
 import java.util.ArrayList;
-import java.util.Optional;
 
+import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.GraalError;
+import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
@@ -14,7 +17,27 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
 	@Override
 	protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+		LIR lir = lirGenRes.getLIR();
+		DebugContext debug = lir.getDebug();
+		AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+
+		if (blocks.length != 1) {
+			// Control Flow for more than 1 Block not yet supported
+			return;
+		}
+
 		AnalysisResult result = context.contextLookup(AnalysisResult.class);
+		ArrayList<DuSequence> inputDuSequences = result.getInputDuSequences();
+
+		AbstractBlockBase<?> block = blocks[0];
+		DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+		duSequenceAnalysis.determineDuSequenceWebs(lir.getLIRforBlock(block));
+
+		ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
+
+		if (!verifyDataFlow(inputDuSequences, outputDuSequences)) {
+			throw GraalError.shouldNotReachHere("SARA verify error");
+		}
 	}
 
 	public boolean verifyDataFlow(ArrayList<DuSequence> inputDuSequences, ArrayList<DuSequence> outputDuSequences) {

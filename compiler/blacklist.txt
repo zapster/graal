@@ -1,0 +1,2 @@
+# com.oracle.truffle.sl.test.SLFactorialTest
+com.oracle.truffle.*

@@ -23,17 +23,10 @@
 
 package org.graalvm.compiler.lir.saraverify;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.DebugContext;
-import org.graalvm.compiler.debug.Indent;
-import org.graalvm.compiler.lir.InstructionValueConsumer;
+import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.LIR;
-import org.graalvm.compiler.lir.LIRInstruction;
-import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
-import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
@@ -42,48 +35,67 @@ import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionType;
 
 import jdk.vm.ci.code.TargetDescription;
-import jdk.vm.ci.meta.Value;
 
 public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationContext> {
 
-    public static class Options {
-        // @formatter:off
-        @Option(help = "Enable static analysis register allocation verification.", type = OptionType.Debug)
-        public static final OptionKey<Boolean> SARAVerify = new OptionKey<>(false);
-        // @formatter:on
-    }
+	public static class Options {
+		// @formatter:off
+		@Option(help = "Enable static analysis register allocation verification.", type = OptionType.Debug)
+		public static final OptionKey<Boolean> SARAVerify = new OptionKey<>(false);
+		// @formatter:on
+	}
 
-    @Override
-    protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
-        LIR lir = lirGenRes.getLIR();
-        DebugContext debug = lir.getDebug();
-        AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+	@Override
+	protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+		LIR lir = lirGenRes.getLIR();
+		DebugContext debug = lir.getDebug();
+		AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
-        InstructionValueConsumer proc = new InstructionValueConsumer() {
+		if (blocks.length != 1) {
+			// Control Flow for more than 1 Block not yet supported
+			return;
+		}
 
-            @Override
-            public void visitValue(LIRInstruction inst, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-                debug.log(3, "%s", value);
+		AbstractBlockBase<?> block = blocks[0];
+		DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+		duSequenceAnalysis.determineDuSequenceWebs(lir.getLIRforBlock(block));
 
-            }
-        };
-        for (AbstractBlockBase<?> block : blocks) {
+		AnalysisResult result = new AnalysisResult(duSequenceAnalysis.getDuSequences());
+		context.contextAdd(result);
 
-            try (Indent i = debug.logAndIndent(3, "Processing %s", block)) {
-                ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+		// for (AbstractBlockBase<?> block : blocks) {
+		//
+		// try (Indent i = debug.logAndIndent(3, "Processing Block %s", block)) {
+		// ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+		//
+		// for (LIRInstruction inst : instructions) {
+		//
+		// // debug.log(3, "InstrClass: %s", inst.getLIRInstructionClass());
+		// System.identityHashCode(inst);
+		//
+		// try (Indent i2 = debug.logAndIndent(3, "%s", inst)) {
+		// try (Indent i3 = debug.logAndIndent(3, "%s", "<input>")) {
+		// inst.visitEachInput(proc);
+		// }
+		// try (Indent i3 = debug.logAndIndent(3, "%s", "<output>")) {
+		// inst.visitEachOutput(proc);
+		// }
+		// try (Indent i3 = debug.logAndIndent(3, "%s", "<alive>")) {
+		// inst.visitEachAlive(proc);
+		// }
+		// try (Indent i3 = debug.logAndIndent(3, "%s", "<temp>")) {
+		// inst.visitEachTemp(proc);
+		// }
+		// try (Indent i3 = debug.logAndIndent(3, "%s", "<state>")) {
+		// inst.visitEachState(proc);
+		// }
+		// }
+		// }
+		// }
+		// }
+		//
+		// context.contextAdd(new AnalysisResult());
 
-                for (LIRInstruction inst : instructions) {
-                    try (Indent i2 = debug.logAndIndent(3, "Processing %s", inst)) {
-                        inst.visitEachInput(proc);
-                        inst.visitEachOutput(proc);
-                        inst.visitEachAlive(proc);
-                        inst.visitEachTemp(proc);
-                        inst.visitEachState(proc);
-                    }
-                }
-            }
-        }
-
-    }
+	}
 
 }
