@@ -7,6 +7,7 @@ import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.Variable;
 
 import jdk.vm.ci.code.Register;
+import jdk.vm.ci.code.StackSlot;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
@@ -17,7 +18,8 @@ public class SARAVerifyValueComparator implements Comparator<Value> {
     enum ValueType {
         Register,
         Variable,
-        JavaConstantValue
+        JavaConstantValue,
+        StackSlot
     }
 
     @Override
@@ -41,6 +43,19 @@ public class SARAVerifyValueComparator implements Comparator<Value> {
             return compareJavaConstant(c1, c2);
         }
 
+        if (ValueUtil.isStackSlot(o1) && ValueUtil.isStackSlot(o2)) {
+            StackSlot s1 = ValueUtil.asStackSlot(o1);
+            StackSlot s2 = ValueUtil.asStackSlot(o2);
+
+            int addFrameSizeComparison = Boolean.compare(s1.getRawAddFrameSize(), s2.getRawAddFrameSize());
+
+            if (addFrameSizeComparison == 0) {
+                return s1.getRawOffset() - s2.getRawOffset();
+            } else {
+                return addFrameSizeComparison;
+            }
+        }
+
         ValueType valType1 = getValueType(o1);
         ValueType valType2 = getValueType(o2);
 
@@ -58,6 +73,10 @@ public class SARAVerifyValueComparator implements Comparator<Value> {
 
         if (LIRValueUtil.isJavaConstant(value)) {
             return ValueType.JavaConstantValue;
+        }
+
+        if (ValueUtil.isStackSlot(value)) {
+            return ValueType.StackSlot;
         }
 
         throw GraalError.unimplemented("Value compare not implemented for " + value.getClass());
