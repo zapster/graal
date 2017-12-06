@@ -20,6 +20,8 @@ import org.graalvm.compiler.lir.ConstantValue;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
+import org.graalvm.compiler.lir.VirtualStackSlot;
+import org.graalvm.compiler.lir.framemap.SimpleVirtualStackSlot;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinaryConsumerConst;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestCondMove;
@@ -460,6 +462,21 @@ public class DuSequenceAnalysisTest {
         assertEquals(-1, comparator.compare(s5, s6));
         assertEquals(1, comparator.compare(s6, s5));
 
+        // virtual stack slot
+        SimpleVirtualStackSlot vs0 = new SimpleVirtualStackSlot(0, ValueKind.Illegal);
+        SimpleVirtualStackSlot vs1 = new SimpleVirtualStackSlot(1, ValueKind.Illegal);
+        SimpleVirtualStackSlot vs2 = new SimpleVirtualStackSlot(2, ValueKind.Illegal);
+        SimpleVirtualStackSlot vsMinus1 = new SimpleVirtualStackSlot(-1, ValueKind.Illegal);
+        assertEquals(0, comparator.compare(vs0, vs0));
+        assertEquals(0, comparator.compare(vs1, vs1));
+        assertEquals(0, comparator.compare(vs2, vs2));
+        assertEquals(-1, comparator.compare(vs0, vs1));
+        assertEquals(1, comparator.compare(vs1, vs0));
+        assertEquals(-2, comparator.compare(vs0, vs2));
+        assertEquals(2, comparator.compare(vs2, vs0));
+        assertEquals(2, comparator.compare(vs1, vsMinus1));
+        assertEquals(-2, comparator.compare(vsMinus1, vs1));
+
         // mixed types
         assertEquals(-1, comparator.compare(r0.asValue(), v1));
         assertEquals(1, comparator.compare(v0, r2.asValue()));
@@ -473,6 +490,15 @@ public class DuSequenceAnalysisTest {
         assertEquals(-2, comparator.compare(v0, s1));
         assertEquals(3, comparator.compare(s1, r0.asValue()));
         assertEquals(-3, comparator.compare(r0.asValue(), s1));
+        assertEquals(-1, comparator.compare(s2, vs1));
+        assertEquals(1, comparator.compare(vs1, s2));
+        assertEquals(-2, comparator.compare(c1, vs1));
+        assertEquals(2, comparator.compare(vs1, c1));
+        assertEquals(-3, comparator.compare(v0, vs1));
+        assertEquals(3, comparator.compare(vs2, v0));
+        assertEquals(-4, comparator.compare(r2.asValue(), vs1));
+        assertEquals(4, comparator.compare(vs1, r2.asValue()));
+
     }
 
     private static void test(ArrayList<LIRInstruction> instructions, List<DuPair> expectedDuPairs, List<DuSequence> expectedDuSequences, List<DuSequenceWeb> expectedDuSequenceWebs) {

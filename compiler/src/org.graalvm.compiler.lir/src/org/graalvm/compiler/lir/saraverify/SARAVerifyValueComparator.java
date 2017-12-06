@@ -5,6 +5,7 @@ import java.util.Comparator;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.Variable;
+import org.graalvm.compiler.lir.VirtualStackSlot;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.StackSlot;
@@ -19,7 +20,8 @@ public class SARAVerifyValueComparator implements Comparator<Value> {
         Register,
         Variable,
         JavaConstantValue,
-        StackSlot
+        StackSlot,
+        VirtualStackSlot
     }
 
     @Override
@@ -56,6 +58,13 @@ public class SARAVerifyValueComparator implements Comparator<Value> {
             }
         }
 
+        if (LIRValueUtil.isVirtualStackSlot(o1) && LIRValueUtil.isVirtualStackSlot(o2)) {
+            VirtualStackSlot vs1 = LIRValueUtil.asVirtualStackSlot(o1);
+            VirtualStackSlot vs2 = LIRValueUtil.asVirtualStackSlot(o2);
+
+            return vs1.getId() - vs2.getId();
+        }
+
         ValueType valType1 = getValueType(o1);
         ValueType valType2 = getValueType(o2);
 
@@ -77,6 +86,10 @@ public class SARAVerifyValueComparator implements Comparator<Value> {
 
         if (ValueUtil.isStackSlot(value)) {
             return ValueType.StackSlot;
+        }
+
+        if (LIRValueUtil.isVirtualStackSlot(value)) {
+            return ValueType.VirtualStackSlot;
         }
 
         throw GraalError.unimplemented("Value compare not implemented for " + value.getClass());
