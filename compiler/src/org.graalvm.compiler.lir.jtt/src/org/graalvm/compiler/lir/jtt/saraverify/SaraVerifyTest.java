@@ -13,8 +13,9 @@ import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
-import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestDefOp;
+import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
 import org.junit.Test;
 
 import jdk.vm.ci.code.Register;
@@ -27,23 +28,20 @@ public class SaraVerifyTest extends GraalCompilerTest {
     public void test() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
 
-        Register rsi = new Register(10, 0, "rsi", null);
-        Register rdx = new Register(11, 0, "rdx", null);
-        Register rbp = new Register(12, 0, "rbp", null);
-        Register rax = new Register(13, 0, "rax", null);
-        Register r0 = new Register(0, 0, "r0", null);
-        Register r1 = new Register(1, 0, "r1", null);
-        Register r2 = new Register(2, 0, "r2", null);
+        Register rbp = new Register(11, 0, "rbp", Register.SPECIAL);
+        Register r0 = new Register(0, 0, "r0", Register.SPECIAL);
+        Register r1 = new Register(1, 0, "r1", Register.SPECIAL);
+        Register r2 = new Register(2, 0, "r2", Register.SPECIAL);
 
-        TestDefOp testDefOp = new TestDefOp(new Variable(LIRKind.Illegal, 0));
-        TestBinary addOp = new TestBinary(TestBinary.ArithmeticOpcode.ADD, r0.asValue(), r1.asValue(), r2.asValue());
         LabelOp labelOp = new LabelOp(null, true);
-        labelOp.addIncomingValues(new Value[]{rsi.asValue(), rdx.asValue(), rbp.asValue()});
-        TestReturn returnOp = new TestReturn(rbp.asValue(), rax.asValue());
+        labelOp.addIncomingValues(new Value[]{r0.asValue(), r1.asValue(), rbp.asValue()});
+        TestBinary addOp = new TestBinary(TestBinary.ArithmeticOpcode.ADD, r2.asValue(), r0.asValue(), r1.asValue());
+        TestBinary addOp2 = new TestBinary(TestBinary.ArithmeticOpcode.ADD, r2.asValue(), r1.asValue(), r2.asValue());
+        TestReturn returnOp = new TestReturn(rbp.asValue(), r2.asValue());
 
         instructions.add(labelOp);
-        instructions.add(testDefOp);
         instructions.add(addOp);
+        instructions.add(addOp2);
         instructions.add(new JumpOp(null));
         instructions.add(returnOp);
 
@@ -51,11 +49,34 @@ public class SaraVerifyTest extends GraalCompilerTest {
         printInstructions(instructions);
 
         // here pre-analyse (instructions)
-        testDefOp.setValue(r0.asValue());
+        // testDefOp.setValue(r0.asValue());
 
         // here verification phase (instructions)
         System.out.println("\n== After Analysis; Before Verification ==");
-        printInstructions(instructions);
+        // printInstructions(instructions);
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+        duSequenceAnalysis.determineDuSequenceWebs(instructions);
+        System.out.println(duSequenceAnalysis.getDuPairs());
+    }
+
+    @Test
+    public void testDuPair() {
+        ArrayList<LIRInstruction> instructions = new ArrayList<>();
+
+        Register rbp = new Register(5, 0, "rbp", null);
+        Variable v0 = new Variable(LIRKind.Illegal, 0);
+
+        LabelOp labelOp = new LabelOp(null, true);
+        labelOp.addIncomingValues(new Value[]{rbp.asValue()});
+        TestMoveFromReg move = new TestMoveFromReg(v0, rbp.asValue());
+        TestReturn returnOp = new TestReturn(v0, null);
+
+        instructions.add(labelOp);
+        instructions.add(move);
+        instructions.add(returnOp);
+
+        // printInstructions(instructions);
+        // DuSequenceAnalysis.determineDuPairs(instructions);
     }
 
     private static void printInstructions(ArrayList<LIRInstruction> instructions) {

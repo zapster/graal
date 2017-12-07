@@ -15,57 +15,68 @@ import jdk.vm.ci.code.TargetDescription;
 
 public class VerificationPhase extends LIRPhase<AllocationContext> {
 
-	@Override
-	protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
-		LIR lir = lirGenRes.getLIR();
-		DebugContext debug = lir.getDebug();
-		AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+    private DebugContext debug;
 
-		if (blocks.length != 1) {
-			// Control Flow for more than 1 Block not yet supported
-			return;
-		}
+    public VerificationPhase() {
+        super();
+    }
 
-		AnalysisResult result = context.contextLookup(AnalysisResult.class);
-		ArrayList<DuSequence> inputDuSequences = result.getInputDuSequences();
+    public VerificationPhase(DebugContext debug) {
+        super();
+        this.debug = debug;
+        this.debug.scope("Verification");
+    }
 
-		AbstractBlockBase<?> block = blocks[0];
-		DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-		duSequenceAnalysis.determineDuSequenceWebs(lir.getLIRforBlock(block));
+    @Override
+    protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+        LIR lir = lirGenRes.getLIR();
+        debug = lir.getDebug();
+        AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
-		ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
+        if (blocks.length != 1) {
+            // Control Flow for more than 1 Block not yet supported
+            return;
+        }
 
-		if (!verifyDataFlow(inputDuSequences, outputDuSequences)) {
-			throw GraalError.shouldNotReachHere("SARA verify error");
-		}
-	}
+        AnalysisResult result = context.contextLookup(AnalysisResult.class);
+        ArrayList<DuSequence> inputDuSequences = result.getInputDuSequences();
 
-	public boolean verifyDataFlow(ArrayList<DuSequence> inputDuSequences, ArrayList<DuSequence> outputDuSequences) {
+        AbstractBlockBase<?> block = blocks[0];
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+        duSequenceAnalysis.determineDuSequenceWebs(lir.getLIRforBlock(block));
 
-		if (inputDuSequences.size() != outputDuSequences.size()) {
-			return false;
-		}
+        ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-		assert inputDuSequences.stream().distinct().count() == outputDuSequences.stream().distinct().count();
+        if (!verifyDataFlow(inputDuSequences, outputDuSequences)) {
+            throw GraalError.shouldNotReachHere("SARA verify error");
+        }
+    }
 
-		for (DuSequence inputDuSequence : inputDuSequences) {
-			LIRInstruction inputDefInstruction = inputDuSequence.peekFirst().getDefInstruction();
-			LIRInstruction inputUseInstruction = inputDuSequence.peekLast().getUseInstruction();
-			int inputOperandDefPosition = inputDuSequence.peekFirst().getOperandDefPosition();
-			int inputOperandUsePosition = inputDuSequence.peekLast().getOperandUsePosition();
+    public boolean verifyDataFlow(ArrayList<DuSequence> inputDuSequences, ArrayList<DuSequence> outputDuSequences) {
+        if (inputDuSequences.size() != outputDuSequences.size()) {
+            debug.logAndIndent(3, "The numbers of du-sequences from the input and output do not match.");
+            return false;
+        }
 
-			boolean match = outputDuSequences.stream()
-					.anyMatch(duSequence -> duSequence.peekFirst().getOperandDefPosition() == inputOperandDefPosition &&
-							duSequence.peekLast().getOperandUsePosition() == inputOperandUsePosition &&
-							duSequence.peekFirst().getDefInstruction().equals(inputDefInstruction) &&
-							duSequence.peekLast().getUseInstruction().equals(inputUseInstruction));
+        assert inputDuSequences.stream().distinct().count() == outputDuSequences.stream().distinct().count();
 
-			if (!match) {
-				System.out.println("Input Sequence with wrong or missing output sequence: " + inputDuSequence);
-				return false;
-			}
-		}
+        for (DuSequence inputDuSequence : inputDuSequences) {
+            LIRInstruction inputDefInstruction = inputDuSequence.peekFirst().getDefInstruction();
+            LIRInstruction inputUseInstruction = inputDuSequence.peekLast().getUseInstruction();
+            int inputOperandDefPosition = inputDuSequence.peekFirst().getOperandDefPosition();
+            int inputOperandUsePosition = inputDuSequence.peekLast().getOperandUsePosition();
 
-		return true;
-	}
+            boolean match = outputDuSequences.stream().anyMatch(duSequence -> duSequence.peekFirst().getOperandDefPosition() == inputOperandDefPosition &&
+                            duSequence.peekLast().getOperandUsePosition() == inputOperandUsePosition &&
+                            duSequence.peekFirst().getDefInstruction().equals(inputDefInstruction) &&
+                            duSequence.peekLast().getUseInstruction().equals(inputUseInstruction));
+
+            if (!match) {
+                debug.logAndIndent(3, "Input Sequence with wrong or missing output sequence: " + inputDuSequence);
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
