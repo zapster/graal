@@ -38,10 +38,13 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.InstrumentInfo;
 import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.Scope;
 import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.TruffleContext;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleLanguage.Env;
 import com.oracle.truffle.api.TruffleOptions;
+import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.nodes.LanguageInfo;
@@ -123,6 +126,8 @@ public abstract class Accessor {
 
         public abstract Object importSymbol(Object vmObject, Env env, String symbolName);
 
+        public abstract Map<String, ?> getExportedSymbols(Object vmObject);
+
         public abstract Object lookupSymbol(Object vmObject, Env env, LanguageInfo language, String symbolName);
 
         public abstract boolean isMimeTypeSupported(Object languageShared, String mimeType);
@@ -153,6 +158,8 @@ public abstract class Accessor {
 
         public abstract Env getEnvForInstrument(LanguageInfo language);
 
+        public abstract Env getExistingEnvForInstrument(LanguageInfo language);
+
         public abstract LanguageInfo getObjectLanguage(Object obj, Object vmObject);
 
         public abstract Object contextReferenceGet(Object reference);
@@ -173,6 +180,8 @@ public abstract class Accessor {
 
         public abstract <C, T extends TruffleLanguage<C>> C getCurrentContext(Class<T> languageClass);
 
+        public abstract TruffleContext getPolyglotContext(Object vmObject);
+
         public abstract Value toHostValue(Object obj, Object languageContext);
 
         public abstract Object toGuestValue(Object obj, Object languageContext);
@@ -185,7 +194,9 @@ public abstract class Accessor {
 
         public abstract boolean isHostAccessAllowed(Object vmObject, Env env);
 
-        public abstract Object createInternalContext(Object vmObject, Map<String, Object> config);
+        public abstract Object createInternalContext(Object vmObject, Map<String, Object> config, TruffleContext spiContext);
+
+        public abstract void initializeInternalContext(Object vmObject, Object contextImpl);
 
         public abstract Object enterInternalContext(Object impl);
 
@@ -193,9 +204,23 @@ public abstract class Accessor {
 
         public abstract void closeInternalContext(Object impl);
 
+        public abstract void reportAllLanguageContexts(Object vmObject, Object contextsListener);
+
+        public abstract void reportAllContextThreads(Object vmObject, Object threadsListener);
+
+        public abstract TruffleContext getParentContext(Object impl);
+
         public abstract boolean isCreateThreadAllowed(Object vmObject);
 
         public abstract Thread createThread(Object vmObject, Runnable runnable, Object context);
+
+        public abstract Iterable<Scope> createDefaultLexicalScope(Node node, Frame frame);
+
+        public abstract Iterable<Scope> createDefaultTopScope(TruffleLanguage<?> language, Object context, Object global);
+
+        public abstract Object legacyTckEnter(Object vm);
+
+        public abstract void legacyTckLeave(Object vm, Object prev);
 
     }
 
@@ -208,13 +233,15 @@ public abstract class Accessor {
 
         public abstract Object createEnvContext(Env localEnv);
 
+        public abstract TruffleContext createTruffleContext(Object impl);
+
         public abstract void postInitEnv(Env env);
 
         public abstract Object evalInContext(String code, Node node, MaterializedFrame frame);
 
         public abstract Object findExportedSymbol(TruffleLanguage.Env env, String globalName, boolean onlyExplicit);
 
-        public abstract Object lookupSymbol(TruffleLanguage.Env env, String globalName);
+        public abstract Object lookupSymbol(TruffleLanguage<?> language, Object context, String globalName);
 
         public abstract Object languageGlobal(TruffleLanguage.Env env);
 
@@ -260,6 +287,12 @@ public abstract class Accessor {
 
         public abstract void disposeThread(Env env, Thread thread);
 
+        public abstract void finalizeContext(Env localEnv);
+
+        public abstract Iterable<Scope> findLocalScopes(Env env, Node node, Frame frame);
+
+        public abstract Iterable<Scope> findTopScopes(Env env);
+
     }
 
     public abstract static class InstrumentSupport {
@@ -279,6 +312,8 @@ public abstract class Accessor {
         public abstract void onFirstExecution(RootNode rootNode);
 
         public abstract void onLoad(RootNode rootNode);
+
+        public abstract Iterable<?> findTopScopes(TruffleLanguage.Env env);
 
         @SuppressWarnings("static-method")
         public final DispatchOutputStream createDispatchOutput(OutputStream out) {
@@ -303,6 +338,22 @@ public abstract class Accessor {
         public abstract Object getEngineInstrumenter(Object instrumentationHandler);
 
         public abstract void onNodeInserted(RootNode rootNode, Node tree);
+
+        public abstract void notifyContextCreated(Object engine, TruffleContext context);
+
+        public abstract void notifyContextClosed(Object engine, TruffleContext context);
+
+        public abstract void notifyLanguageContextCreated(Object engine, TruffleContext context, LanguageInfo info);
+
+        public abstract void notifyLanguageContextInitialized(Object engine, TruffleContext context, LanguageInfo info);
+
+        public abstract void notifyLanguageContextFinalized(Object engine, TruffleContext context, LanguageInfo info);
+
+        public abstract void notifyLanguageContextDisposed(Object engine, TruffleContext context, LanguageInfo info);
+
+        public abstract void notifyThreadStarted(Object engine, TruffleContext context, Thread thread);
+
+        public abstract void notifyThreadFinished(Object engine, TruffleContext context, Thread thread);
 
     }
 

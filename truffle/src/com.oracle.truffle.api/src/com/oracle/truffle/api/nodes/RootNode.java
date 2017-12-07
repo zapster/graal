@@ -37,11 +37,13 @@ import com.oracle.truffle.api.TruffleLanguage.ContextReference;
 import com.oracle.truffle.api.TruffleLanguage.Env;
 import com.oracle.truffle.api.TruffleLanguage.ParsingRequest;
 import com.oracle.truffle.api.TruffleRuntime;
+import com.oracle.truffle.api.TruffleStackTraceElement;
+import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.FrameInstance;
 import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.api.impl.DefaultCompilerOptions;
 import com.oracle.truffle.api.impl.Accessor.EngineSupport;
+import com.oracle.truffle.api.impl.DefaultCompilerOptions;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
 
@@ -257,7 +259,7 @@ public abstract class RootNode extends Node {
 
     /**
      * Returns the source section associated with this {@link RootNode}. Returns <code>null</code>
-     * if by default.
+     * if by default. Can be called on any thread and without a language context.
      *
      * @since 0.13
      */
@@ -270,7 +272,7 @@ public abstract class RootNode extends Node {
      * A description of the AST (expected to be a method or procedure name in most languages) that
      * identifies the AST for the benefit of guest language programmers using tools; it might
      * appear, for example in the context of a stack dump or trace and is not expected to be called
-     * often.
+     * often. Can be called on any thread and without a language context.
      * <p>
      * In some languages AST "compilation units" may have no intrinsic names. When no information is
      * available, language implementations might simply use the first few characters of the code,
@@ -296,7 +298,9 @@ public abstract class RootNode extends Node {
      * a guest language programmer. This method has effect on tools and guest language stack traces.
      * By default a {@link RootNode} is internal if no language was passed in the constructor or if
      * the {@link #getSourceSection() root source section} is set and points to an internal source.
-     * This method is intended to be overwritten by guest languages.
+     * This method is intended to be overwritten by guest languages, when the node's source is
+     * internal, the implementation should respect that. Can be called on any thread and without a
+     * language context.
      *
      * @since 0.27
      */
@@ -308,6 +312,18 @@ public abstract class RootNode extends Node {
         if (sc != null) {
             return sc.getSource().isInternal();
         }
+        return false;
+    }
+
+    /**
+     * Returns <code>true</code> if a TruffleException leaving this node should capture
+     * {@link Frame} objects in its stack trace in addition to the default information. This is
+     * <code>false</code> by default to avoid the attached overhead. The captured frames are then
+     * accessible through {@link TruffleStackTraceElement#getFrame()}
+     *
+     * @since 0.31
+     */
+    public boolean isCaptureFramesForTrace() {
         return false;
     }
 
@@ -447,7 +463,8 @@ public abstract class RootNode extends Node {
     }
 
     /**
-     * Does this contain AST content that it is possible to instrument.
+     * Does this contain AST content that it is possible to instrument. Can be called on any thread
+     * and without a language context.
      *
      * @since 0.8 or earlier
      */
@@ -483,5 +500,4 @@ public abstract class RootNode extends Node {
             return value;
         }
     }
-
 }

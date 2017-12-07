@@ -45,6 +45,7 @@ import org.graalvm.options.OptionValues;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleLanguage.Env;
+import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.FrameSlot;
 import com.oracle.truffle.api.frame.FrameSlotTypeException;
@@ -272,13 +273,40 @@ public abstract class TruffleLanguage<C> {
         boolean interactive() default true;
 
         /**
-         * Returns <code>true</code> if this language is intended to be used internally only.
-         * Internal languages cannot be used directly, only by using it from another non-internal
-         * language.
+         * Returns <code>true</code> if this language is intended for internal use only. Internal
+         * languages cannot be used in the host environment directly, they can only be used from
+         * other languages or from instruments.
          *
          * @since 0.27
          */
         boolean internal() default false;
+
+        /**
+         * Specifies a list of languages that this language depends on. Languages are referenced
+         * using their {@link #id()}. This has the following effects:
+         * <ul>
+         * <li>This language always has access to dependent languages if this language is
+         * accessible. Languages may not be accessible if language access is
+         * {@link org.graalvm.polyglot.Context#create(String...) restricted}.
+         * <li>This language is finalized before dependent language contexts are
+         * {@link TruffleLanguage#finalizeContext(Object) finalized}.
+         * <li>This language is disposed before dependent language contexts are
+         * {@link TruffleLanguage#disposeContext(Object) disposed}.
+         * </ul>
+         * <p>
+         * {@link #internal() Non-internal} languages implicitly depend on all internal languages.
+         * Therefore by default non-internal languages are disposed and finalized before internal
+         * languages.
+         * <p>
+         * Dependent languages references are optional. If a dependent language is not installed and
+         * the language needs to fail in such a case then the language should fail on
+         * {@link TruffleLanguage#initializeContext(Object) context initialization}. Cycles in
+         * dependencies will cause an {@link IllegalStateException} when one of the cyclic languages
+         * is {@link org.graalvm.polyglot.Context#initialize(String) initialized}.
+         *
+         * @since 0.30
+         */
+        String[] dependentLanguages() default {};
     }
 
     /**
@@ -328,14 +356,47 @@ public abstract class TruffleLanguage<C> {
     }
 
     /**
-     * Disposes the context created by
-     * {@link #createContext(com.oracle.truffle.api.TruffleLanguage.Env)}. A language can be asked
-     * by its user to <em>clean-up</em>. In such case the language is supposed to dispose any
-     * resources acquired before and <em>dispose</em> the <code>context</code> - e.g. render it
-     * useless for any future calls.
+     * Performs language context finalization actions that are necessary before language contexts
+     * are {@link #disposeContext(Object) disposed}. All installed languages must remain usable
+     * after finalization. The finalization order can be influenced by specifying
+     * {@link Registration#dependentLanguages() language dependencies}. By default internal
+     * languages are finalized last, otherwise the default order is unspecified but deterministic.
+     * <p>
+     * While finalization code is run, other language contexts may become initialized. In such a
+     * case, the finalization order may be non-deterministic and/or not respect the order specified
+     * by language dependencies.
      *
-     * @param context the context {@link #createContext(com.oracle.truffle.api.TruffleLanguage.Env)
-     *            created by the language}
+     * @see Registration#dependentLanguages() for specifying language dependencies.
+     * @param context the context created by
+     *            {@link #createContext(com.oracle.truffle.api.TruffleLanguage.Env)}
+     * @since 0.30
+     */
+    protected void finalizeContext(C context) {
+    }
+
+    /**
+     * Disposes the context created by
+     * {@link #createContext(com.oracle.truffle.api.TruffleLanguage.Env)}. A dispose cleans up all
+     * resources associated with a context. The context may become unusable after it was disposed.
+     * It is not allowed to run guest language code while disposing a context. Finalization code
+     * should be run in {@link #finalizeContext(Object)} instead. Finalization will be performed
+     * prior to context {@link #disposeContext(Object) disposal}.
+     * <p>
+     * The disposal order can be influenced by specifying {@link Registration#dependentLanguages()
+     * language dependencies}. By default internal languages are disposed last, otherwise the
+     * default order is unspecified but deterministic. During disposal no other language must be
+     * accessed using the {@link Env language environment}.
+     * <p>
+     * All threads {@link Env#createThread(Runnable) created} by a language must be stopped after
+     * dispose was called. The languages are responsible for fulfilling that contract otherwise an
+     * {@link AssertionError} is thrown. It is recommended to join all threads that were disposed.
+     *
+     * @param context the context created by
+     *            {@link #createContext(com.oracle.truffle.api.TruffleLanguage.Env)}
+     * @see #finalizeContext(Object) to run finalization code for a context.
+     * @see #disposeThread(Object, Thread) to perform disposal actions when a thread is no longer
+     *      used.
+     *
      * @since 0.8 or earlier
      */
     protected void disposeContext(C context) {
@@ -431,7 +492,7 @@ public abstract class TruffleLanguage<C> {
         private boolean disposed;
 
         ParsingRequest(Source source, Node node, MaterializedFrame frame, String... argumentNames) {
-            Objects.nonNull(source);
+            Objects.requireNonNull(source);
             this.node = node;
             this.frame = frame;
             this.source = source;
@@ -564,7 +625,9 @@ public abstract class TruffleLanguage<C> {
      * @param symbolName the name of the symbol to look up.
      *
      * @since 0.27
+     * @deprecated Implement {@link #findTopScopes(java.lang.Object)} instead.
      */
+    @Deprecated
     protected Object lookupSymbol(C context, String symbolName) {
         return null;
     }
@@ -607,7 +670,9 @@ public abstract class TruffleLanguage<C> {
      * Invoked before a context is accessed from a new thread. This allows the language to perform
      * initialization actions for each thread before guest language code is executed. Also for
      * languages that deny access from multiple threads at the same time, multiple threads may be
-     * initialized if they are used sequentially.
+     * initialized if they are used sequentially. This method will be invoked before the context is
+     * {@link #initializeContext(Object) initialized} for the thread the context will be initialized
+     * with.
      * <p>
      * The {@link Thread#currentThread() current thread} may differ from the initialized thread.
      * <p>
@@ -629,8 +694,8 @@ public abstract class TruffleLanguage<C> {
      * thread} may differ from the disposed thread.
      * <p>
      *
-     * <b>Example multi-threaded language implementation:
-     * <b> {@link TruffleLanguageSnippets.MultiThreadedLanguage#initializeThread}
+     * <b>Example multi-threaded language implementation: </b>
+     * {@link TruffleLanguageSnippets.MultiThreadedLanguage#initializeThread}
      *
      * @since 0.28
      */
@@ -659,6 +724,57 @@ public abstract class TruffleLanguage<C> {
      * @since 0.8 or earlier
      */
     protected abstract boolean isObjectOfLanguage(Object object);
+
+    /**
+     * Find a hierarchy of local scopes enclosing the given {@link Node node}. Unless the node is in
+     * a global scope, it is expected that there is at least one scope provided, that corresponds to
+     * the enclosing function. The language might provide additional block scopes, closure scopes,
+     * etc. Global top scopes are provided by {@link #findTopScopes(java.lang.Object)}. The scope
+     * hierarchy should correspond with the scope nesting, from the inner-most to the outer-most.
+     * The scopes are expected to contain variables valid at the given node.
+     * <p>
+     * Scopes may depend on the information provided by the frame. <br/>
+     * Lexical scopes are returned when <code>frame</code> argument is <code>null</code>.
+     * <p>
+     * When not overridden, the enclosing {@link RootNode}'s scope with variables read from its
+     * {@link FrameDescriptor}'s {@link FrameSlot}s is provided by default.
+     * <p>
+     * The
+     * {@link com.oracle.truffle.api.instrumentation.TruffleInstrument.Env#findLocalScopes(com.oracle.truffle.api.nodes.Node, com.oracle.truffle.api.frame.Frame)}
+     * provides result of this method to instruments.
+     *
+     * @param context the current context of the language
+     * @param node a node to find the enclosing scopes for. The node, is inside a {@link RootNode}
+     *            associated with this language.
+     * @param frame The current frame the node is in, or <code>null</code> for lexical access when
+     *            the program is not running, or is not suspended at the node's location.
+     * @return an iterable with scopes in their nesting order from the inner-most to the outer-most.
+     * @since 0.30
+     */
+    protected Iterable<Scope> findLocalScopes(C context, Node node, Frame frame) {
+        assert node != null;
+        return AccessAPI.engineAccess().createDefaultLexicalScope(node, frame);
+    }
+
+    /**
+     * Find a hierarchy of top-most scopes of the language, if any.
+     * <p>
+     * When not overridden and the {@link #getLanguageGlobal(java.lang.Object) global object} is a
+     * <code>TruffleObject</code> with keys, a single scope is provided by default, whose
+     * {@link Scope#getVariables() getVariables()} returns the global object.
+     * <p>
+     * The
+     * {@link com.oracle.truffle.api.instrumentation.TruffleInstrument.Env#findTopScopes(java.lang.String)}
+     * provides result of this method to instruments.
+     *
+     * @param context the current context of the language
+     * @return an iterable with scopes in their nesting order from the inner-most to the outer-most.
+     * @since 0.30
+     */
+    protected Iterable<Scope> findTopScopes(C context) {
+        Object global = getLanguageGlobal(context);
+        return AccessAPI.engineAccess().createDefaultTopScope(this, context, global);
+    }
 
     /**
      * Runs source code in a halted execution context, or at top level.
@@ -1024,7 +1140,7 @@ public abstract class TruffleLanguage<C> {
         }
 
         /**
-         * Creates a new thread that has access to given inner context. A thread is
+         * Creates a new thread that has access to the given context. A thread is
          * {@link TruffleLanguage#initializeThread(Object, Thread) initialized} when it is
          * {@link Thread#start() started} and {@link TruffleLanguage#disposeThread(Object, Thread)
          * disposed} as soon as the thread finished the execution.
@@ -1038,11 +1154,17 @@ public abstract class TruffleLanguage<C> {
          * The language that created and started the thread is responsible to complete all running
          * or waiting threads when the context is {@link TruffleLanguage#disposeContext(Object)
          * disposed}.
+         * <p>
+         * The {@link TruffleContext} can be either an inner context created by
+         * {@link #newContextBuilder()}.{@link TruffleContext.Builder#build() build()}, or the
+         * context associated with this environment obtained from {@link #getContext()}.
          *
          * @param runnable the runnable to run on this thread
          * @param context the context to enter and leave when the thread is started.
          * @throws IllegalStateException if thread creation is not {@link #isCreateThreadAllowed()
          *             allowed}.
+         * @see #getContext()
+         * @see #newContextBuilder()
          * @since 0.28
          */
         @TruffleBoundary
@@ -1352,6 +1474,16 @@ public abstract class TruffleLanguage<C> {
             return config;
         }
 
+        /**
+         * Returns the polyglot context associated with this environment.
+         *
+         * @return the polyglot context
+         * @since 0.30
+         */
+        public TruffleContext getContext() {
+            return AccessAPI.engineAccess().getPolyglotContext(vmObject);
+        }
+
         @SuppressWarnings("rawtypes")
         @TruffleBoundary
         <E extends TruffleLanguage> E getLanguage(Class<E> languageClass) {
@@ -1363,7 +1495,7 @@ public abstract class TruffleLanguage<C> {
         }
 
         Object findExportedSymbol(String globalName, boolean onlyExplicit) {
-            Object c = getContext();
+            Object c = getLanguageContext();
             if (c != UNSET_CONTEXT) {
                 return spi.findExportedSymbol(c, globalName, onlyExplicit);
             } else {
@@ -1372,7 +1504,7 @@ public abstract class TruffleLanguage<C> {
         }
 
         Object getLanguageGlobal() {
-            Object c = getContext();
+            Object c = getLanguageContext();
             if (c != UNSET_CONTEXT) {
                 return spi.getLanguageGlobal(c);
             } else {
@@ -1381,7 +1513,7 @@ public abstract class TruffleLanguage<C> {
         }
 
         Object findMetaObject(Object obj) {
-            Object c = getContext();
+            Object c = getLanguageContext();
             if (c != UNSET_CONTEXT) {
                 final Object rawValue = AccessAPI.engineAccess().findOriginalObject(obj);
                 return spi.findMetaObject(c, rawValue);
@@ -1391,7 +1523,7 @@ public abstract class TruffleLanguage<C> {
         }
 
         SourceSection findSourceLocation(Object obj) {
-            Object c = getContext();
+            Object c = getLanguageContext();
             if (c != UNSET_CONTEXT) {
                 final Object rawValue = AccessAPI.engineAccess().findOriginalObject(obj);
                 return spi.findSourceLocation(c, rawValue);
@@ -1405,8 +1537,17 @@ public abstract class TruffleLanguage<C> {
             return spi.isObjectOfLanguage(rawValue);
         }
 
+        Iterable<Scope> findLocalScopes(Node node, Frame frame) {
+            assert node != null;
+            return spi.findLocalScopes(context, node, frame);
+        }
+
+        Iterable<Scope> findTopScopes() {
+            return spi.findTopScopes(context);
+        }
+
         void dispose() {
-            Object c = getContext();
+            Object c = getLanguageContext();
             if (c != UNSET_CONTEXT) {
                 spi.disposeContext(c);
             } else {
@@ -1439,7 +1580,7 @@ public abstract class TruffleLanguage<C> {
         }
 
         String toStringIfVisible(Object value, boolean checkVisibility) {
-            Object c = getContext();
+            Object c = getLanguageContext();
             if (c != UNSET_CONTEXT) {
                 if (checkVisibility) {
                     if (!spi.isVisible(c, value)) {
@@ -1452,7 +1593,7 @@ public abstract class TruffleLanguage<C> {
             }
         }
 
-        private Object getContext() {
+        private Object getLanguageContext() {
             if (contextUnchangedAssumption.isValid()) {
                 return context;
             } else {
@@ -1516,6 +1657,10 @@ public abstract class TruffleLanguage<C> {
             return API.nodes();
         }
 
+        static InteropSupport interopAccess() {
+            return API.interopSupport();
+        }
+
         @Override
         protected LanguageSupport languageSupport() {
             return new LanguageImpl();
@@ -1546,17 +1691,14 @@ public abstract class TruffleLanguage<C> {
         }
 
         @Override
-        public Object lookupSymbol(Env env, String globalName) {
-            if (env.context != Env.UNSET_CONTEXT) {
-                return env.spi.lookupSymbol(env.context, globalName);
-            } else {
-                return null;
-            }
+        @SuppressWarnings("unchecked")
+        public Object lookupSymbol(TruffleLanguage<?> language, Object context, String globalName) {
+            return ((TruffleLanguage<Object>) language).lookupSymbol(context, globalName);
         }
 
         @Override
         public Object getContext(Env env) {
-            Object c = env.getContext();
+            Object c = env.getLanguageContext();
             if (c != Env.UNSET_CONTEXT) {
                 return c;
             } else {
@@ -1590,6 +1732,11 @@ public abstract class TruffleLanguage<C> {
         }
 
         @Override
+        public TruffleContext createTruffleContext(Object impl) {
+            return new TruffleContext(impl);
+        }
+
+        @Override
         public void postInitEnv(Env env) {
             env.postInit();
         }
@@ -1611,7 +1758,7 @@ public abstract class TruffleLanguage<C> {
 
         @Override
         public void onThrowable(RootNode root, Throwable e) {
-            TruffleStackTrace.fillIn(e);
+            TruffleStackTrace.fillIn(e, root.isCaptureFramesForTrace());
         }
 
         @Override
@@ -1627,6 +1774,11 @@ public abstract class TruffleLanguage<C> {
         @Override
         public void initializeMultiThreading(Env env) {
             env.getSpi().initializeMultiThreading(env.context);
+        }
+
+        @Override
+        public void finalizeContext(Env env) {
+            env.getSpi().finalizeContext(env.context);
         }
 
         @Override
@@ -1829,11 +1981,26 @@ public abstract class TruffleLanguage<C> {
         }
 
         @Override
+        public Iterable<Scope> findLocalScopes(Env env, Node node, Frame frame) {
+            return env.findLocalScopes(node, frame);
+        }
+
+        @Override
+        public Iterable<Scope> findTopScopes(Env env) {
+            return env.findTopScopes();
+        }
+
+        @Override
         public OptionDescriptors describeOptions(TruffleLanguage<?> language, String requiredGroup) {
             OptionDescriptors descriptors = language.getOptionDescriptors();
             if (descriptors == null) {
                 return OptionDescriptors.EMPTY;
             }
+            assert verifyDescriptors(language, requiredGroup, descriptors);
+            return descriptors;
+        }
+
+        private static boolean verifyDescriptors(TruffleLanguage<?> language, String requiredGroup, OptionDescriptors descriptors) {
             String groupPlusDot = requiredGroup + ".";
             for (OptionDescriptor descriptor : descriptors) {
                 if (!descriptor.getName().equals(requiredGroup) && !descriptor.getName().startsWith(groupPlusDot)) {
@@ -1842,7 +2009,7 @@ public abstract class TruffleLanguage<C> {
                                     descriptor.getName(), language.getClass().getName(), requiredGroup));
                 }
             }
-            return descriptors;
+            return true;
         }
 
     }

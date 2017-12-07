@@ -33,6 +33,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Method;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -60,6 +61,9 @@ import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleLanguage.Env;
 import com.oracle.truffle.api.TruffleOptions;
+import com.oracle.truffle.api.Scope;
+import com.oracle.truffle.api.TruffleContext;
+import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.impl.Accessor.EngineSupport;
 import com.oracle.truffle.api.impl.DispatchOutputStream;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
@@ -67,6 +71,7 @@ import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.java.JavaInterop;
 import com.oracle.truffle.api.nodes.LanguageInfo;
+import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
@@ -1583,6 +1588,11 @@ public class PolyglotEngine {
         }
 
         @Override
+        public TruffleContext getPolyglotContext(Object vmObject) {
+            throw new UnsupportedOperationException("Polyglot contexts are not supported within PolygotEngine.");
+        }
+
+        @Override
         public <T extends TruffleLanguage<?>> T getCurrentLanguage(Class<T> languageClass) {
             PolyglotEngine engine = PolyglotEngine.GLOBAL_PROFILE.get();
             if (engine == null) {
@@ -1622,6 +1632,11 @@ public class PolyglotEngine {
         @Override
         public Env getEnvForInstrument(LanguageInfo language) {
             return ((LanguageShared) NODES.getEngineObject(language)).currentLanguage().getEnv(true);
+        }
+
+        @Override
+        public Env getExistingEnvForInstrument(LanguageInfo language) {
+            return ((LanguageShared) NODES.getEngineObject(language)).currentLanguage().getEnv(false);
         }
 
         @Override
@@ -1699,6 +1714,34 @@ public class PolyglotEngine {
             }
         }
 
+        @Override
+        public Map<String, ?> getExportedSymbols(Object vmObject) {
+            Instrument instrument = (Instrument) vmObject;
+            HashMap<String, Object> globals = instrument.getRuntime().currentVM().globals;
+            return new AbstractMap<String, Object>() {
+                @Override
+                public Set<Map.Entry<String, Object>> entrySet() {
+                    LinkedHashSet<Map.Entry<String, Object>> valueEntries = new LinkedHashSet<>(globals.size());
+                    for (Map.Entry<String, Object> entry : globals.entrySet()) {
+                        String name = entry.getKey();
+                        Object value = entry.getValue();
+                        if (value instanceof DirectValue) {
+                            value = ((DirectValue) value).value;
+                        }
+                        value = toGuestValue(value, vmObject);
+                        Map.Entry<String, Object> valueEntry = new AbstractMap.SimpleImmutableEntry<>(name, value);
+                        valueEntries.add(valueEntry);
+                    }
+                    return Collections.unmodifiableSet(valueEntries);
+                }
+
+                @Override
+                public org.graalvm.polyglot.Value remove(Object key) {
+                    throw new UnsupportedOperationException();
+                }
+            };
+        }
+
         @SuppressWarnings("deprecation")
         @Override
         public <C> com.oracle.truffle.api.impl.FindContextNode<C> createFindContextNode(TruffleLanguage<C> lang) {
@@ -1771,12 +1814,42 @@ public class PolyglotEngine {
         }
 
         @Override
+        public Iterable<Scope> createDefaultLexicalScope(Node node, Frame frame) {
+            return DefaultScope.lexicalScope(node, frame);
+        }
+
+        @Override
+        public Iterable<Scope> createDefaultTopScope(TruffleLanguage<?> language, Object context, Object global) {
+            return DefaultScope.topScope(language, context, global);
+        }
+
+        @Override
+        public void reportAllLanguageContexts(Object vmObject, Object contextsListener) {
+            throw new UnsupportedOperationException("Internal contexts are not supported within PolygotEngine.");
+        }
+
+        @Override
+        public void reportAllContextThreads(Object vmObject, Object threadsListener) {
+            throw new UnsupportedOperationException("Internal contexts are not supported within PolygotEngine.");
+        }
+
+        @Override
+        public TruffleContext getParentContext(Object impl) {
+            throw new UnsupportedOperationException("Internal contexts are not supported within PolygotEngine.");
+        }
+
+        @Override
         public void closeInternalContext(Object impl) {
             throw new UnsupportedOperationException("Internal contexts are not supported within PolygotEngine.");
         }
 
         @Override
-        public Object createInternalContext(Object vmObject, Map<String, Object> config) {
+        public Object createInternalContext(Object vmObject, Map<String, Object> config, TruffleContext context) {
+            throw new UnsupportedOperationException("Internal contexts are not supported within PolygotEngine.");
+        }
+
+        @Override
+        public void initializeInternalContext(Object vmObject, Object contextImpl) {
             throw new UnsupportedOperationException("Internal contexts are not supported within PolygotEngine.");
         }
 
@@ -1793,6 +1866,16 @@ public class PolyglotEngine {
         @Override
         public boolean isCreateThreadAllowed(Object vmObject) {
             return false;
+        }
+
+        @Override
+        public Object legacyTckEnter(Object vm) {
+            return ((PolyglotEngine) vm).enter();
+        }
+
+        @Override
+        public void legacyTckLeave(Object vm, Object prev) {
+            ((PolyglotEngine) vm).leave(prev);
         }
 
         @Override

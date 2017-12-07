@@ -33,8 +33,6 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.lang.ref.Reference;
-import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -46,8 +44,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.DoubleBinaryOperator;
 
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import com.oracle.truffle.api.TruffleLanguage;
@@ -58,7 +58,7 @@ import com.oracle.truffle.api.debug.SuspendedEvent;
 import com.oracle.truffle.api.impl.Accessor;
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
-import com.oracle.truffle.api.interop.ForeignAccess.Factory26;
+import com.oracle.truffle.api.interop.ForeignAccess.StandardFactory;
 import com.oracle.truffle.api.interop.KeyInfo;
 import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.TruffleObject;
@@ -126,7 +126,7 @@ import com.oracle.truffle.tck.impl.TestObject;
  * interop package} defines what types of data can be interchanged between the languages and the
  * <em>TCK</em> does its best to make sure all these data are really accepted as an input on a
  * boundary of your {@link TruffleLanguage language implementation}. That doesn't mean such data
- * need to be used internally, many languages do conversions in their {@link Factory26 foreign
+ * need to be used internally, many languages do conversions in their {@link StandardFactory foreign
  * access} {@link RootNode nodes} to more suitable internal representation. Such conversion is fully
  * acceptable as nobody prescribes what is the actual type of output after executing a function/code
  * snippet in your language.
@@ -139,8 +139,8 @@ import com.oracle.truffle.tck.impl.TestObject;
  */
 public abstract class TruffleTCK {
     private static final Random RANDOM = new Random();
-    private static Reference<PolyglotEngine> previousVMReference = new WeakReference<>(null);
     private PolyglotEngine tckVM;
+    private Object prev;
 
     /** @since 0.8 or earlier */
     protected TruffleTCK() {
@@ -153,19 +153,23 @@ public abstract class TruffleTCK {
      */
     @AfterClass
     public static void disposePreviousVM() {
-        replacePreviousVM(null);
-
     }
 
-    private static void replacePreviousVM(PolyglotEngine newVM) {
-        PolyglotEngine vm = previousVMReference.get();
-        if (vm == newVM) {
-            return;
-        }
-        if (vm != null) {
-            vm.dispose();
-        }
-        previousVMReference = new WeakReference<>(newVM);
+    /**
+     * @since 0.30
+     */
+    @Before
+    public final void enterTCK() throws Exception {
+        PolyglotEngine vm = vm();
+        this.prev = TruffleTCKAccessor.engineAccess().legacyTckEnter(vm);
+    }
+
+    /**
+     * @since 0.30
+     */
+    @After
+    public final void afterTCK() throws Exception {
+        TruffleTCKAccessor.engineAccess().legacyTckLeave(vm(), this.prev);
     }
 
     /**
@@ -731,7 +735,6 @@ public abstract class TruffleTCK {
     private PolyglotEngine vm() throws Exception {
         if (tckVM == null) {
             tckVM = prepareVM();
-            replacePreviousVM(tckVM);
         }
         return tckVM;
     }
