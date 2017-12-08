@@ -60,8 +60,8 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
@@ -92,8 +92,8 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
@@ -124,8 +124,8 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
@@ -155,8 +155,8 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
@@ -186,8 +186,8 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
@@ -220,8 +220,8 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
@@ -254,8 +254,8 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
@@ -290,8 +290,8 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
@@ -326,8 +326,8 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
@@ -359,16 +359,16 @@ public class VerificationTest extends JTTTest {
         duSequenceAnalysis.determineDuSequenceWebs(instructions);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences));
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }
 
     @Test
     public void testVerify() {
-        VerificationPhase verificationPhase = new VerificationPhase(this.getDebugContext());
+        VerificationPhase verificationPhase = new VerificationPhase();
         ArrayList<DuSequence> duSequences = new ArrayList<>();
 
-        assertTrue(verificationPhase.verifyDataFlow(duSequences, duSequences));
+        assertTrue(verificationPhase.verifyDataFlow(duSequences, duSequences, this.getDebugContext()));
     }
 
     @Test
