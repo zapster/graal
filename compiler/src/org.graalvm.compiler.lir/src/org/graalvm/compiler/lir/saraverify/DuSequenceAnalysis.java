@@ -94,6 +94,12 @@ public class DuSequenceAnalysis {
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
             output.add(mode + ": " + value + " @ pos: " + operandDefPosition);
 
+            if (ValueUtil.isIllegal(value)) {
+                // value is part of a composite value
+                operandDefPosition++;
+                return;
+            }
+
             ArrayList<ValUsage> useInstructions = valUseInstructions.get(value);
             if (useInstructions == null) {
                 // definition of a value, which is not used
@@ -136,6 +142,12 @@ public class DuSequenceAnalysis {
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
             output.add(mode + ": " + value + " @ pos: " + operandUsePosition);
+
+            if (ValueUtil.isIllegal(value)) {
+                // value is part of a composite value
+                operandUsePosition++;
+                return;
+            }
 
             ArrayList<ValUsage> useInstructions = valUseInstructions.get(value);
 
