@@ -3,6 +3,7 @@ package org.graalvm.compiler.lir.saraverify;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -24,15 +25,20 @@ public class DuSequenceAnalysis {
     private ArrayList<DuPair> duPairs;
     private ArrayList<DuSequence> duSequences;
     private ArrayList<DuSequenceWeb> duSequenceWebs;
+
     private Map<Value, ArrayList<ValUsage>> valUseInstructions;
-    private ArrayList<String> output;
+
+    private Map<LIRInstruction, Integer> instructionDefOperandCount;
+    private Map<LIRInstruction, Integer> instructionUseOperandCount;
 
     public List<DuSequenceWeb> determineDuSequenceWebs(ArrayList<LIRInstruction> instructions) {
         valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
         duPairs = new ArrayList<>();
         duSequences = new ArrayList<>();
         duSequenceWebs = new ArrayList<>();
-        output = new ArrayList<>();
+
+        instructionDefOperandCount = new HashMap<>();
+        instructionUseOperandCount = new HashMap<>();
 
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer();
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer();
@@ -46,11 +52,9 @@ public class DuSequenceAnalysis {
 
             visitValues(inst, defConsumer, useConsumer, useConsumer);
 
-            output.add("\n" + inst);
+            instructionDefOperandCount.put(inst, operandDefPosition);
+            instructionUseOperandCount.put(inst, operandUsePosition);
         }
-
-        Collections.reverse(output);
-        // output.stream().forEach(x -> System.out.println(x));
 
         return duSequenceWebs;
     }
@@ -61,6 +65,14 @@ public class DuSequenceAnalysis {
 
     public ArrayList<DuSequence> getDuSequences() {
         return duSequences;
+    }
+
+    public Map<LIRInstruction, Integer> getInstructionDefOperandCount() {
+        return instructionDefOperandCount;
+    }
+
+    public Map<LIRInstruction, Integer> getInstructionUseOperandCount() {
+        return instructionUseOperandCount;
     }
 
     private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,
@@ -92,8 +104,6 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            output.add(mode + ": " + value + " @ pos: " + operandDefPosition);
-
             if (ValueUtil.isIllegal(value)) {
                 // value is part of a composite value
                 operandDefPosition++;
@@ -141,8 +151,6 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            output.add(mode + ": " + value + " @ pos: " + operandUsePosition);
-
             if (ValueUtil.isIllegal(value)) {
                 // value is part of a composite value
                 operandUsePosition++;
