@@ -10,9 +10,9 @@ import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v2;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v3;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
-import org.graalvm.compiler.debug.DebugContext;
-import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.jtt.JTTTest;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
@@ -364,7 +364,7 @@ public class VerificationTest extends JTTTest {
     }
 
     @Test
-    public void testVerify() {
+    public void testVerifyDataFlow() {
         VerificationPhase verificationPhase = new VerificationPhase();
         ArrayList<DuSequence> duSequences = new ArrayList<>();
 
@@ -372,10 +372,130 @@ public class VerificationTest extends JTTTest {
     }
 
     @Test
-    public void testDebug() {
-        DebugContext debug = this.getDebugContext();
-        try (Scope s = debug.scope("SARAVerifyTest")) {
-            debug.log(3, "Log Test");
-        }
+    public void testVerifyOperandCount() {
+        Map<LIRInstruction, Integer> emptyMap = new HashMap<>();
+        assertTrue(VerificationPhase.verifyOperandCount(emptyMap, emptyMap, emptyMap, emptyMap));
+    }
+
+    @Test
+    public void testVerifyOperandCount2() {
+        Map<LIRInstruction, Integer> operandDefCountMap = new HashMap<>();
+        Map<LIRInstruction, Integer> operandUseCountMap = new HashMap<>();
+
+        LabelOp labelOp = new LabelOp(null, false);
+        operandDefCountMap.put(labelOp, 3);
+        operandUseCountMap.put(labelOp, 0);
+
+        TestReturn returnOp = new TestReturn(v2, v1);
+        operandDefCountMap.put(returnOp, 0);
+        operandUseCountMap.put(returnOp, 2);
+
+        assertTrue(VerificationPhase.verifyOperandCount(operandDefCountMap, operandUseCountMap, operandDefCountMap, operandUseCountMap));
+    }
+
+    @Test
+    public void testVerifyOperandCount3() {
+        Map<LIRInstruction, Integer> inputOperandDefCount = new HashMap<>();
+        Map<LIRInstruction, Integer> inputOperandUseCount = new HashMap<>();
+        Map<LIRInstruction, Integer> outputOperandDefCount = new HashMap<>();
+        Map<LIRInstruction, Integer> outputOperandUseCount = new HashMap<>();
+
+        LabelOp labelOp = new LabelOp(null, false);
+        TestMoveFromReg moveOp = new TestMoveFromReg(v1, v0);
+        TestReturn returnOp = new TestReturn(v2, v1);
+
+        inputOperandDefCount.put(labelOp, 3);
+        inputOperandDefCount.put(moveOp, 1);
+        inputOperandDefCount.put(returnOp, 0);
+
+        inputOperandUseCount.put(labelOp, 0);
+        inputOperandUseCount.put(moveOp, 1);
+        inputOperandUseCount.put(returnOp, 2);
+
+        outputOperandDefCount.put(labelOp, 3);
+        outputOperandDefCount.put(returnOp, 0);
+
+        outputOperandUseCount.put(labelOp, 0);
+        outputOperandUseCount.put(returnOp, 2);
+
+        assertTrue(VerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+    }
+
+    @Test
+    public void testVerifyOperandCount4() {
+        Map<LIRInstruction, Integer> inputOperandDefCount = new HashMap<>();
+        Map<LIRInstruction, Integer> inputOperandUseCount = new HashMap<>();
+        Map<LIRInstruction, Integer> outputOperandDefCount = new HashMap<>();
+        Map<LIRInstruction, Integer> outputOperandUseCount = new HashMap<>();
+
+        LabelOp labelOp = new LabelOp(null, false);
+        TestMoveFromReg moveOp = new TestMoveFromReg(v1, v0);
+        TestReturn returnOp = new TestReturn(v2, v1);
+
+        inputOperandDefCount.put(labelOp, 3);
+        inputOperandDefCount.put(returnOp, 0);
+
+        inputOperandUseCount.put(labelOp, 0);
+        inputOperandUseCount.put(returnOp, 2);
+
+        outputOperandDefCount.put(labelOp, 3);
+        outputOperandDefCount.put(moveOp, 1);
+        outputOperandDefCount.put(returnOp, 0);
+
+        outputOperandUseCount.put(labelOp, 0);
+        outputOperandUseCount.put(moveOp, 1);
+        outputOperandUseCount.put(returnOp, 2);
+
+        assertTrue(VerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+    }
+
+    @Test
+    public void testVerifyOperandCount5() {
+        Map<LIRInstruction, Integer> inputOperandDefCount = new HashMap<>();
+        Map<LIRInstruction, Integer> inputOperandUseCount = new HashMap<>();
+        Map<LIRInstruction, Integer> outputOperandDefCount = new HashMap<>();
+        Map<LIRInstruction, Integer> outputOperandUseCount = new HashMap<>();
+
+        LabelOp labelOp = new LabelOp(null, false);
+        TestReturn returnOp = new TestReturn(v2, v1);
+
+        inputOperandDefCount.put(labelOp, 3);
+        inputOperandDefCount.put(returnOp, 0);
+
+        inputOperandUseCount.put(labelOp, 0);
+        inputOperandUseCount.put(returnOp, 2);
+
+        outputOperandDefCount.put(labelOp, 3);
+        outputOperandDefCount.put(returnOp, 1);
+
+        outputOperandUseCount.put(labelOp, 0);
+        outputOperandUseCount.put(returnOp, 2);
+
+        assertFalse(VerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+    }
+
+    @Test
+    public void testVerifyOperandCount6() {
+        Map<LIRInstruction, Integer> inputOperandDefCount = new HashMap<>();
+        Map<LIRInstruction, Integer> inputOperandUseCount = new HashMap<>();
+        Map<LIRInstruction, Integer> outputOperandDefCount = new HashMap<>();
+        Map<LIRInstruction, Integer> outputOperandUseCount = new HashMap<>();
+
+        LabelOp labelOp = new LabelOp(null, false);
+        TestReturn returnOp = new TestReturn(v2, v1);
+
+        inputOperandDefCount.put(labelOp, 3);
+        inputOperandDefCount.put(returnOp, 0);
+
+        inputOperandUseCount.put(labelOp, 0);
+        inputOperandUseCount.put(returnOp, 1);
+
+        outputOperandDefCount.put(labelOp, 3);
+        outputOperandDefCount.put(returnOp, 0);
+
+        outputOperandUseCount.put(labelOp, 0);
+        outputOperandUseCount.put(returnOp, 2);
+
+        assertFalse(VerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
     }
 }

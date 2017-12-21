@@ -23,9 +23,6 @@
 
 package org.graalvm.compiler.lir.saraverify;
 
-import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
-import org.graalvm.compiler.debug.DebugContext;
-import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
@@ -46,55 +43,11 @@ public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationCont
 
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
-        LIR lir = lirGenRes.getLIR();
-        DebugContext debug = lir.getDebug();
-        AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-
-        if (blocks.length != 1) {
-            // Control Flow for more than 1 Block not yet supported
-            return;
-        }
-
-        AbstractBlockBase<?> block = blocks[0];
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        duSequenceAnalysis.determineDuSequenceWebs(lir.getLIRforBlock(block));
+        duSequenceAnalysis.determineDuSequenceWebs(lirGenRes);
 
-        AnalysisResult result = new AnalysisResult(duSequenceAnalysis.getDuSequences());
+        AnalysisResult result = new AnalysisResult(duSequenceAnalysis.getDuSequences(), duSequenceAnalysis.getInstructionDefOperandCount(), duSequenceAnalysis.getInstructionUseOperandCount());
         context.contextAdd(result);
-
-        // for (AbstractBlockBase<?> block : blocks) {
-        //
-        // try (Indent i = debug.logAndIndent(3, "Processing Block %s", block)) {
-        // ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
-        //
-        // for (LIRInstruction inst : instructions) {
-        //
-        // // debug.log(3, "InstrClass: %s", inst.getLIRInstructionClass());
-        // System.identityHashCode(inst);
-        //
-        // try (Indent i2 = debug.logAndIndent(3, "%s", inst)) {
-        // try (Indent i3 = debug.logAndIndent(3, "%s", "<input>")) {
-        // inst.visitEachInput(proc);
-        // }
-        // try (Indent i3 = debug.logAndIndent(3, "%s", "<output>")) {
-        // inst.visitEachOutput(proc);
-        // }
-        // try (Indent i3 = debug.logAndIndent(3, "%s", "<alive>")) {
-        // inst.visitEachAlive(proc);
-        // }
-        // try (Indent i3 = debug.logAndIndent(3, "%s", "<temp>")) {
-        // inst.visitEachTemp(proc);
-        // }
-        // try (Indent i3 = debug.logAndIndent(3, "%s", "<state>")) {
-        // inst.visitEachState(proc);
-        // }
-        // }
-        // }
-        // }
-        // }
-        //
-        // context.contextAdd(new AnalysisResult());
-
     }
 
 }

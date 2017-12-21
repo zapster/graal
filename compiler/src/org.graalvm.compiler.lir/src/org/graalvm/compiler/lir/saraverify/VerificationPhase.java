@@ -1,8 +1,9 @@
 package org.graalvm.compiler.lir.saraverify;
 
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.Map.Entry;
 
-import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.debug.GraalError;
@@ -21,26 +22,28 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
-        LIR lir = lirGenRes.getLIR();
-        DebugContext debugContext = lir.getDebug();
-        AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-
-        if (blocks.length != 1) {
-            // Control Flow for more than 1 Block not yet supported
-            return;
-        }
-
         AnalysisResult result = context.contextLookup(AnalysisResult.class);
         ArrayList<DuSequence> inputDuSequences = result.getInputDuSequences();
 
-        AbstractBlockBase<?> block = blocks[0];
-        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        duSequenceAnalysis.determineDuSequenceWebs(lir.getLIRforBlock(block));
+        if (inputDuSequences == null) {
+            // no input du-sequences were created by the RegisterAllocationVerificationPhase
+            return;
+        }
 
+        LIR lir = lirGenRes.getLIR();
+        DebugContext debugContext = lir.getDebug();
+
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+        duSequenceAnalysis.determineDuSequenceWebs(lirGenRes);
         ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
 
         if (!verifyDataFlow(inputDuSequences, outputDuSequences, debugContext)) {
-            throw GraalError.shouldNotReachHere("SARA verify error");
+            throw GraalError.shouldNotReachHere("SARA verify error: Data Flow not equal");
+        }
+
+        if (!verifyOperandCount(result.getInstructionDefOperandCount(), result.getInstructionUseOperandCount(),
+                        duSequenceAnalysis.getInstructionDefOperandCount(), duSequenceAnalysis.getInstructionUseOperandCount())) {
+            throw GraalError.shouldNotReachHere("SARA verify error: Operand numbers not equal");
         }
     }
 
@@ -69,6 +72,30 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                 try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
                     debugContext.logAndIndent(3, "Input Sequence with wrong or missing output sequence: " + inputDuSequence);
                 }
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static boolean verifyOperandCount(Map<LIRInstruction, Integer> inputInstructionDefOperandCount,
+                    Map<LIRInstruction, Integer> inputInstructionUseOperandCount,
+                    Map<LIRInstruction, Integer> outputInstructionDefOperandCount,
+                    Map<LIRInstruction, Integer> outputInstructionUseOperandCount) {
+
+        for (Entry<LIRInstruction, Integer> entry : inputInstructionDefOperandCount.entrySet()) {
+            Integer count = outputInstructionDefOperandCount.get(entry.getKey());
+
+            if (count != null && count.compareTo(entry.getValue()) != 0) {
+                return false;
+            }
+        }
+
+        for (Entry<LIRInstruction, Integer> entry : inputInstructionUseOperandCount.entrySet()) {
+            Integer count = outputInstructionUseOperandCount.get(entry.getKey());
+
+            if (count != null && count.compareTo(entry.getValue()) != 0) {
                 return false;
             }
         }

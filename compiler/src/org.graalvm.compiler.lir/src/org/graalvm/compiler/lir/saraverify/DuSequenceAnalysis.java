@@ -4,14 +4,18 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
+import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
+import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
@@ -31,14 +35,28 @@ public class DuSequenceAnalysis {
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
 
+    public List<DuSequenceWeb> determineDuSequenceWebs(LIRGenerationResult lirGenRes) {
+        LIR lir = lirGenRes.getLIR();
+        AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+
+        if (blocks.length != 1) {
+            // Control Flow for more than 1 Block not yet supported
+            return null;
+        }
+
+        AbstractBlockBase<?> block = blocks[0];
+
+        return determineDuSequenceWebs(lir.getLIRforBlock(block));
+    }
+
     public List<DuSequenceWeb> determineDuSequenceWebs(ArrayList<LIRInstruction> instructions) {
         valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
         duPairs = new ArrayList<>();
         duSequences = new ArrayList<>();
         duSequenceWebs = new ArrayList<>();
 
-        instructionDefOperandCount = new HashMap<>();
-        instructionUseOperandCount = new HashMap<>();
+        instructionDefOperandCount = new IdentityHashMap<>();
+        instructionUseOperandCount = new IdentityHashMap<>();
 
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer();
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer();

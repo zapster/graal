@@ -20,7 +20,6 @@ import org.graalvm.compiler.lir.ConstantValue;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
-import org.graalvm.compiler.lir.VirtualStackSlot;
 import org.graalvm.compiler.lir.framemap.SimpleVirtualStackSlot;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinaryConsumerConst;
@@ -536,5 +535,4 @@ public class DuSequenceAnalysisTest {
             assert actual.stream().anyMatch(x -> x.equals(duSequenceWeb));
         }
     }
-
 }

@@ -1,31 +1,4 @@
 # com.oracle.truffle.sl.test.SLFactorialTest
 com.oracle.truffle.*
 
-# composite value compare failure
-org.graalvm.compiler.jtt.bytecode.BC_getstatic_f
-org.graalvm.compiler.jtt.bytecode.BC_getstatic_z
-org.graalvm.compiler.jtt.bytecode.BC_getstatic_i
-org.graalvm.compiler.jtt.bytecode.BC_putstatic
-
-# stackslot value compare failure
-org.graalvm.compiler.jtt.bytecode.BC_lshr02
-org.graalvm.compiler.jtt.except.BC_caload
-org.graalvm.compiler.jtt.except.BC_sastore
-org.graalvm.compiler.jtt.except.BC_arraylength
-org.graalvm.compiler.jtt.except.BC_irem
-org.graalvm.compiler.jtt.except.BC_idiv
-org.graalvm.compiler.jtt.bytecode.BC_arraylength
-org.graalvm.compiler.jtt.bytecode.BC_ldiv
-org.graalvm.compiler.jtt.bytecode.BC_irem2
-org.graalvm.compiler.jtt.bytecode.BC_lrem
-org.graalvm.compiler.jtt.bytecode.BC_invokespecial
-org.graalvm.compiler.jtt.bytecode.BC_idiv2
-org.graalvm.compiler.jtt.bytecode.BC_invokespecial2
-org.graalvm.compiler.jtt.bytecode.BC_getfield
-org.graalvm.compiler.jtt.bytecode.BC_ldiv2
-org.graalvm.compiler.jtt.bytecode.BC_putfield_01)
-
-# org.graalvm.compiler.nodes.extended.BranchProbabilityNode.probability(double, boolean) should have been handled by a GeneratedInvocationPlugin
-org.graalvm.compiler.jtt.bytecode.BC_d*
-org.graalvm.compiler.jtt.bytecode.BC_lookupswitch05
 
