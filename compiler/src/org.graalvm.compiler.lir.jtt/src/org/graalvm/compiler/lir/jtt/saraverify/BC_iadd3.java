@@ -2,6 +2,7 @@ package org.graalvm.compiler.lir.jtt.saraverify;
 
 import java.util.ListIterator;
 
+import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.jtt.JTTTest;
 import org.graalvm.compiler.lir.alloc.lsra.LinearScanPhase;
 import org.graalvm.compiler.lir.dfa.MarkBasePointersPhase;
@@ -11,6 +12,7 @@ import org.graalvm.compiler.lir.phases.LIRSuites;
 import org.graalvm.compiler.lir.saraverify.RegisterAllocationVerificationPhase;
 import org.graalvm.compiler.lir.saraverify.VerificationPhase;
 import org.graalvm.compiler.options.OptionValues;
+import org.junit.Rule;
 
 /*
  * Copyright (c) 2007, 2012, Oracle and/or its affiliates. All rights reserved.
@@ -39,6 +41,7 @@ import org.graalvm.compiler.options.OptionValues;
  */
 
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 /*
  */
@@ -61,7 +64,11 @@ public class BC_iadd3 extends JTTTest {
 
         phase = lirSuites.getAllocationStage().findPhase(LinearScanPhase.class);
         assert phase != null;
-        phase.add(injector);
+        phase.add(injector.new InjectorCopy());
+
+        phase = lirSuites.getAllocationStage().findPhase(LinearScanPhase.class);
+        assert phase != null;
+        phase.add(injector.new InjectorLabel());
 
         return lirSuites;
     }
@@ -70,43 +77,53 @@ public class BC_iadd3 extends JTTTest {
         return a + b;
     }
 
+    @Rule public ExpectedException thrown = ExpectedException.none();
+
     @Test
     public void run0() throws Throwable {
+        thrown.expect(GraalError.class);
         runTest("test", ((short) 1), ((short) 2));
     }
 
     @Test
     public void run1() throws Throwable {
+        thrown.expect(GraalError.class);
         runTest("test", ((short) 0), ((short) -1));
     }
 
     @Test
     public void run2() throws Throwable {
+        thrown.expect(GraalError.class);
         runTest("test", ((short) 33), ((short) 67));
     }
 
     @Test
     public void run3() throws Throwable {
+        thrown.expect(GraalError.class);
         runTest("test", ((short) 1), ((short) -1));
     }
 
     @Test
     public void run4() throws Throwable {
+        thrown.expect(GraalError.class);
         runTest("test", ((short) -128), ((short) 1));
     }
 
     @Test
     public void run5() throws Throwable {
+        thrown.expect(GraalError.class);
         runTest("test", ((short) 127), ((short) 1));
     }
 
     @Test
     public void run6() throws Throwable {
+        thrown.expect(GraalError.class);
         runTest("test", ((short) -32768), ((short) 1));
     }
 
     @Test
     public void run7() throws Throwable {
+        thrown.expect(GraalError.class);
         runTest("test", ((short) 32767), ((short) 1));
     }
 
