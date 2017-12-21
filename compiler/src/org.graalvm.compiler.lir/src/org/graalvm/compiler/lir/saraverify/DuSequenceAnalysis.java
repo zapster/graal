@@ -3,7 +3,6 @@ package org.graalvm.compiler.lir.saraverify;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +34,7 @@ public class DuSequenceAnalysis {
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
 
-    public List<DuSequenceWeb> determineDuSequenceWebs(LIRGenerationResult lirGenRes) {
+    public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
@@ -49,7 +48,7 @@ public class DuSequenceAnalysis {
         return determineDuSequenceWebs(lir.getLIRforBlock(block));
     }
 
-    public List<DuSequenceWeb> determineDuSequenceWebs(ArrayList<LIRInstruction> instructions) {
+    public AnalysisResult determineDuSequenceWebs(ArrayList<LIRInstruction> instructions) {
         valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
         duPairs = new ArrayList<>();
         duSequences = new ArrayList<>();
@@ -74,23 +73,7 @@ public class DuSequenceAnalysis {
             instructionUseOperandCount.put(inst, operandUsePosition);
         }
 
-        return duSequenceWebs;
-    }
-
-    public ArrayList<DuPair> getDuPairs() {
-        return duPairs;
-    }
-
-    public ArrayList<DuSequence> getDuSequences() {
-        return duSequences;
-    }
-
-    public Map<LIRInstruction, Integer> getInstructionDefOperandCount() {
-        return instructionDefOperandCount;
-    }
-
-    public Map<LIRInstruction, Integer> getInstructionUseOperandCount() {
-        return instructionUseOperandCount;
+        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount);
     }
 
     private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,

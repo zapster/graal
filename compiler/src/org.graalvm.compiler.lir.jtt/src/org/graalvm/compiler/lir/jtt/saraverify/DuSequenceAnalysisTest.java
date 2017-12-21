@@ -28,6 +28,7 @@ import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromConst;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveToReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
+import org.graalvm.compiler.lir.saraverify.AnalysisResult;
 import org.graalvm.compiler.lir.saraverify.DuPair;
 import org.graalvm.compiler.lir.saraverify.DuSequence;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
@@ -300,9 +301,10 @@ public class DuSequenceAnalysisTest {
         instructions.add(returnOp);
 
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        List<DuSequenceWeb> duSequenceWebs = duSequenceAnalysis.determineDuSequenceWebs(instructions);
-        List<DuPair> duPairs = duSequenceAnalysis.getDuPairs();
-        List<DuSequence> duSequences = duSequenceAnalysis.getDuSequences();
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions);
+        List<DuSequenceWeb> duSequenceWebs = analysisResult.getDuSequenceWebs();
+        List<DuPair> duPairs = analysisResult.getDuPairs();
+        List<DuSequence> duSequences = analysisResult.getDuSequences();
 
         throw GraalError.unimplemented();
     }
@@ -503,9 +505,10 @@ public class DuSequenceAnalysisTest {
     private static void test(ArrayList<LIRInstruction> instructions, List<DuPair> expectedDuPairs, List<DuSequence> expectedDuSequences, List<DuSequenceWeb> expectedDuSequenceWebs) {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
 
-        List<DuSequenceWeb> actualDuSequenceWebs = duSequenceAnalysis.determineDuSequenceWebs(instructions);
-        List<DuPair> actualDuPairs = duSequenceAnalysis.getDuPairs();
-        List<DuSequence> actualDuSequences = duSequenceAnalysis.getDuSequences();
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions);
+        List<DuSequenceWeb> actualDuSequenceWebs = analysisResult.getDuSequenceWebs();
+        List<DuPair> actualDuPairs = analysisResult.getDuPairs();
+        List<DuSequence> actualDuSequences = analysisResult.getDuSequences();
 
         assertEqualsDuSequenceWebs(expectedDuSequenceWebs, actualDuSequenceWebs);
         assertEqualsDuPairs(expectedDuPairs, actualDuPairs);

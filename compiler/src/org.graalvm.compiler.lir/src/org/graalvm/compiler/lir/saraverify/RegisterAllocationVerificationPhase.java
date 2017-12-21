@@ -44,9 +44,7 @@ public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationCont
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        duSequenceAnalysis.determineDuSequenceWebs(lirGenRes);
-
-        AnalysisResult result = new AnalysisResult(duSequenceAnalysis.getDuSequences(), duSequenceAnalysis.getInstructionDefOperandCount(), duSequenceAnalysis.getInstructionUseOperandCount());
+        AnalysisResult result = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes);
         context.contextAdd(result);
     }
 

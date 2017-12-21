@@ -7,18 +7,32 @@ import org.graalvm.compiler.lir.LIRInstruction;
 
 public class AnalysisResult {
 
-    private ArrayList<DuSequence> inputDuSequences;
+    private ArrayList<DuPair> duPairs;
+    private ArrayList<DuSequence> duSequences;
+    private ArrayList<DuSequenceWeb> duSequenceWebs;
+
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
 
-    public AnalysisResult(ArrayList<DuSequence> inputDuSequences, Map<LIRInstruction, Integer> instructionDefOperandCount, Map<LIRInstruction, Integer> instructionUseOperandCount) {
-        this.inputDuSequences = inputDuSequences;
+    public AnalysisResult(ArrayList<DuPair> duPairs, ArrayList<DuSequence> duSequences, ArrayList<DuSequenceWeb> duSequenceWebs, Map<LIRInstruction, Integer> instructionDefOperandCount,
+                    Map<LIRInstruction, Integer> instructionUseOperandCount) {
+        this.duPairs = duPairs;
+        this.duSequences = duSequences;
+        this.duSequenceWebs = duSequenceWebs;
         this.instructionDefOperandCount = instructionDefOperandCount;
         this.instructionUseOperandCount = instructionUseOperandCount;
     }
 
-    public ArrayList<DuSequence> getInputDuSequences() {
-        return inputDuSequences;
+    public ArrayList<DuPair> getDuPairs() {
+        return duPairs;
+    }
+
+    public ArrayList<DuSequence> getDuSequences() {
+        return duSequences;
+    }
+
+    public ArrayList<DuSequenceWeb> getDuSequenceWebs() {
+        return duSequenceWebs;
     }
 
     public Map<LIRInstruction, Integer> getInstructionDefOperandCount() {

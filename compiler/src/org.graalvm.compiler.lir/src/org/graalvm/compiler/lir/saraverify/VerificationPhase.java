@@ -22,27 +22,30 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
-        AnalysisResult result = context.contextLookup(AnalysisResult.class);
-        ArrayList<DuSequence> inputDuSequences = result.getInputDuSequences();
+        AnalysisResult inputResult = context.contextLookup(AnalysisResult.class);
 
-        if (inputDuSequences == null) {
+        if (inputResult == null) {
             // no input du-sequences were created by the RegisterAllocationVerificationPhase
             return;
         }
+
+        System.out.println("AnalysisResult is not null");
+
+        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         LIR lir = lirGenRes.getLIR();
         DebugContext debugContext = lir.getDebug();
 
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        duSequenceAnalysis.determineDuSequenceWebs(lirGenRes);
-        ArrayList<DuSequence> outputDuSequences = duSequenceAnalysis.getDuSequences();
+        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes);
+        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         if (!verifyDataFlow(inputDuSequences, outputDuSequences, debugContext)) {
             throw GraalError.shouldNotReachHere("SARA verify error: Data Flow not equal");
         }
 
-        if (!verifyOperandCount(result.getInstructionDefOperandCount(), result.getInstructionUseOperandCount(),
-                        duSequenceAnalysis.getInstructionDefOperandCount(), duSequenceAnalysis.getInstructionUseOperandCount())) {
+        if (!verifyOperandCount(inputResult.getInstructionDefOperandCount(), inputResult.getInstructionUseOperandCount(),
+                        outputResult.getInstructionDefOperandCount(), outputResult.getInstructionUseOperandCount())) {
             throw GraalError.shouldNotReachHere("SARA verify error: Operand numbers not equal");
         }
     }
