@@ -1,17 +1,6 @@
 package org.graalvm.compiler.lir.jtt.saraverify;
 
-import java.util.ListIterator;
-
 import org.graalvm.compiler.debug.GraalError;
-import org.graalvm.compiler.jtt.JTTTest;
-import org.graalvm.compiler.lir.alloc.lsra.LinearScanPhase;
-import org.graalvm.compiler.lir.dfa.MarkBasePointersPhase;
-import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
-import org.graalvm.compiler.lir.phases.LIRPhase;
-import org.graalvm.compiler.lir.phases.LIRSuites;
-import org.graalvm.compiler.lir.saraverify.RegisterAllocationVerificationPhase;
-import org.graalvm.compiler.lir.saraverify.VerificationPhase;
-import org.graalvm.compiler.options.OptionValues;
 import org.junit.Rule;
 
 /*
@@ -45,32 +34,12 @@ import org.junit.rules.ExpectedException;
 
 /*
  */
-public class BC_iadd3 extends JTTTest {
+public class BC_iadd3 extends InjectorTest {
 
     @Override
-    protected LIRSuites createLIRSuites(OptionValues opts) {
-        LIRSuites lirSuites = super.createLIRSuites(opts);
-        RegisterAllocationVerificationPhase registerAllocationVerification = new RegisterAllocationVerificationPhase();
-        VerificationPhase verification = new VerificationPhase();
+    public Injector getInjectorPhase() {
         Injector injector = new Injector();
-
-        ListIterator<LIRPhase<AllocationContext>> phase = lirSuites.getAllocationStage().findPhase(MarkBasePointersPhase.class);
-        assert phase != null;
-        phase.add(registerAllocationVerification);
-
-        phase = lirSuites.getAllocationStage().findPhase(LinearScanPhase.class);
-        assert phase != null;
-        phase.add(verification);
-
-        phase = lirSuites.getAllocationStage().findPhase(LinearScanPhase.class);
-        assert phase != null;
-        phase.add(injector.new InjectorCopy());
-
-        phase = lirSuites.getAllocationStage().findPhase(LinearScanPhase.class);
-        assert phase != null;
-        phase.add(injector.new InjectorLabel());
-
-        return lirSuites;
+        return injector.new InjectorCopy();
     }
 
     public static int test(short a, short b) {

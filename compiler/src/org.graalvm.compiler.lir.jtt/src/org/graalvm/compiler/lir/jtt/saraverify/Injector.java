@@ -19,8 +19,8 @@ import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.meta.AllocatableValue;
 
-class Injector {
-    class InjectorCopy extends AllocationPhase {
+class Injector extends AllocationPhase {
+    class InjectorCopy extends Injector {
 
         @Override
         protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
@@ -60,7 +60,7 @@ class Injector {
         }
     }
 
-    class InjectorLabel extends AllocationPhase {
+    class InjectorLabel extends Injector {
 
         @Override
         protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
@@ -79,6 +79,11 @@ class Injector {
             }
         }
 
+    }
+
+    @Override
+    protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+        return;
     }
 
 }
