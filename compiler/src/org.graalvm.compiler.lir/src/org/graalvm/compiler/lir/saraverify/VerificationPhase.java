@@ -29,8 +29,6 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             return;
         }
 
-        System.out.println("AnalysisResult is not null");
-
         ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         LIR lir = lirGenRes.getLIR();
