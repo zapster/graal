@@ -1,11 +1,15 @@
 package org.graalvm.compiler.lir.saraverify;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.TreeMap;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
@@ -29,36 +33,63 @@ public class DuSequenceAnalysis {
     private ArrayList<DuSequence> duSequences;
     private ArrayList<DuSequenceWeb> duSequenceWebs;
 
-    private Map<Value, ArrayList<ValUsage>> valUseInstructions;
-
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
+
+    HashMap<AbstractBlockBase<?>, Map<Value, ArrayList<ValUsage>>> blockValUseInstructions;
 
     public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+        HashSet<AbstractBlockBase<?>> blockQueue = new HashSet<>();
 
-        if (blocks.length != 1) {
-            // Control Flow for more than 1 Block not yet supported
+        if (!(lir.getControlFlowGraph().getLoops().isEmpty())) {
+            // control flow contains one or more loops
             return null;
         }
 
-        AbstractBlockBase<?> block = blocks[0];
+        initializeCollections();
 
-        return determineDuSequenceWebs(lir.getLIRforBlock(block));
+        // start with leaf blocks
+        for (AbstractBlockBase<?> block : blocks) {
+            if (block.getSuccessorCount() == 0) {
+                blockQueue.add(block);
+            }
+        }
+
+        ArrayList<AbstractBlockBase<?>> visitedBlocks = new ArrayList<>();
+        blockValUseInstructions = new HashMap<>();
+
+        while (!blockQueue.isEmpty()) {
+            // get any block, whose successors have already been visited, remove it from the queue and add its
+            // predecessors to the queue
+            AbstractBlockBase<?> block = blockQueue.stream().filter(b -> visitedBlocks.containsAll(Arrays.asList(b.getSuccessors()))).findFirst().get();
+            blockQueue.remove(block);
+            blockQueue.addAll(Arrays.asList(block.getPredecessors()));
+            visitedBlocks.add(block);
+
+            // get instructions of block
+            ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+
+            Map<Value, ArrayList<ValUsage>> valUseInstructions = mergeSuccessorValUseInstructions(block);
+            blockValUseInstructions.put(block, valUseInstructions);
+
+            determineDuSequenceWebs(instructions, valUseInstructions);
+        }
+
+        assert visitedBlocks.containsAll(Arrays.asList(blocks));
+
+        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount);
     }
 
     public AnalysisResult determineDuSequenceWebs(ArrayList<LIRInstruction> instructions) {
-        valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
-        duPairs = new ArrayList<>();
-        duSequences = new ArrayList<>();
-        duSequenceWebs = new ArrayList<>();
+        initializeCollections();
+        return determineDuSequenceWebs(instructions, new TreeMap<>(new SARAVerifyValueComparator()));
+    }
 
-        instructionDefOperandCount = new IdentityHashMap<>();
-        instructionUseOperandCount = new IdentityHashMap<>();
-
-        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer();
-        UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer();
+    private AnalysisResult determineDuSequenceWebs(ArrayList<LIRInstruction> instructions, Map<Value, ArrayList<ValUsage>> valUseInstructions) {
+        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions);
+        UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(valUseInstructions);
 
         List<LIRInstruction> reverseInstructions = new ArrayList<>(instructions);
         Collections.reverse(reverseInstructions);
@@ -74,6 +105,37 @@ public class DuSequenceAnalysis {
         }
 
         return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount);
+    }
+
+    private void initializeCollections() {
+        this.duPairs = new ArrayList<>();
+        this.duSequences = new ArrayList<>();
+        this.duSequenceWebs = new ArrayList<>();
+
+        instructionDefOperandCount = new IdentityHashMap<>();
+        instructionUseOperandCount = new IdentityHashMap<>();
+    }
+
+    private Map<Value, ArrayList<ValUsage>> mergeSuccessorValUseInstructions(AbstractBlockBase<?> block) {
+        AbstractBlockBase<?>[] successors = block.getSuccessors();
+
+        Map<Value, ArrayList<ValUsage>> merged = new TreeMap<>(new SARAVerifyValueComparator());
+
+        for (AbstractBlockBase<?> successor : successors) {
+            Map<Value, ArrayList<ValUsage>> successorValUseInstructions = blockValUseInstructions.get(successor);
+
+            for (Entry<Value, ArrayList<ValUsage>> entry : successorValUseInstructions.entrySet()) {
+                ArrayList<ValUsage> valUsages = merged.get(entry.getKey());
+
+                if (valUsages == null) {
+                    valUsages = new ArrayList<>();
+                    merged.put(entry.getKey(), valUsages);
+                }
+
+                valUsages.addAll(entry.getValue());
+            }
+        }
+        return merged;
     }
 
     private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,
@@ -102,6 +164,12 @@ public class DuSequenceAnalysis {
     }
 
     class DefInstructionValueConsumer implements InstructionValueConsumer {
+
+        private Map<Value, ArrayList<ValUsage>> valUseInstructions;
+
+        public DefInstructionValueConsumer(Map<Value, ArrayList<ValUsage>> valUseInstructions) {
+            this.valUseInstructions = valUseInstructions;
+        }
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
@@ -149,6 +217,12 @@ public class DuSequenceAnalysis {
     }
 
     class UseInstructionValueConsumer implements InstructionValueConsumer {
+
+        private Map<Value, ArrayList<ValUsage>> valUseInstructions;
+
+        public UseInstructionValueConsumer(Map<Value, ArrayList<ValUsage>> valUseInstructions) {
+            this.valUseInstructions = valUseInstructions;
+        }
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
