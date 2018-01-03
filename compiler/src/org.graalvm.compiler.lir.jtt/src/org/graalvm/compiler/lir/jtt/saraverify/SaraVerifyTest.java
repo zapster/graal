@@ -15,6 +15,7 @@ import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
+import org.graalvm.compiler.lir.saraverify.AnalysisResult;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
 import org.junit.Test;
 
@@ -55,8 +56,8 @@ public class SaraVerifyTest extends GraalCompilerTest {
         System.out.println("\n== After Analysis; Before Verification ==");
         // printInstructions(instructions);
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        duSequenceAnalysis.determineDuSequenceWebs(instructions);
-        System.out.println(duSequenceAnalysis.getDuPairs());
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions);
+        System.out.println(analysisResult.getDuPairs());
     }
 
     @Test
