@@ -157,6 +157,18 @@ Describes the design of self-optimizing and self-specializing interpreter, and t
 
 ## Graal Papers
 
+### 2018
+
+- David Leopoldseder, Lukas Stadler, Thomas Würthinger, Josef Eisl, Doug Simon, Hanspeter Mössenböck  
+[**Dominance-based Duplication Simulation (DBDS) &endash; Code Duplication to Enable Compiler Optimizations**](http://dx.doi.org/10.1145/3168811)  
+In Proceedings of the 2018 International Symposium on Code Generation and Optimization (CGO 2018)
+
+### 2017
+
+- Josef Eisl, Stefan Marr, Thomas Würthinger, Hanspeter Mössenböck  
+[**Trace Register Allocation Policies: Compile-time vs. Performance Trade-offs**](http://dx.doi.org/10.1145/3132190.3132209)  
+In Proceedings of the 14th International Conference on Managed Languages & Runtimes (ManLang 2017)
+
 ### 2016
 
 - Josef Eisl, Matthias Grimmer, Doug Simon, Thomas Würthinger, Hanspeter Mössenböck  
