@@ -33,25 +33,11 @@ import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.NodeUtil;
 import com.oracle.truffle.api.source.SourceSection;
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.channels.FileChannel;
-import java.nio.channels.SocketChannel;
-import java.nio.channels.WritableByteChannel;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.concurrent.Callable;
-import static org.graalvm.compiler.debug.DebugOptions.DumpPath;
-import static org.graalvm.compiler.debug.DebugOptions.PrintBinaryGraphPort;
-import static org.graalvm.compiler.debug.DebugOptions.PrintBinaryGraphs;
-import static org.graalvm.compiler.debug.DebugOptions.PrintGraphHost;
-import static org.graalvm.compiler.debug.DebugOptions.PrintXmlGraphPort;
-import org.graalvm.compiler.debug.PathUtilities;
 import org.graalvm.compiler.truffle.GraphPrintVisitor.GraphPrintAdapter;
 import org.graalvm.compiler.truffle.GraphPrintVisitor.GraphPrintHandler;
 
 public class TruffleTreeDumpHandler implements DebugDumpHandler {
 
-    private final Callable<WritableByteChannel> out;
     private final OptionValues options;
 
     /**
@@ -69,31 +55,6 @@ public class TruffleTreeDumpHandler implements DebugDumpHandler {
 
     public TruffleTreeDumpHandler(OptionValues options) {
         this.options = options;
-        if (DebugOptions.PrintGraphFile.getValue(options)) {
-            this.out = createFilePrinter(options);
-        } else {
-            this.out = createNetworkPrinter(options);
-        }
-    }
-
-    private static Path getFilePrinterPath(OptionValues options) throws IOException {
-        // Construct the path to the file.
-        // PrintGraphFileName -
-        String extension = PrintBinaryGraphs.getValue(options) ? "bgv" : "gv.xml";
-        return PathUtilities.getPath(options, DumpPath, extension);
-    }
-
-    private static Callable<WritableByteChannel> createFilePrinter(OptionValues options) {
-        return () -> {
-            Path path = getFilePrinterPath(options);
-            return FileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
-        };
-    }
-
-    private static Callable<WritableByteChannel> createNetworkPrinter(OptionValues options) {
-        String host = PrintGraphHost.getValue(options);
-        int port = PrintBinaryGraphs.getValue(options) ? PrintBinaryGraphPort.getValue(options) : PrintXmlGraphPort.getValue(options);
-        return () -> SocketChannel.open(new InetSocketAddress(host, port));
     }
 
     @Override
@@ -101,38 +62,33 @@ public class TruffleTreeDumpHandler implements DebugDumpHandler {
         if (object instanceof TruffleTreeDump && DebugOptions.PrintGraph.getValue(options) && TruffleCompilerOptions.getValue(DebugOptions.PrintTruffleTrees)) {
             String message = String.format(format, arguments);
             try {
-                dumpRootCallTarget(message, ((TruffleTreeDump) object).callTarget);
+                dumpRootCallTarget(debug, message, ((TruffleTreeDump) object).callTarget);
             } catch (IOException ex) {
-                ex.printStackTrace();
+                throw rethrowSilently(RuntimeException.class, ex);
             }
         }
     }
 
-    private void dumpRootCallTarget(final String message, RootCallTarget callTarget) throws IOException {
+    private static void dumpRootCallTarget(DebugContext debug, final String message, RootCallTarget callTarget) throws IOException {
         if (callTarget.getRootNode() != null) {
-            final GraphPrintVisitor printer;
-            try {
-                printer = new GraphPrintVisitor(out.call());
-            } catch (RuntimeException | IOException ex) {
-                throw ex;
-            } catch (Exception ex) {
-                throw new IOException(ex);
-            }
+            final GraphPrintVisitor printer = new GraphPrintVisitor(debug);
 
-            printer.beginGroup(callTarget, callTarget.toString(), callTarget.getRootNode().getName());
+            printer.beginGroup(callTarget, "Truffle." + callTarget.toString(), callTarget.getRootNode().getName());
             printer.beginGraph(message).visit(callTarget.getRootNode());
             if (callTarget instanceof OptimizedCallTarget) {
+                printer.beginGroup(callTarget, "Inlining", "Inlining");
                 TruffleInlining inlining = new TruffleInlining((OptimizedCallTarget) callTarget, new DefaultInliningPolicy());
                 if (inlining.countInlinedCalls() > 0) {
-                    dumpInlinedTrees(printer, (OptimizedCallTarget) callTarget, inlining);
+                    dumpInlinedTrees(debug, printer, (OptimizedCallTarget) callTarget, inlining);
                     dumpInlinedCallGraph(printer, (OptimizedCallTarget) callTarget, inlining);
                 }
+                printer.endGroup();
             }
             printer.endGroup();
         }
     }
 
-    private static void dumpInlinedTrees(final GraphPrintVisitor printer, final OptimizedCallTarget callTarget, TruffleInlining inlining) throws IOException {
+    private static void dumpInlinedTrees(DebugContext debug, GraphPrintVisitor printer, final OptimizedCallTarget callTarget, TruffleInlining inlining) throws IOException {
         for (DirectCallNode callNode : NodeUtil.findAllNodeInstances(callTarget.getRootNode(), DirectCallNode.class)) {
             CallTarget inlinedCallTarget = callNode.getCurrentCallTarget();
             if (inlinedCallTarget instanceof OptimizedCallTarget && callNode instanceof OptimizedDirectCallNode) {
@@ -140,7 +96,7 @@ public class TruffleTreeDumpHandler implements DebugDumpHandler {
                 if (decision != null && decision.isInline()) {
                     printer.beginGroup((RootCallTarget) inlinedCallTarget, inlinedCallTarget.toString(), null);
                     printer.beginGraph(inlinedCallTarget.toString()).visit(((RootCallTarget) inlinedCallTarget).getRootNode());
-                    dumpInlinedTrees(printer, (OptimizedCallTarget) inlinedCallTarget, decision);
+                    dumpInlinedTrees(debug, printer, (OptimizedCallTarget) inlinedCallTarget, decision);
                     printer.endGroup();
                 }
             }
@@ -184,5 +140,10 @@ public class TruffleTreeDumpHandler implements DebugDumpHandler {
     @Override
     public void close() {
         // nothing to do
+    }
+
+    @SuppressWarnings({"unused", "unchecked"})
+    private static <E extends Exception> E rethrowSilently(Class<E> type, Throwable ex) throws E {
+        throw (E) ex;
     }
 }

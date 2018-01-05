@@ -52,13 +52,13 @@ public final class SpecializationData extends TemplateMethod {
     private List<GuardExpression> guards = Collections.emptyList();
     private List<CacheExpression> caches = Collections.emptyList();
     private List<AssumptionExpression> assumptionExpressions = Collections.emptyList();
-    private List<ShortCircuitData> shortCircuits;
     private final Set<SpecializationData> replaces = new TreeSet<>();
     private final Set<String> replacesNames = new TreeSet<>();
     private final Set<SpecializationData> excludedBy = new TreeSet<>();
     private String insertBeforeName;
     private SpecializationData insertBefore;
     private boolean reachable;
+    private boolean reachesFallback;
     private int index;
     private DSLExpression limitExpression;
 
@@ -72,6 +72,14 @@ public final class SpecializationData extends TemplateMethod {
         for (SpecializationThrowsData exception : exceptions) {
             exception.setSpecialization(this);
         }
+    }
+
+    public void setReachesFallback(boolean reachesFallback) {
+        this.reachesFallback = reachesFallback;
+    }
+
+    public boolean isReachesFallback() {
+        return reachesFallback;
     }
 
     public boolean isCacheBoundByGuard(CacheExpression cacheExpression) {
@@ -107,14 +115,32 @@ public final class SpecializationData extends TemplateMethod {
     }
 
     public boolean isGuardBoundWithCache(GuardExpression guardExpression) {
-        return !getBoundCaches(guardExpression.getExpression()).isEmpty();
+        List<CacheExpression> resolvedCaches = getCaches();
+        if (resolvedCaches.isEmpty()) {
+            return false;
+        }
+        Set<VariableElement> boundVars = guardExpression.getExpression().findBoundVariableElements();
+        if (boundVars.isEmpty()) {
+            return false;
+        }
+        for (CacheExpression cache : resolvedCaches) {
+            VariableElement cacheVar = cache.getParameter().getVariableElement();
+            if (boundVars.contains(cacheVar)) {
+                // bound caches for caches are returned before
+                return true;
+            }
+        }
+        return false;
     }
 
     public Set<CacheExpression> getBoundCaches(DSLExpression guardExpression) {
+        List<CacheExpression> resolvedCaches = getCaches();
+        if (resolvedCaches.isEmpty()) {
+            return Collections.emptySet();
+        }
         Set<VariableElement> boundVars = guardExpression.findBoundVariableElements();
         Set<CacheExpression> foundCaches = new LinkedHashSet<>();
-
-        for (CacheExpression cache : getCaches()) {
+        for (CacheExpression cache : resolvedCaches) {
             VariableElement cacheVar = cache.getParameter().getVariableElement();
             if (boundVars.contains(cacheVar)) {
                 // bound caches for caches are returned before
@@ -309,14 +335,6 @@ public final class SpecializationData extends TemplateMethod {
         return guards;
     }
 
-    public void setShortCircuits(List<ShortCircuitData> shortCircuits) {
-        this.shortCircuits = shortCircuits;
-    }
-
-    public List<ShortCircuitData> getShortCircuits() {
-        return shortCircuits;
-    }
-
     public SpecializationData findNextSpecialization() {
         List<SpecializationData> specializations = node.getSpecializations();
         for (int i = 0; i < specializations.size() - 1; i++) {
@@ -332,8 +350,21 @@ public final class SpecializationData extends TemplateMethod {
         return String.format("%s [id = %s, method = %s, guards = %s, signature = %s]", getClass().getSimpleName(), getId(), getMethod(), getGuards(), getDynamicTypes());
     }
 
-    public boolean isFrameUsed() {
-        return getFrame() != null;
+    public boolean isFrameUsedByGuard() {
+        Parameter frame = getFrame();
+        if (frame != null) {
+            for (GuardExpression guard : getGuards()) {
+                if (guard.getExpression().findBoundVariableElements().contains(frame.getVariableElement())) {
+                    return true;
+                }
+            }
+            for (CacheExpression cache : getCaches()) {
+                if (cache.getExpression().findBoundVariableElements().contains(frame.getVariableElement())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public List<CacheExpression> getCaches() {
@@ -353,7 +384,11 @@ public final class SpecializationData extends TemplateMethod {
     }
 
     public boolean hasMultipleInstances() {
-        if (!getCaches().isEmpty()) {
+        return getMaximumNumberOfInstances() > 1;
+    }
+
+    public boolean isGuardBindsCache() {
+        if (!getCaches().isEmpty() && !getGuards().isEmpty()) {
             for (GuardExpression guard : getGuards()) {
                 DSLExpression guardExpression = guard.getExpression();
                 Set<VariableElement> boundVariables = guardExpression.findBoundVariableElements();
@@ -370,7 +405,7 @@ public final class SpecializationData extends TemplateMethod {
     }
 
     public boolean isConstantLimit() {
-        if (hasMultipleInstances()) {
+        if (isGuardBindsCache()) {
             DSLExpression expression = getLimitExpression();
             if (expression == null) {
                 return true;
@@ -387,7 +422,7 @@ public final class SpecializationData extends TemplateMethod {
     }
 
     public int getMaximumNumberOfInstances() {
-        if (hasMultipleInstances()) {
+        if (isGuardBindsCache()) {
             DSLExpression expression = getLimitExpression();
             if (expression == null) {
                 return 3; // default limit
@@ -414,7 +449,7 @@ public final class SpecializationData extends TemplateMethod {
             return true;
         }
 
-        if (hasMultipleInstances()) {
+        if (prev.isGuardBindsCache()) {
             // may fallthrough due to limit
             return true;
         }

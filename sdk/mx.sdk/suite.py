@@ -1,5 +1,5 @@
 suite = {
-  "mxversion" : "5.124.5",
+  "mxversion" : "5.128.4",
   "name" : "sdk",
   "sourceinprojectwhitelist" : [],
   "url" : "https://github.com/graalvm/graal",
@@ -95,6 +95,19 @@ suite = {
       "workingSets" : "Truffle,Tools",
       "checkstyle" : "org.graalvm.word",
     },
+    "org.graalvm.polyglot.tck" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "org.graalvm.polyglot",
+      ],
+      "exports" : [
+        "<package-info>",  # exports all packages containing package-info.java
+      ],
+      "checkstyle" : "org.graalvm.word",
+      "javaCompliance" : "1.8",
+      "workingSets" : "API,SDK,Test",
+    },
   },
   "licenses" : {
     "UPL" : {
@@ -117,8 +130,7 @@ suite = {
         "artifactId" : "graal-sdk"
       },
       "javadocType": "api",
-      "description" : """GraalVM is an ecosystem for compiling and running applications written in multiple languages.
-GraalVM removes the isolation between programming languages and enables interoperability in a shared runtime.""",
+      "description" : "GraalVM is an ecosystem for compiling and running applications written in multiple languages.\nGraalVM removes the isolation between programming languages and enables interoperability in a shared runtime.",
     },
     "WORD_API" : {
       "subDir" : "src",
@@ -143,6 +155,22 @@ GraalVM removes the isolation between programming languages and enables interope
         "GRAAL_SDK",
       ],
       "maven": False,
+    },
+    "POLYGLOT_TCK" : {
+      "subDir" : "src",
+      "moduleName" : "org.graalvm.polyglot_tck",
+      "dependencies" : [
+        "org.graalvm.polyglot.tck",
+      ],
+      "distDependencies" : [
+        "GRAAL_SDK",
+      ],
+      "maven" : {
+        "groupId" : "org.graalvm",
+        "artifactId" : "polyglot-tck"
+      },
+      "javadocType": "api",
+      "description" : """GraalVM TCK SPI""",
     },
   },
 }

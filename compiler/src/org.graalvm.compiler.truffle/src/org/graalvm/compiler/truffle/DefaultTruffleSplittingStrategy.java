@@ -22,14 +22,15 @@
  */
 package org.graalvm.compiler.truffle;
 
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleSplitting;
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleSplittingMaxCalleeSize;
-
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.NodeCost;
 import com.oracle.truffle.api.nodes.NodeUtil;
 import com.oracle.truffle.api.nodes.NodeUtil.NodeCountFilter;
+import com.oracle.truffle.api.nodes.RootNode;
+
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleSplitting;
+import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleSplittingMaxCalleeSize;
 
 public final class DefaultTruffleSplittingStrategy implements TruffleSplittingStrategy {
 
@@ -80,10 +81,19 @@ public final class DefaultTruffleSplittingStrategy implements TruffleSplittingSt
             return false;
         }
 
+        RootNode rootNode = call.getRootNode();
+        if (rootNode == null) {
+            return false;
+        }
         // disable recursive splitting for now
-        OptimizedCallTarget root = (OptimizedCallTarget) call.getRootNode().getCallTarget();
+        OptimizedCallTarget root = (OptimizedCallTarget) rootNode.getCallTarget();
         if (root == callTarget || root.getSourceCallTarget() == callTarget) {
             // recursive call found
+            return false;
+        }
+
+        // Disable splitting if it will cause a deep split-only recursion
+        if (isRecursiveSplit(call)) {
             return false;
         }
 
@@ -92,6 +102,36 @@ public final class DefaultTruffleSplittingStrategy implements TruffleSplittingSt
             return true;
         }
         return countPolymorphic(call) >= 1;
+    }
+
+    private static boolean isRecursiveSplit(OptimizedDirectCallNode call) {
+        final OptimizedCallTarget splitCandidateTarget = call.getCallTarget();
+
+        OptimizedCallTarget callRootTarget = (OptimizedCallTarget) call.getRootNode().getCallTarget();
+        OptimizedCallTarget callSourceTarget = callRootTarget.getSourceCallTarget();
+        int depth = 0;
+        while (callSourceTarget != null) {
+            if (callSourceTarget == splitCandidateTarget) {
+                depth++;
+                if (depth == 2) {
+                    return true;
+                }
+            }
+            final OptimizedDirectCallNode splitCallSite = callRootTarget.getCallSiteForSplit();
+            if (splitCallSite == null) {
+                break;
+            }
+            final RootNode splitCallSiteRootNode = splitCallSite.getRootNode();
+            if (splitCallSiteRootNode == null) {
+                break;
+            }
+            callRootTarget = (OptimizedCallTarget) splitCallSiteRootNode.getCallTarget();
+            if (callRootTarget == null) {
+                break;
+            }
+            callSourceTarget = callRootTarget.getSourceCallTarget();
+        }
+        return false;
     }
 
     private static boolean isMaxSingleCall(OptimizedDirectCallNode call) {

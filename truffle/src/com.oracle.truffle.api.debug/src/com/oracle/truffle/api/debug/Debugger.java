@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage;
@@ -46,7 +47,6 @@ import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.vm.PolyglotEngine;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Represents debugging related state of a {@link PolyglotEngine}.
@@ -85,7 +85,7 @@ public final class Debugger {
 
     private final Env env;
     final List<Object> propSupport = new CopyOnWriteArrayList<>();
-    private final ObjectStructures.MessageNodes msgNodes;
+    final ObjectStructures.MessageNodes msgNodes;
     private final Set<DebuggerSession> sessions = new HashSet<>();
     private final List<Breakpoint> breakpoints = new ArrayList<>();
     final Breakpoint alwaysHaltBreakpoint;

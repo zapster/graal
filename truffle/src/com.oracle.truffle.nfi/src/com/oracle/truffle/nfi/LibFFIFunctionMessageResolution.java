@@ -35,10 +35,15 @@ import com.oracle.truffle.api.interop.KeyInfo;
 import com.oracle.truffle.api.interop.MessageResolution;
 import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.java.JavaInterop;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.nfi.BindableNativeObject.BindSignatureNode;
+import com.oracle.truffle.nfi.BindableNativeObjectFactory.ReBindSignatureNodeGen;
 import com.oracle.truffle.nfi.LibFFIFunctionMessageResolutionFactory.CachedExecuteNodeGen;
+import com.oracle.truffle.nfi.TypeConversion.AsStringNode;
+import com.oracle.truffle.nfi.TypeConversionFactory.AsStringNodeGen;
 
 @MessageResolution(receiverType = LibFFIFunction.class)
 class LibFFIFunctionMessageResolution {
@@ -194,10 +199,18 @@ class LibFFIFunctionMessageResolution {
 
     @Resolve(message = "INVOKE")
     abstract static class ReBindNode extends Node {
-        @Child private NativePointerMessageResolution.BindNode bind = NativePointerMessageResolutionForeignFactory.BindSubNodeGen.create();
+
+        @Child private BindSignatureNode bind = ReBindSignatureNodeGen.create();
 
         public TruffleObject access(LibFFIFunction receiver, String identifier, Object[] args) {
-            return bind.access(receiver.getPointer(), identifier, args);
+            if (!"bind".equals(identifier)) {
+                throw UnknownIdentifierException.raise(identifier);
+            }
+            if (args.length != 1) {
+                throw ArityException.raise(1, args.length);
+            }
+
+            return bind.execute(receiver, args[0]);
         }
     }
 
@@ -216,9 +229,11 @@ class LibFFIFunctionMessageResolution {
         private static final int INVOCABLE = KeyInfo.newBuilder().setInvocable(true).build();
         private static final int NOT_EXISTING = 0;
 
+        @Child AsStringNode asString = AsStringNodeGen.create(true);
+
         @SuppressWarnings("unused")
-        public int access(LibFFIFunction receiver, String identifier) {
-            if ("bind".equals(identifier)) {
+        public int access(LibFFIFunction receiver, Object identifier) {
+            if ("bind".equals(asString.execute(identifier))) {
                 return INVOCABLE;
             } else {
                 return NOT_EXISTING;

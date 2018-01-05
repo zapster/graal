@@ -30,6 +30,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
 import org.junit.Test;
 
 import com.oracle.truffle.api.test.polyglot.ContextAPITestLanguage.LanguageContext;
@@ -94,6 +95,46 @@ public class ContextAPITest {
         assertSame(object, context.importSymbol("object").asHostObject());
         assertNull(context.importSymbol("notexisting"));
         context.close();
+    }
+
+    @Test
+    public void testInstrumentOption() {
+        // Instrument options can be set to context builders with implicit engine:
+        Context.Builder contextBuilder = Context.newBuilder();
+        contextBuilder.option("optiontestinstr1.StringOption1", "Hello");
+        contextBuilder.build();
+
+    }
+
+    @Test
+    public void testInstrumentOptionAsContext() {
+        // Instrument options are refused by context builders with an existing engine:
+        Context.Builder contextBuilder = Context.newBuilder();
+        contextBuilder.engine(Engine.create());
+        contextBuilder.option("optiontestinstr1.StringOption1", "Hello");
+        try {
+            contextBuilder.build();
+            fail();
+        } catch (IllegalArgumentException ex) {
+            // O.K.
+            assertEquals("Option optiontestinstr1.StringOption1 is an engine option. Engine level options can only be configured for contexts without a shared engine set. " +
+                            "To resolve this, configure the option when creating the Engine or create a context without a shared engine.", ex.getMessage());
+        }
+    }
+
+    @Test
+    public void testInvalidEngineOptionAsContext() {
+        // Instrument options are refused by context builders with an existing engine:
+        Context.Builder contextBuilder = Context.newBuilder();
+        contextBuilder.engine(Engine.create());
+        contextBuilder.option("optiontestinstr1.StringOption1+Typo", "100");
+        try {
+            contextBuilder.build();
+            fail();
+        } catch (IllegalArgumentException ex) {
+            // O.K.
+            assertTrue(ex.getMessage().startsWith("Could not find option with name optiontestinstr1.StringOption1+Typo."));
+        }
     }
 
 }

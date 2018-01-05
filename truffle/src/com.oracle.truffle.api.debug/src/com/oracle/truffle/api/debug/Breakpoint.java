@@ -38,7 +38,6 @@ import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.debug.DebuggerSession.SteppingLocation;
-import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.instrumentation.EventBinding;
@@ -52,6 +51,7 @@ import com.oracle.truffle.api.instrumentation.SourceSectionFilter.IndexRange;
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter.SourcePredicate;
 import com.oracle.truffle.api.instrumentation.StandardTags.StatementTag;
 import com.oracle.truffle.api.nodes.DirectCallNode;
+import com.oracle.truffle.api.nodes.ExecutableNode;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
@@ -126,6 +126,7 @@ public class Breakpoint {
     /* We use long instead of int in the implementation to avoid not hitting again on overflows. */
     private final AtomicLong hitCount = new AtomicLong();
     private volatile Assumption conditionUnchanged;
+    private volatile Assumption conditionExistsUnchanged;
 
     private EventBinding<? extends ExecutionEventNodeFactory> breakpointBinding;
     private EventBinding<?> sourceBinding;
@@ -230,11 +231,19 @@ public class Breakpoint {
      * @since 0.9
      */
     public synchronized void setCondition(String expression) {
+        boolean existsChanged = (this.condition == null) != (expression == null);
         this.condition = expression;
         Assumption assumption = conditionUnchanged;
         if (assumption != null) {
             this.conditionUnchanged = null;
             assumption.invalidate();
+        }
+        if (existsChanged) {
+            assumption = conditionExistsUnchanged;
+            if (assumption != null) {
+                this.conditionExistsUnchanged = null;
+                assumption.invalidate();
+            }
         }
     }
 
@@ -374,6 +383,13 @@ public class Breakpoint {
         return conditionUnchanged;
     }
 
+    private synchronized Assumption getConditionExistsUnchanged() {
+        if (conditionExistsUnchanged == null) {
+            conditionExistsUnchanged = Truffle.getRuntime().createAssumption("Breakpoint condition existence unchanged.");
+        }
+        return conditionExistsUnchanged;
+    }
+
     synchronized void installGlobal(Debugger d) {
         if (disposed) {
             throw new IllegalArgumentException("Cannot install breakpoint, it is disposed already.");
@@ -478,13 +494,14 @@ public class Breakpoint {
      *
      * @throws BreakpointConditionFailure
      */
-    boolean notifyIndirectHit(DebuggerNode source, DebuggerNode node, Frame frame) throws BreakpointConditionFailure {
+    boolean notifyIndirectHit(DebuggerNode source, DebuggerNode node, MaterializedFrame frame) throws BreakpointConditionFailure {
         if (!isEnabled()) {
             return false;
         }
         assert node.getBreakpoint() == this;
 
         if (source != node) {
+            // TODO: We're testing the breakpoint condition for a second time (GR-7398).
             if (!((BreakpointNode) node).shouldBreak(frame)) {
                 return false;
             }
@@ -714,6 +731,7 @@ public class Breakpoint {
         private final BranchProfile breakBranch = BranchProfile.create();
 
         @Child private ConditionalBreakNode breakCondition;
+        @CompilationFinal private Assumption conditionExistsUnchanged;
         @CompilationFinal(dimensions = 1) private DebuggerSession[] sessions;
         @CompilationFinal private Assumption sessionsUnchanged;
 
@@ -721,6 +739,7 @@ public class Breakpoint {
             super(context);
             this.breakpoint = breakpoint;
             initializeSessions();
+            this.conditionExistsUnchanged = breakpoint.getConditionExistsUnchanged();
             if (breakpoint.condition != null) {
                 this.breakCondition = new ConditionalBreakNode(context, breakpoint);
             }
@@ -772,6 +791,16 @@ public class Breakpoint {
             if (!active) {
                 return;
             }
+            if (!conditionExistsUnchanged.isValid()) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                if (breakpoint.condition != null) {
+                    this.breakCondition = insert(new ConditionalBreakNode(context, breakpoint));
+                    notifyInserted(this.breakCondition);
+                } else {
+                    this.breakCondition = null;
+                }
+                conditionExistsUnchanged = breakpoint.getConditionExistsUnchanged();
+            }
             BreakpointConditionFailure conditionError = null;
             try {
                 if (!shouldBreak(frame)) {
@@ -784,20 +813,26 @@ public class Breakpoint {
             breakpoint.doBreak(this, sessions, frame.materialize(), conditionError);
         }
 
-        boolean shouldBreak(@SuppressWarnings("unused") Frame frame) throws BreakpointConditionFailure {
-            // TODO we should use the current frame to evaluate the break condition
-            // currently the called break condition needs to access the parent frame
-            // using stack access methods.
+        boolean shouldBreak(VirtualFrame frame) throws BreakpointConditionFailure {
             if (breakCondition != null) {
                 try {
-                    return breakCondition.shouldBreak();
+                    setThreadSuspendEnabled(false);
+                    return breakCondition.shouldBreak(frame);
                 } catch (Throwable e) {
                     CompilerDirectives.transferToInterpreter();
                     throw new BreakpointConditionFailure(breakpoint, e);
-                    // fallthrough to true
+                } finally {
+                    setThreadSuspendEnabled(true);
                 }
             }
             return true;
+        }
+
+        @ExplodeLoop
+        private void setThreadSuspendEnabled(boolean enabled) {
+            for (DebuggerSession session : sessions) {
+                session.setThreadSuspendEnabled(enabled);
+            }
         }
 
     }
@@ -830,6 +865,7 @@ public class Breakpoint {
         private final EventContext context;
         private final Breakpoint breakpoint;
         @Child private DirectCallNode conditionCallNode;
+        @Child private ExecutableNode conditionSnippet;
         @CompilationFinal private Assumption conditionUnchanged;
 
         ConditionalBreakNode(EventContext context, Breakpoint breakpoint) {
@@ -838,12 +874,17 @@ public class Breakpoint {
             this.conditionUnchanged = breakpoint.getConditionUnchanged();
         }
 
-        boolean shouldBreak() {
-            if (conditionCallNode == null || !conditionUnchanged.isValid()) {
+        boolean shouldBreak(VirtualFrame frame) {
+            if ((conditionSnippet == null && conditionCallNode == null) || !conditionUnchanged.isValid()) {
                 CompilerDirectives.transferToInterpreterAndInvalidate();
-                initializeConditional();
+                initializeConditional(frame.materialize());
             }
-            Object result = conditionCallNode.call(EMPTY_ARRAY);
+            Object result;
+            if (conditionSnippet != null) {
+                result = conditionSnippet.execute(frame);
+            } else {
+                result = conditionCallNode.call(EMPTY_ARRAY);
+            }
             if (!(result instanceof Boolean)) {
                 CompilerDirectives.transferToInterpreter();
                 throw new IllegalArgumentException("Unsupported return type " + result + " in condition.");
@@ -851,16 +892,17 @@ public class Breakpoint {
             return (Boolean) result;
         }
 
-        private void initializeConditional() {
+        private void initializeConditional(MaterializedFrame frame) {
             Node instrumentedNode = context.getInstrumentedNode();
             final RootNode rootNode = instrumentedNode.getRootNode();
             if (rootNode == null) {
                 throw new IllegalStateException("Probe was disconnected from the AST.");
             }
 
+            Source instrumentedSource = context.getInstrumentedSourceSection().getSource();
             Source conditionSource;
             synchronized (breakpoint) {
-                conditionSource = Source.newBuilder(breakpoint.condition).mimeType(context.getInstrumentedSourceSection().getSource().getMimeType()).name(
+                conditionSource = Source.newBuilder(breakpoint.condition).language(instrumentedSource.getLanguage()).mimeType(instrumentedSource.getMimeType()).name(
                                 "breakpoint condition").build();
                 if (conditionSource == null) {
                     throw new IllegalStateException("Condition is not resolved " + rootNode);
@@ -868,8 +910,14 @@ public class Breakpoint {
                 conditionUnchanged = breakpoint.getConditionUnchanged();
             }
 
-            final CallTarget callTarget = Debugger.ACCESSOR.parse(conditionSource, instrumentedNode, new String[0]);
-            conditionCallNode = insert(Truffle.getRuntime().createDirectCallNode(callTarget));
+            ExecutableNode snippet = breakpoint.debugger.getEnv().parseInline(conditionSource, instrumentedNode, frame);
+            if (snippet != null) {
+                conditionSnippet = insert(snippet);
+                notifyInserted(snippet);
+            } else {
+                CallTarget callTarget = Debugger.ACCESSOR.parse(conditionSource, instrumentedNode, new String[0]);
+                conditionCallNode = insert(Truffle.getRuntime().createDirectCallNode(callTarget));
+            }
         }
     }
 
@@ -955,6 +1003,7 @@ public class Breakpoint {
             return delegate.isResolved();
         }
     }
+
 }
 
 class BreakpointSnippets {

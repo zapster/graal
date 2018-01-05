@@ -103,7 +103,7 @@ public class IntrospectionTest {
 
         abstract Object execute(Object o);
 
-        @Specialization(guards = "cachedO == o")
+        @Specialization(guards = "cachedO == o", limit = "3")
         protected static int doInt(int o, @SuppressWarnings("unused") @Cached("o") int cachedO) {
             return o;
         }
@@ -282,26 +282,6 @@ public class IntrospectionTest {
             }
         }
 
-    }
-
-    @SuppressWarnings("deprecation")
-    @com.oracle.truffle.api.dsl.internal.DSLOptions(defaultGenerator = com.oracle.truffle.api.dsl.internal.DSLOptions.DSLGenerator.DEFAULT)
-    @TypeSystem
-    public static class SomeReflectionTS {
-
-    }
-
-    @ExpectError("Reflection is not supported by the used DSL layout. Only the flat DSL layout supports reflection.")
-    @Introspectable
-    @TypeSystemReference(SomeReflectionTS.class)
-    public abstract static class SomeReflection1Node extends Node {
-
-        abstract Object execute(Object o);
-
-        @Specialization
-        protected static int doInt(int o) {
-            return o;
-        }
     }
 
 }

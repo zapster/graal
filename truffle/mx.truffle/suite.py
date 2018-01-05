@@ -1,5 +1,5 @@
 suite = {
-  "mxversion" : "5.123.0",
+  "mxversion" : "5.128.5",
   "name" : "truffle",
   "sourceinprojectwhitelist" : [],
   "url" : "http://openjdk.java.net/projects/graal",
@@ -10,9 +10,9 @@ suite = {
     "organizationUrl" : "http://openjdk.java.net/projects/graal",
   },
   "scm" : {
-    "url" : "https://github.com/graalvm/truffle",
-    "read" : "https://github.com/graalvm/truffle.git",
-    "write" : "git@github.com:graalvm/truffle.git",
+    "url" : "https://github.com/graalvm/graal/tree/master/truffle",
+    "read" : "https://github.com/graalvm/graal.git",
+    "write" : "git@github.com:graalvm/graal.git",
   },
   "repositories" : {
     "lafo-snapshots" : {
@@ -87,7 +87,7 @@ suite = {
       ],
       "exports" : [
         "<package-info>", # exports all packages containing package-info.java
-        "com.oracle.truffle.api.impl", # exported to graal-core
+        "com.oracle.truffle.api.impl", # exported to the Graal compiler
       ],
       "javaCompliance" : "1.8",
       "workingSets" : "API,Truffle",
@@ -149,6 +149,7 @@ suite = {
       "sourceDirs" : ["src"],
       "dependencies" : [
         "TRUFFLE_API",
+        "TRUFFLE_INSTRUMENT_TEST",
         "mx:JMH_1_18",
       ],
       "imports" : ["jdk.internal.loader"],
@@ -188,6 +189,22 @@ suite = {
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "API,Truffle,Codegen,Test",
       "jacoco" : "exclude",
+    },
+
+    "com.oracle.truffle.sl.tck" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "mx:JUNIT",
+        "sdk:POLYGLOT_TCK"
+      ],
+      "exports" : [
+        "com.oracle.truffle.sl.tck",
+      ],
+      "checkstyle" : "com.oracle.truffle.sl",
+      "javaCompliance" : "1.8",
+      "workingSets" : "SimpleLanguage,Test",
+      "license" : "UPL",
     },
 
     "com.oracle.truffle.dsl.processor" : {
@@ -274,7 +291,7 @@ suite = {
     "com.oracle.truffle.api.debug" : {
       "subDir" : "src",
       "sourceDirs" : ["src"],
-      "dependencies" : ["com.oracle.truffle.api.vm", "com.oracle.truffle.api.metadata"],
+      "dependencies" : ["com.oracle.truffle.api.vm"],
       "runtimeDeps" : [
         "java.desktop"
       ],
@@ -468,6 +485,10 @@ suite = {
       "dependencies" : [
         "TRUFFLE_API",
         "mx:JUNIT",
+        "sdk:POLYGLOT_TCK"
+      ],
+      "uses":[
+        "org.graalvm.polyglot.tck.LanguageProvider"
       ],
       "generatedDependencies" : [
         "com.oracle.truffle.tutorial",
@@ -497,19 +518,6 @@ suite = {
           "com.oracle.truffle.api.instrumentation.test",
           "mx:JUNIT"
           ],
-      "checkstyle" : "com.oracle.truffle.api",
-      "javaCompliance" : "1.8",
-      "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
-      "workingSets" : "Truffle,Tools",
-    },
-
-    "com.oracle.truffle.tools.debug.shell" : {
-      "subDir" : "src",
-      "sourceDirs" : ["src"],
-      "dependencies" : [
-        "com.oracle.truffle.api.vm",
-        "JLINE"
-      ],
       "checkstyle" : "com.oracle.truffle.api",
       "javaCompliance" : "1.8",
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
@@ -605,6 +613,17 @@ suite = {
       "license" : "UPL",
     },
 
+    "com.oracle.truffle.sl.launcher" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "sdk:GRAAL_SDK",
+      ],
+      "javaCompliance" : "1.8",
+      "workingSets" : "Truffle,SimpleLanguage",
+      "license" : "UPL",
+    },
+
     "com.oracle.truffle.sl.test" : {
       "subDir" : "src",
       "sourceDirs" : ["src"],
@@ -664,8 +683,7 @@ suite = {
       "distDependencies" : [
         "sdk:GRAAL_SDK"
       ],
-      "description" : """Truffle is a multi-language framework for executing dynamic languages
-        that achieves high performance when combined with Graal.""",
+      "description" : "Truffle is a multi-language framework for executing dynamic languages\nthat achieves high performance when combined with Graal.",
       "javadocType": "api",
     },
 
@@ -691,7 +709,7 @@ suite = {
       "native" : True,
       "relpath" : True,
       "platformDependent" : True,
-      "output" : "mxbuild/truffle-nfi-native",
+      "output" : "<mxbuild>/truffle-nfi-native",
       "dependencies" : [
         "com.oracle.truffle.nfi.native",
       ],
@@ -704,10 +722,12 @@ suite = {
       "dependencies" : [
         "com.oracle.truffle.tck"
       ],
-      "distDependencies" : ["TRUFFLE_API"],
+      "distDependencies" : [
+        "TRUFFLE_API",
+        "sdk:POLYGLOT_TCK",
+      ],
       "exclude" : ["mx:JUNIT"],
-      "description" : """A collection of tests that can certify language implementation to be compliant
-        with most recent requirements of the Truffle infrastructure and tooling.""",
+      "description" : "A collection of tests that can certify language implementation to be compliant\nwith most recent requirements of the Truffle infrastructure and tooling.",
       "allowsJavadocWarnings": True,
     },
 
@@ -757,6 +777,20 @@ suite = {
       "allowsJavadocWarnings": True,
     },
 
+    "TRUFFLE_SL_LAUNCHER" : {
+      "subDir" : "src",
+      "javaCompliance" : "1.8",
+      "dependencies" : [
+        "com.oracle.truffle.sl.launcher",
+      ],
+      "distDependencies" : [
+          "sdk:GRAAL_SDK",
+      ],
+      "license" : "UPL",
+      "description" : "Truffle SL launchers using the polyglot API.",
+      "allowsJavadocWarnings": True,
+    },
+
     "TRUFFLE_SL_TEST" : {
       "subDir" : "src",
       "javaCompliance" : "1.8",
@@ -777,18 +811,33 @@ suite = {
       "maven" : False
     },
 
+    "TRUFFLE_SL_TCK" : {
+      "subDir" : "src",
+      "javaCompliance" : "1.8",
+      "dependencies" : [
+        "com.oracle.truffle.sl.tck"
+      ],
+      "exclude" : [
+        "mx:JUNIT",
+      ],
+      "distDependencies" : [
+        "sdk:POLYGLOT_TCK"
+      ],
+      "license" : "UPL",
+      "maven" : False
+    },
+
      "TRUFFLE_DEBUG" : {
       "subDir" : "src",
       "javaCompliance" : "1.8",
       "dependencies" : [
-        "com.oracle.truffle.tools.debug.shell",
         "com.oracle.truffle.tools"
       ],
       "exclude" : ["JLINE"],
       "distDependencies" : [
           "TRUFFLE_API",
       ],
-      "description" : "Experimental REPL server to build your debugger console for your language.",
+      "description" : "Truffle Tools APIs.",
       "allowsJavadocWarnings": True,
      },
 
@@ -840,11 +889,12 @@ suite = {
      "TRUFFLE_TEST_NATIVE" : {
        "native" : True,
        "platformDependent" : True,
-       "output" : "mxbuild/truffle-test-native",
+       "output" : "<mxbuild>/truffle-test-native",
        "dependencies" : [
          "com.oracle.truffle.nfi.test.native",
        ],
       "maven" : False,
      },
+
   },
 }

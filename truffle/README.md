@@ -4,7 +4,7 @@
 ## Introduction
 
 Truffle is a framework for implementing languages as simple interpreters.
-Together with the [Graal compiler](https://github.com/graalvm/graal-core/),
+Together with the [Graal compiler](https://github.com/graalvm/graal/tree/master/compiler),
 Truffle interpreters are automatically just-in-time compiled and programs
 running on top of them can reach performance of normal Java.
 
@@ -124,5 +124,5 @@ Detailed info can be found in the [contributing document](CONTRIBUTING.md).
 
 ## License
 
-The Truffle framework is licensed under the [GPL 2 with Classpath exception](https://github.com/graalvm/truffle/blob/master/LICENSE.GPL.md).
+The Truffle framework is licensed under the [GPL 2 with Classpath exception](LICENSE.GPL.md).
 The SimpleLanguage is licensed under the [Universal Permissive License (UPL)](http://opensource.org/licenses/UPL).

@@ -44,8 +44,12 @@ import com.oracle.truffle.api.InstrumentInfo;
 import com.oracle.truffle.api.Option;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleRuntime;
+import com.oracle.truffle.api.Scope;
+import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.instrumentation.InstrumentationHandler.AccessorInstrumentHandler;
 import com.oracle.truffle.api.instrumentation.InstrumentationHandler.InstrumentClientInstrumenter;
+import com.oracle.truffle.api.nodes.ExecutableNode;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
@@ -359,6 +363,30 @@ public abstract class TruffleInstrument {
         }
 
         /**
+         * Parses source snippet of the node's language at the provided node location. The result is
+         * an AST fragment represented by {@link ExecutableNode} that accepts frames valid at the
+         * provided node location, or <code>null</code> when inline parsing is not supported by the
+         * language.
+         *
+         * @param source a source snippet to parse at the provided node location
+         * @param node a context location where the source is parsed at, must not be
+         *            <code>null</code>
+         * @param frame a frame location where the source is parsed at, can be <code>null</code>
+         * @return the executable fragment representing the parsed result, or <code>null</code>
+         * @since 0.31
+         */
+        public ExecutableNode parseInline(Source source, Node node, MaterializedFrame frame) {
+            if (node == null) {
+                throw new IllegalArgumentException("Node must not be null.");
+            }
+            TruffleLanguage.Env env = AccessorInstrumentHandler.engineAccess().getEnvForInstrument(vmObject, source.getLanguage(), source.getMimeType());
+            // Assert that the languages match:
+            assert AccessorInstrumentHandler.langAccess().getLanguageInfo(env) == node.getRootNode().getLanguageInfo();
+            ExecutableNode fragment = AccessorInstrumentHandler.langAccess().parseInline(env, source, node, frame);
+            return fragment;
+        }
+
+        /**
          * Returns <code>true</code> if the given root node is considered an engine evaluation root
          * for the current execution context. Multiple such root nodes can appear on stack frames
          * returned by
@@ -515,6 +543,77 @@ public abstract class TruffleInstrument {
                 throw new IllegalArgumentException("No language available for given node.");
             }
             return AccessorInstrumentHandler.engineAccess().getEnvForInstrument(languageInfo);
+        }
+
+        /**
+         * Returns the polyglot scope - symbols explicitly exported by languages.
+         *
+         * @return a read-only map of symbol names and their values
+         * @since 0.30
+         */
+        public Map<String, ? extends Object> getExportedSymbols() {
+            return AccessorInstrumentHandler.engineAccess().getExportedSymbols(vmObject);
+        }
+
+        /**
+         * Find a list of local scopes enclosing the given {@link Node node}. The scopes contain
+         * variables that are valid at the provided node and that have a relation to it. Unless the
+         * node is in a global scope, it is expected that there is at least one scope provided, that
+         * corresponds to the enclosing function. Global top scopes are provided by
+         * {@link #findTopScopes(java.lang.String)}. The iteration order corresponds with the scope
+         * nesting, from the inner-most to the outer-most.
+         * <p>
+         * Scopes may depend on the information provided by the frame. <br/>
+         * Lexical scopes are returned when <code>frame</code> argument is <code>null</code>.
+         *
+         * @param node a node to get the enclosing scopes for. The node needs to be inside a
+         *            {@link RootNode} associated with a language.
+         * @param frame The current frame the node is in, or <code>null</code> for lexical access
+         *            when the program is not running, or is not suspended at the node's location.
+         * @return an {@link Iterable} providing list of scopes from the inner-most to the
+         *         outer-most.
+         * @see TruffleLanguage#findLocalScopes(java.lang.Object, com.oracle.truffle.api.nodes.Node,
+         *      com.oracle.truffle.api.frame.Frame)
+         * @since 0.30
+         */
+        public Iterable<Scope> findLocalScopes(Node node, Frame frame) {
+            RootNode rootNode = node.getRootNode();
+            if (rootNode == null) {
+                throw new IllegalArgumentException("The node " + node + " does not have a RootNode.");
+            }
+            LanguageInfo languageInfo = rootNode.getLanguageInfo();
+            if (languageInfo == null) {
+                throw new IllegalArgumentException("The root node " + rootNode + " does not have a language associated.");
+            }
+            final TruffleLanguage.Env env = AccessorInstrumentHandler.engineAccess().getEnvForInstrument(languageInfo);
+            Iterable<Scope> langScopes = AccessorInstrumentHandler.langAccess().findLocalScopes(env, node, frame);
+            assert langScopes != null : languageInfo.getId();
+            return langScopes;
+        }
+
+        /**
+         * Find a list of top scopes of a language. The iteration order corresponds with the scope
+         * nesting, from the inner-most to the outer-most.
+         *
+         * @param languageId a language id.
+         * @return a list of top scopes, can be empty when no top scopes are provided by the
+         *         language
+         * @see TruffleLanguage#findTopScopes(java.lang.Object)
+         * @since 0.30
+         */
+        public Iterable<Scope> findTopScopes(String languageId) {
+            LanguageInfo languageInfo = getLanguages().get(languageId);
+            if (languageInfo == null) {
+                throw new IllegalArgumentException("Unknown language: " + languageId + ". Known languages are: " + getLanguages().keySet());
+            }
+            final TruffleLanguage.Env env = AccessorInstrumentHandler.engineAccess().getEnvForInstrument(languageInfo);
+            return findTopScopes(env);
+        }
+
+        static Iterable<Scope> findTopScopes(TruffleLanguage.Env env) {
+            Iterable<Scope> langScopes = AccessorInstrumentHandler.langAccess().findTopScopes(env);
+            assert langScopes != null : AccessorInstrumentHandler.langAccess().getLanguageInfo(env).getId();
+            return langScopes;
         }
 
     }

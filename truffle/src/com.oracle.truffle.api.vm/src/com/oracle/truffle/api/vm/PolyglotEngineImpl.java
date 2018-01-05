@@ -34,6 +34,7 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -59,11 +60,13 @@ import com.oracle.truffle.api.InstrumentInfo;
 import com.oracle.truffle.api.TruffleException;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.impl.DispatchOutputStream;
+import com.oracle.truffle.api.instrumentation.ContextsListener;
 import com.oracle.truffle.api.instrumentation.EventBinding;
 import com.oracle.truffle.api.instrumentation.EventContext;
 import com.oracle.truffle.api.instrumentation.ExecutionEventListener;
 import com.oracle.truffle.api.instrumentation.Instrumenter;
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
+import com.oracle.truffle.api.instrumentation.ThreadsListener;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.vm.PolyglotImpl.VMObject;
@@ -230,14 +233,9 @@ class PolyglotEngineImpl extends org.graalvm.polyglot.impl.AbstractPolyglotImpl.
             }
         }
 
+        // When changing this logic, make sure it is in synch with #findEngineOption()
         for (String key : options.keySet()) {
-            int groupIndex = key.indexOf('.');
-            String group;
-            if (groupIndex != -1) {
-                group = key.substring(0, groupIndex);
-            } else {
-                group = key;
-            }
+            String group = parseOptionGroup(key);
             String value = options.get(key);
             PolyglotLanguage language = idToLanguage.get(group);
             if (language != null && !language.cache.isInternal()) {
@@ -273,6 +271,28 @@ class PolyglotEngineImpl extends org.graalvm.polyglot.impl.AbstractPolyglotImpl.
         }
     }
 
+    /**
+     * Find if there is an "engine option" (covers engine, compiler and instruments options) present
+     * among the given options.
+     */
+    // The implementation must be in synch with #parseOptions()
+    boolean isEngineGroup(String group) {
+        return idToPublicInstrument.containsKey(group) ||
+                        group.equals(PolyglotImpl.OPTION_GROUP_ENGINE) ||
+                        group.equals(PolyglotImpl.OPTION_GROUP_COMPILER);
+    }
+
+    static String parseOptionGroup(String key) {
+        int groupIndex = key.indexOf('.');
+        String group;
+        if (groupIndex != -1) {
+            group = key.substring(0, groupIndex);
+        } else {
+            group = key;
+        }
+        return group;
+    }
+
     @Override
     public PolyglotEngineImpl getEngine() {
         return this;
@@ -299,33 +319,88 @@ class PolyglotEngineImpl extends org.graalvm.polyglot.impl.AbstractPolyglotImpl.
     }
 
     private Map<String, PolyglotLanguage> initializeLanguages(Map<String, LanguageInfo> infos) {
-        Map<String, PolyglotLanguage> langs = new LinkedHashMap<>();
-        Map<String, LanguageCache> cachedLanguages = LanguageCache.languages();
-        Set<LanguageCache> uniqueLanguages = new LinkedHashSet<>();
-        uniqueLanguages.addAll(cachedLanguages.values());
-        this.hostLanguage = createLanguage(createHostLanguageCache(), HOST_LANGUAGE_INDEX);
+        Map<String, PolyglotLanguage> polyglotLanguages = new LinkedHashMap<>();
+        Map<String, LanguageCache> cachedLanguages = new HashMap<>();
+        List<LanguageCache> sortedLanguages = new ArrayList<>();
+        for (LanguageCache lang : LanguageCache.languages().values()) {
+            String id = lang.getId();
+            if (!cachedLanguages.containsKey(id)) {
+                sortedLanguages.add(lang);
+                cachedLanguages.put(id, lang);
+            }
+        }
+        Collections.sort(sortedLanguages);
+
+        LinkedHashSet<LanguageCache> serializedLanguages = new LinkedHashSet<>();
+        Set<String> languageReferences = new HashSet<>();
+        Map<String, RuntimeException> initErrors = new HashMap<>();
+
+        for (LanguageCache language : sortedLanguages) {
+            languageReferences.addAll(language.getDependentLanguages());
+        }
+
+        // visit / initialize internal languages first to model the implicit
+        // dependency of every public language to every internal language
+        for (LanguageCache language : sortedLanguages) {
+            if (language.isInternal() && !languageReferences.contains(language.getId())) {
+                visitLanguage(initErrors, cachedLanguages, serializedLanguages, language);
+            }
+        }
+
+        for (LanguageCache language : sortedLanguages) {
+            if (!language.isInternal() && !languageReferences.contains(language.getId())) {
+                visitLanguage(initErrors, cachedLanguages, serializedLanguages, language);
+            }
+        }
+
+        this.hostLanguage = createLanguage(createHostLanguageCache(), HOST_LANGUAGE_INDEX, null);
 
         int index = 1;
-        for (LanguageCache cache : uniqueLanguages) {
-            PolyglotLanguage languageImpl = createLanguage(cache, index);
+        for (LanguageCache cache : serializedLanguages) {
+            PolyglotLanguage languageImpl = createLanguage(cache, index, initErrors.get(cache.getId()));
 
             String id = languageImpl.cache.getId();
             verifyId(id, cache.getClassName());
-            if (langs.containsKey(id)) {
-                throw failDuplicateId(id, languageImpl.cache.getClassName(), langs.get(id).cache.getClassName());
+            if (polyglotLanguages.containsKey(id)) {
+                throw failDuplicateId(id, languageImpl.cache.getClassName(), polyglotLanguages.get(id).cache.getClassName());
             }
-            langs.put(id, languageImpl);
+            polyglotLanguages.put(id, languageImpl);
             infos.put(id, languageImpl.info);
             index++;
         }
 
         this.hostLanguage.ensureInitialized();
 
-        return langs;
+        return polyglotLanguages;
     }
 
-    private PolyglotLanguage createLanguage(LanguageCache cache, int index) {
-        PolyglotLanguage languageImpl = new PolyglotLanguage(this, cache, index, index == HOST_LANGUAGE_INDEX);
+    private void visitLanguage(Map<String, RuntimeException> initErrors, Map<String, LanguageCache> cachedLanguages, LinkedHashSet<LanguageCache> serializedLanguages,
+                    LanguageCache language) {
+        visitLanguageImpl(new HashSet<>(), initErrors, cachedLanguages, serializedLanguages, language);
+    }
+
+    private void visitLanguageImpl(Set<String> visitedIds, Map<String, RuntimeException> initErrors, Map<String, LanguageCache> cachedLanguages, LinkedHashSet<LanguageCache> serializedLanguages,
+                    LanguageCache language) {
+        Set<String> dependencies = language.getDependentLanguages();
+        for (String dependency : dependencies) {
+            LanguageCache dependentLanguage = cachedLanguages.get(dependency);
+            if (dependentLanguage == null) {
+                // dependent languages are optional
+                continue;
+            }
+            if (visitedIds.contains(dependency)) {
+                initErrors.put(language.getId(), new PolyglotIllegalStateException("Illegal cyclic language dependency found:" + language.getId() + " -> " + dependency));
+                continue;
+            }
+            visitedIds.add(dependency);
+            visitLanguageImpl(visitedIds, initErrors, cachedLanguages, serializedLanguages, dependentLanguage);
+            visitedIds.remove(dependency);
+        }
+        serializedLanguages.add(language);
+    }
+
+    private PolyglotLanguage createLanguage(LanguageCache cache, int index, RuntimeException initError) {
+        PolyglotLanguage languageImpl = new PolyglotLanguage(this, cache, index, index == HOST_LANGUAGE_INDEX, initError);
         languageImpl.info = NODES.createLanguage(languageImpl, cache.getId(), cache.getName(), cache.getVersion(), cache.getMimeTypes());
         Language language = impl.getAPIAccess().newLanguage(languageImpl);
         languageImpl.api = language;
@@ -374,6 +449,50 @@ class PolyglotEngineImpl extends org.graalvm.polyglot.impl.AbstractPolyglotImpl.
 
     synchronized void removeContext(PolyglotContextImpl context) {
         contexts.remove(context);
+    }
+
+    void reportAllLanguageContexts(ContextsListener listener) {
+        PolyglotContextImpl[] allContexts;
+        synchronized (this) {
+            if (contexts.isEmpty()) {
+                return;
+            }
+            allContexts = contexts.toArray(new PolyglotContextImpl[contexts.size()]);
+        }
+        for (PolyglotContextImpl context : allContexts) {
+            listener.onContextCreated(context.truffleContext);
+            for (PolyglotLanguageContext lc : context.contexts) {
+                LanguageInfo language = lc.language.info;
+                if (lc.env != null) {
+                    listener.onLanguageContextCreated(context.truffleContext, language);
+                    if (lc.isInitialized()) {
+                        listener.onLanguageContextInitialized(context.truffleContext, language);
+                        if (lc.finalized) {
+                            listener.onLanguageContextFinalized(context.truffleContext, language);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void reportAllContextThreads(ThreadsListener listener) {
+        PolyglotContextImpl[] allContexts;
+        synchronized (this) {
+            if (contexts.isEmpty()) {
+                return;
+            }
+            allContexts = contexts.toArray(new PolyglotContextImpl[contexts.size()]);
+        }
+        for (PolyglotContextImpl context : allContexts) {
+            Thread[] threads;
+            synchronized (context) {
+                threads = context.getSeenThreads().keySet().toArray(new Thread[0]);
+            }
+            for (Thread thread : threads) {
+                listener.onThreadInitialized(context.truffleContext, thread);
+            }
+        }
     }
 
     @Override
@@ -517,6 +636,12 @@ class PolyglotEngineImpl extends org.graalvm.polyglot.impl.AbstractPolyglotImpl.
             }
         }
         return allOptions;
+    }
+
+    Collection<Thread> getAllThreads(PolyglotContextImpl context) {
+        synchronized (context) {
+            return new ArrayList<>(context.getSeenThreads().keySet());
+        }
     }
 
     private static final class PolyglotShutDownHook implements Runnable {

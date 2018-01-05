@@ -1,5 +1,5 @@
 Graal is a dynamic compiler written in Java that integrates with the HotSpot JVM. It has a focus on high performance and extensibility.
-In addition, it provides optimized performance for [Truffle](https://github.com/graalvm/truffle)-based languages running on the JVM.
+In addition, it provides optimized performance for [Truffle](https://github.com/graalvm/graal/tree/master/truffle)-based languages running on the JVM.
 
 ## Setup
 
@@ -96,3 +96,7 @@ You need to use the same JDK the [OTN](http://www.oracle.com/technetwork/oracle-
 The build step above should work on all [supported JDK 8 build platforms](https://wiki.openjdk.java.net/display/Build/Supported+Build+Platforms).
 It should also work on other platforms (such as Oracle Linux, CentOS and Fedora as described [here](http://mail.openjdk.java.net/pipermail/graal-dev/2015-December/004050.html)).
 If you run into build problems, send a message to the [Graal mailing list](http://mail.openjdk.java.net/mailman/listinfo/graal-dev).
+
+## License
+
+The Graal compiler is licensed under the [GPL 2](LICENSE.md).

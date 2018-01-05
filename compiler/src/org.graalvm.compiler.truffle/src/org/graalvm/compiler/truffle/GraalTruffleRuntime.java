@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
-import java.util.WeakHashMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -52,14 +51,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
-
-import jdk.vm.ci.code.BailoutException;
-import jdk.vm.ci.code.stack.InspectedFrame;
-import jdk.vm.ci.code.stack.InspectedFrameVisitor;
-import jdk.vm.ci.code.stack.StackIntrospection;
-import jdk.vm.ci.meta.MetaAccessProvider;
-import jdk.vm.ci.meta.ResolvedJavaMethod;
-import jdk.vm.ci.meta.SpeculationLog;
 
 import org.graalvm.compiler.api.runtime.GraalRuntime;
 import org.graalvm.compiler.code.CompilationResult;
@@ -77,7 +68,6 @@ import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.serviceprovider.GraalServices;
 import org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleOptionsOverrideScope;
 import org.graalvm.compiler.truffle.debug.CompilationStatisticsListener;
-import org.graalvm.compiler.truffle.debug.PrintCallTargetProfiling;
 import org.graalvm.compiler.truffle.debug.TraceCompilationASTListener;
 import org.graalvm.compiler.truffle.debug.TraceCompilationCallTreeListener;
 import org.graalvm.compiler.truffle.debug.TraceCompilationFailureListener;
@@ -112,16 +102,23 @@ import com.oracle.truffle.api.nodes.RepeatingNode;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.object.LayoutFactory;
 
-public abstract class GraalTruffleRuntime implements TruffleRuntime {
+import jdk.vm.ci.code.BailoutException;
+import jdk.vm.ci.code.stack.InspectedFrame;
+import jdk.vm.ci.code.stack.InspectedFrameVisitor;
+import jdk.vm.ci.code.stack.StackIntrospection;
+import jdk.vm.ci.meta.MetaAccessProvider;
+import jdk.vm.ci.meta.ResolvedJavaMethod;
+import jdk.vm.ci.meta.SpeculationLog;
 
-    private final Map<RootCallTarget, Void> callTargets = Collections.synchronizedMap(new WeakHashMap<RootCallTarget, Void>());
+public abstract class GraalTruffleRuntime implements TruffleRuntime {
 
     /**
      * Used only to reset state for native image compilation.
      */
-    protected void clearCallTargets() {
+    protected void clearState() {
         assert TruffleOptions.AOT : "Must be called only in AOT mode.";
-        callTargets.clear();
+        callMethods = null;
+        truffleCompiler = null;
     }
 
     protected static class BackgroundCompileQueue {
@@ -242,7 +239,6 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime {
         TraceCompilationCallTreeListener.install(this);
         TraceInliningListener.install(this);
         TraceSplittingListener.install(this);
-        PrintCallTargetProfiling.install(this);
         CompilationStatisticsListener.install(this);
         TraceCompilationASTListener.install(this);
         installShutdownHooks();
@@ -496,17 +492,10 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime {
         OptimizedCallTarget target = createOptimizedCallTarget(source, rootNode);
         rootNode.setCallTarget(target);
         tvmci.onLoad(target.getRootNode());
-        callTargets.put(target, null);
         return target;
     }
 
     protected abstract OptimizedCallTarget createOptimizedCallTarget(OptimizedCallTarget source, RootNode rootNode);
-
-    @SuppressWarnings("deprecation")
-    @Override
-    public Collection<RootCallTarget> getCallTargets() {
-        return Collections.unmodifiableSet(callTargets.keySet());
-    }
 
     public void addCompilationListener(GraalTruffleCompilationListener listener) {
         compilationListeners.add(listener);
@@ -766,7 +755,7 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime {
     private static Object loadObjectLayoutFactory() {
         ServiceLoader<LayoutFactory> graalLoader = ServiceLoader.load(LayoutFactory.class, GraalTruffleRuntime.class.getClassLoader());
         if (Java8OrEarlier) {
-            return loadBestObjectLayoutFactory(graalLoader);
+            return selectObjectLayoutFactory(graalLoader);
         } else {
             /*
              * The Graal module (i.e., jdk.internal.vm.compiler) is loaded by the platform class
@@ -775,18 +764,25 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime {
              * to search the app class loader path as well.
              */
             ServiceLoader<LayoutFactory> appLoader = ServiceLoader.load(LayoutFactory.class, LayoutFactory.class.getClassLoader());
-            return loadBestObjectLayoutFactory(CollectionsUtil.concat(graalLoader, appLoader));
+            return selectObjectLayoutFactory(CollectionsUtil.concat(graalLoader, appLoader));
         }
     }
 
-    protected static LayoutFactory loadBestObjectLayoutFactory(Iterable<LayoutFactory> serviceLoaders) {
+    protected static LayoutFactory selectObjectLayoutFactory(Iterable<LayoutFactory> availableLayoutFactories) {
+        String layoutFactoryImplName = System.getProperty("truffle.object.LayoutFactory");
         LayoutFactory bestLayoutFactory = null;
-        for (LayoutFactory currentLayoutFactory : serviceLoaders) {
-            if (bestLayoutFactory == null) {
-                bestLayoutFactory = currentLayoutFactory;
-            } else if (currentLayoutFactory.getPriority() >= bestLayoutFactory.getPriority()) {
-                assert currentLayoutFactory.getPriority() != bestLayoutFactory.getPriority();
-                bestLayoutFactory = currentLayoutFactory;
+        for (LayoutFactory currentLayoutFactory : availableLayoutFactories) {
+            if (layoutFactoryImplName != null) {
+                if (currentLayoutFactory.getClass().getName().equals(layoutFactoryImplName)) {
+                    return currentLayoutFactory;
+                }
+            } else {
+                if (bestLayoutFactory == null) {
+                    bestLayoutFactory = currentLayoutFactory;
+                } else if (currentLayoutFactory.getPriority() >= bestLayoutFactory.getPriority()) {
+                    assert currentLayoutFactory.getPriority() != bestLayoutFactory.getPriority();
+                    bestLayoutFactory = currentLayoutFactory;
+                }
             }
         }
         return bestLayoutFactory;

@@ -102,7 +102,12 @@ abstract class LibFFIType {
         }
 
         private static Number asNumber(Object object) {
-            if (object instanceof Number) {
+            if (object instanceof Byte ||
+                            object instanceof Short ||
+                            object instanceof Integer ||
+                            object instanceof Long ||
+                            object instanceof Float ||
+                            object instanceof Double) {
                 return (Number) object;
             } else if (object instanceof Boolean) {
                 return (Boolean) object ? 1 : 0;
@@ -143,6 +148,7 @@ abstract class LibFFIType {
                     buffer.putPointer(number.longValue(), size);
                     break;
                 default:
+                    CompilerDirectives.transferToInterpreter();
                     throw new AssertionError(simpleType.name());
             }
         }
@@ -169,6 +175,7 @@ abstract class LibFFIType {
                 case DOUBLE:
                     return buffer.getDouble();
                 default:
+                    CompilerDirectives.transferToInterpreter();
                     throw new AssertionError(simpleType.name());
             }
         }
@@ -208,6 +215,7 @@ abstract class LibFFIType {
                 case POINTER:
                     return new NativePointer(primitive);
                 default:
+                    CompilerDirectives.transferToInterpreter();
                     throw new AssertionError(simpleType.name());
             }
         }
@@ -242,7 +250,7 @@ abstract class LibFFIType {
         @Override
         public Object slowpathPrepareArgument(TruffleObject value) {
             // we always need an unbox here
-            return null;
+            return PrepareArgument.UNBOX;
         }
     }
 
@@ -299,7 +307,7 @@ abstract class LibFFIType {
             if (value instanceof NativePointer || value instanceof NativeString) {
                 return value;
             } else {
-                return super.slowpathPrepareArgument(value);
+                return PrepareArgument.POINTER;
             }
         }
     }
@@ -346,7 +354,7 @@ abstract class LibFFIType {
             if (value instanceof NativeString) {
                 return value;
             } else {
-                return null;
+                return PrepareArgument.UNBOX;
             }
         }
     }
@@ -467,6 +475,7 @@ abstract class LibFFIType {
                     }
                     break;
                 default:
+                    CompilerDirectives.transferToInterpreter();
                     throw new AssertionError(elementType.name());
             }
 
@@ -484,6 +493,7 @@ abstract class LibFFIType {
 
         @Override
         protected Object doDeserialize(NativeArgumentBuffer buffer) {
+            CompilerDirectives.transferToInterpreter();
             throw new AssertionError("Arrays can only be passed from Java to native");
         }
 
@@ -540,7 +550,7 @@ abstract class LibFFIType {
         public Object slowpathPrepareArgument(TruffleObject value) {
             Class<?> arrayType = getArrayType(value);
             if (arrayType == null) {
-                return null;
+                return PrepareArgument.POINTER;
             } else {
                 return JavaInterop.asJavaObject(arrayType, value);
             }
@@ -629,7 +639,7 @@ abstract class LibFFIType {
 
         @Override
         public Object slowpathPrepareArgument(TruffleObject value) {
-            return value;
+            return PrepareArgument.EXECUTABLE;
         }
     }
 
@@ -646,6 +656,7 @@ abstract class LibFFIType {
 
         @Override
         protected Object doDeserialize(NativeArgumentBuffer buffer) {
+            CompilerDirectives.transferToInterpreter();
             throw new AssertionError("environment pointer can not be used as return type");
         }
 
@@ -729,12 +740,32 @@ abstract class LibFFIType {
         return createSerializeArgumentNode();
     }
 
+    public enum PrepareArgument {
+        /**
+         * The {@link TruffleObject} should be unboxed, and the result should be passed on.
+         */
+        UNBOX,
+        /**
+         * If the {@link TruffleObject} is a pointer ({@link Message#IS_POINTER}, it should be sent
+         * the {@link Message#AS_POINTER} message, and the result passed on. Otherwise, the object
+         * should be transformed to a pointer with {@link Message#TO_NATIVE}.
+         */
+        POINTER,
+        /**
+         * The caller should check whether the object is {@link Message#IS_EXECUTABLE}. If it is, it
+         * should be directly passed to the {@link #serialize} method. Otherwise, it should be
+         * treated as {@link #POINTER}.
+         */
+        EXECUTABLE
+    }
+
     /**
      * Prepare the argument so it can be passed to the {@link #serialize} method. This should only
      * be called from the slow-path, on the fast-path the node created by
      * {@link #createSerializeArgumentNode()} will do this already in a more efficient way. If this
-     * method returns {@code null}, you should send an {@link Message#UNBOX} message to the object
-     * and try again.
+     * returns one of the {@link PrepareArgument} enum values, special handling is required (see
+     * documentation of {@link PrepareArgument}). Otherwise, the return value of this function
+     * should be passed directly to the {@link #serialize} method.
      */
     @TruffleBoundary
     public abstract Object slowpathPrepareArgument(TruffleObject value);

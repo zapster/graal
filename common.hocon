@@ -1,12 +1,12 @@
 # overlay version
-overlay = 2c3c4952c2ad7dc321526f6c976051fd70e5c872
+overlay = c6dd636911c01b77f267014f138ee99a358ca5f6
 
 # labsjdk* are JDKs based on OracleJDK binaries
 # openjdk* are JDKs based on OpenJDK binaries
 jdks: {
-  labsjdk8 : {name : labsjdk, version : "8u141-jvmci-0.36", platformspecific: true}
+  labsjdk8 : {name : labsjdk, version : "8u151-jvmci-0.39", platformspecific: true}
   labsjdk9 : {name : labsjdk, version : "9+181", platformspecific: true}
-  labsjdk8Debug : {name : labsjdk, version : "8u141-jvmci-0.36-fastdebug", platformspecific: true}
+  labsjdk8Debug : {name : labsjdk, version : "8u151-jvmci-0.39-fastdebug", platformspecific: true}
 }
 
 # Overlay placeholder for pinning mx to a specific revision
@@ -125,3 +125,47 @@ maven-deploy-dry-run : ${labsjdk8} {
     ["mx", "maven-deploy", "--licenses", "GPLv2-CPE,UPL", "--dry-run", "ossrh", "https://this-is-only-a-test"]
   ]
 }
+
+svm-common: ${mx} {
+  environment: {
+    DEFAULT_VM: "server"
+    LANG: "en_US.UTF-8"
+  }
+  logs: [
+    "*/native_image_server.log"
+    "*/svmbuild/*.log"
+    "*/svmbuild/images/*.log"
+    "*/*/stripped/*.map"
+    "*/callgrind.*"
+    "*.bgv"
+  ]
+}
+
+svm-common-linux: ${svm-common} ${linux-amd64} {
+  packages: {
+    make: ">=3.83"
+    gcc-build-essentials: ">=4.9.1" # GCC 4.9.0 fails on cluster
+    ruby: ">=2.1.0"
+    valgrind: ">=3.9.0"
+  }
+  timelimit: "55:00"
+}
+
+svm-capabilities-avx2 : {
+  capabilities : [linux, amd64, avx2]
+}
+
+svm-capabilities-manycores : {
+  capabilities : [linux, amd64, manycores]
+}
+
+svm-common-darwin: ${svm-common} ${darwin-amd64} {
+  timelimit: "45:00"
+}
+
+svm-common-sulong: {
+  packages: {
+    llvm: "==3.8"
+  }
+}
+

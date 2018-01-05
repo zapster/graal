@@ -36,12 +36,15 @@ import static org.junit.Assert.fail;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.Callable;
 
+import org.graalvm.polyglot.Engine;
 import org.hamcrest.CoreMatchers;
 import org.junit.Before;
 import org.junit.Test;
@@ -58,6 +61,7 @@ import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.interop.UnsupportedTypeException;
 import com.oracle.truffle.api.interop.java.JavaInterop;
 import com.oracle.truffle.api.interop.java.MethodMessage;
 import com.oracle.truffle.api.nodes.Node;
@@ -65,6 +69,11 @@ import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.test.ReflectionUtils;
 
 public class JavaInteropTest {
+    static {
+        // ensure engine is initialized
+        Engine.newBuilder().build().close();
+    }
+
     public class Data {
         public int x;
         public double y;
@@ -116,6 +125,13 @@ public class JavaInteropTest {
         TruffleObject expected = JavaInterop.asTruffleObject(null);
         TruffleObject computed = JavaInterop.toJavaClass(expected);
         assertEquals(expected, computed);
+    }
+
+    @Test
+    public void nullAsJavaObject() {
+        TruffleObject nullObject = JavaInterop.asTruffleObject(null);
+        assertTrue(JavaInterop.isJavaObject(nullObject));
+        assertNull(JavaInterop.asJavaObject(nullObject));
     }
 
     @Test
@@ -702,6 +718,22 @@ public class JavaInteropTest {
         testArrayObject(aobj, 4);
     }
 
+    @Test
+    public void testHasKeysDefaults() {
+        TruffleObject noKeys = new NoKeysObject();
+        assertFalse(hasKeys(noKeys));
+        TruffleObject keysObj = new DefaultHasKeysObject();
+        assertTrue(hasKeys(keysObj));
+    }
+
+    @Test
+    public void testHasKeys() {
+        TruffleObject hasKeysObj = new HasKeysObject(true);
+        assertTrue(hasKeys(hasKeysObj));
+        hasKeysObj = new HasKeysObject(false);
+        assertFalse(hasKeys(hasKeysObj));
+    }
+
     private static void testArrayObject(TruffleObject array, int length) {
         int keyInfo;
         for (int i = 0; i < length; i++) {
@@ -816,12 +848,54 @@ public class JavaInteropTest {
     }
 
     @Test
+    public void testNewObject() throws InteropException {
+        TruffleObject objectClass = JavaInterop.asTruffleObject(Object.class);
+        Object object = ForeignAccess.sendNew(Message.createNew(0).createNode(), objectClass);
+        assertThat(object, CoreMatchers.instanceOf(TruffleObject.class));
+        assertTrue(JavaInterop.isJavaObject(Object.class, (TruffleObject) object));
+    }
+
+    @Test
     public void testNewArray() throws InteropException {
         TruffleObject longArrayClass = JavaInterop.asTruffleObject(long[].class);
         Object longArray = ForeignAccess.sendNew(Message.createNew(1).createNode(), longArrayClass, 4);
         assertThat(longArray, CoreMatchers.instanceOf(TruffleObject.class));
         assertTrue(JavaInterop.isJavaObject(long[].class, (TruffleObject) longArray));
         assertEquals(4, message(Message.GET_SIZE, (TruffleObject) longArray));
+    }
+
+    @Test
+    public void testException() throws InteropException {
+        TruffleObject iterator = JavaInterop.asTruffleObject(Collections.emptyList().iterator());
+        try {
+            ForeignAccess.sendInvoke(Message.createInvoke(0).createNode(), iterator, "next");
+            fail("expected an exception but none was thrown");
+        } catch (InteropException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            assertTrue("expected HostException but was: " + ex.getClass(), JavaInterop.isHostException(ex));
+            assertThat(JavaInterop.asHostException(ex), CoreMatchers.instanceOf(NoSuchElementException.class));
+        }
+    }
+
+    @Test
+    public void testException2() throws InteropException {
+        TruffleObject hashMapClass = JavaInterop.asTruffleObject(HashMap.class);
+        try {
+            ForeignAccess.sendNew(Message.createNew(0).createNode(), hashMapClass, -1);
+            fail("expected an exception but none was thrown");
+        } catch (InteropException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            assertTrue("expected HostException but was: " + ex.getClass(), JavaInterop.isHostException(ex));
+            assertThat(JavaInterop.asHostException(ex), CoreMatchers.instanceOf(IllegalArgumentException.class));
+        }
+
+        try {
+            ForeignAccess.sendNew(Message.createNew(0).createNode(), hashMapClass, "");
+            fail("expected an exception but none was thrown");
+        } catch (UnsupportedTypeException ex) {
+        }
     }
 
     public static final class TestJavaObject {
@@ -864,6 +938,10 @@ public class JavaInteropTest {
         Node n = m.createNode();
         CallTarget callTarget = Truffle.getRuntime().createCallTarget(new TemporaryRoot(n, receiver));
         return callTarget.call(arr);
+    }
+
+    static boolean hasKeys(TruffleObject foreignObject) {
+        return ForeignAccess.sendHasKeys(Message.HAS_KEYS.createNode(), foreignObject);
     }
 
     static int getKeyInfo(TruffleObject foreignObject, Object propertyName) {
@@ -964,6 +1042,61 @@ public class JavaInteropTest {
         }
     }
 
+    static final class DefaultHasKeysObject implements TruffleObject {
+
+        @Override
+        public ForeignAccess getForeignAccess() {
+            return ForeignAccess.create(new ForeignAccess.Factory() {
+                @Override
+                public boolean canHandle(TruffleObject obj) {
+                    return obj instanceof DefaultHasKeysObject;
+                }
+
+                @Override
+                public CallTarget accessMessage(Message message) {
+                    if (Message.HAS_KEYS.equals(message)) {
+                        return null;
+                    }
+                    if (Message.KEYS.equals(message)) {
+                        return Truffle.getRuntime().createCallTarget(RootNode.createConstantNode(new ArrayTruffleObject(1)));
+                    }
+                    return null;
+                }
+            });
+        }
+
+    }
+
+    static final class HasKeysObject implements TruffleObject {
+
+        private final boolean hasKeys;
+
+        HasKeysObject(boolean hasKeys) {
+            this.hasKeys = hasKeys;
+        }
+
+        @Override
+        public ForeignAccess getForeignAccess() {
+            return HasKeysObjectMessageResolutionForeign.ACCESS;
+        }
+
+        public static boolean isInstance(TruffleObject obj) {
+            return obj instanceof HasKeysObject;
+        }
+
+        @MessageResolution(receiverType = HasKeysObject.class)
+        static final class HasKeysObjectMessageResolution {
+
+            @Resolve(message = "HAS_KEYS")
+            public abstract static class HasKeysNode extends Node {
+
+                public Object access(HasKeysObject receiver) {
+                    return receiver.hasKeys;
+                }
+            }
+        }
+    }
+
     static final class ArrayTruffleObject implements TruffleObject {
 
         private final int size;
@@ -1047,6 +1180,16 @@ public class JavaInteropTest {
 
         @MessageResolution(receiverType = InternalPropertiesObject.class)
         static final class PropertiesVisibilityObjectMessageResolution {
+
+            @Resolve(message = "HAS_KEYS")
+            public abstract static class HasKeysNode extends Node {
+
+                public Object access(InternalPropertiesObject receiver) {
+                    assert receiver != null;
+                    return true;
+                }
+            }
+
             @Resolve(message = "KEYS")
             public abstract static class KeysNode extends Node {
 

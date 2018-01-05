@@ -25,6 +25,7 @@
 package com.oracle.truffle.api.instrumentation;
 
 import java.io.PrintStream;
+import java.util.concurrent.locks.Lock;
 
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives;
@@ -163,19 +164,28 @@ public final class ProbeNode extends Node {
     }
 
     private EventChainNode lazyUpdatedImpl(VirtualFrame frame) {
-        EventChainNode nextChain = handler.createBindings(ProbeNode.this);
-        if (nextChain == null) {
-            // chain is null -> remove wrapper;
-            // Note: never set child nodes to null, can cause races
-            InstrumentationHandler.removeWrapper(ProbeNode.this);
-            return null;
-        }
-
         EventChainNode oldChain;
-        synchronized (this) {
+        EventChainNode nextChain;
+        Lock lock = getLock();
+        lock.lock();
+        try {
+            Assumption localVersion = this.version;
+            if (localVersion != null && localVersion.isValid()) {
+                return this.chain;
+            }
+            nextChain = handler.createBindings(ProbeNode.this);
+            if (nextChain == null) {
+                // chain is null -> remove wrapper;
+                // Note: never set child nodes to null, can cause races
+                InstrumentationHandler.removeWrapper(ProbeNode.this);
+                return null;
+            }
+
             oldChain = this.chain;
             this.chain = insert(nextChain);
             this.version = Truffle.getRuntime().createAssumption("Instruments unchanged");
+        } finally {
+            lock.unlock();
         }
 
         if (oldChain != null) {
@@ -201,7 +211,7 @@ public final class ProbeNode extends Node {
         return null;
     }
 
-    ProbeNode.EventChainNode createEventChainCallback(EventBinding<?> binding) {
+    ProbeNode.EventChainNode createEventChainCallback(EventBinding.Source<?> binding) {
         ProbeNode.EventChainNode next;
         Object element = binding.getElement();
         if (element instanceof ExecutionEventListener) {
@@ -218,7 +228,7 @@ public final class ProbeNode extends Node {
         return next;
     }
 
-    private ExecutionEventNode createEventNode(EventBinding<?> binding, Object element) {
+    private ExecutionEventNode createEventNode(EventBinding.Source<?> binding, Object element) {
         ExecutionEventNode eventNode;
         try {
             eventNode = ((ExecutionEventNodeFactory) element).create(context);
@@ -246,7 +256,7 @@ public final class ProbeNode extends Node {
      * guest language execution semantics. Normal response is to log and continue.
      */
     @TruffleBoundary
-    static void exceptionEventForClientInstrument(EventBinding<?> b, String eventName, Throwable t) {
+    static void exceptionEventForClientInstrument(EventBinding.Source<?> b, String eventName, Throwable t) {
         assert !b.isLanguageBinding();
         if (t instanceof ThreadDeath) {
             // Terminates guest language execution immediately
@@ -273,10 +283,10 @@ public final class ProbeNode extends Node {
     abstract static class EventChainNode extends Node {
 
         @Child private ProbeNode.EventChainNode next;
-        private final EventBinding<?> binding;
+        private final EventBinding.Source<?> binding;
         @CompilationFinal private boolean seenException;
 
-        EventChainNode(EventBinding<?> binding) {
+        EventChainNode(EventBinding.Source<?> binding) {
             this.binding = binding;
         }
 
@@ -341,6 +351,9 @@ public final class ProbeNode extends Node {
         protected abstract void innerOnEnter(EventContext context, VirtualFrame frame);
 
         final void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
+            if (next != null) {
+                next.onReturnValue(context, frame, result);
+            }
             try {
                 innerOnReturnValue(context, frame, result);
             } catch (Throwable t) {
@@ -355,14 +368,14 @@ public final class ProbeNode extends Node {
                     exceptionEventForClientInstrument(binding, "onReturnValue", t);
                 }
             }
-            if (next != null) {
-                next.onReturnValue(context, frame, result);
-            }
         }
 
         protected abstract void innerOnReturnValue(EventContext context, VirtualFrame frame, Object result);
 
         final void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
+            if (next != null) {
+                next.onReturnExceptional(context, frame, exception);
+            }
             try {
                 innerOnReturnExceptional(context, frame, exception);
             } catch (Throwable t) {
@@ -378,9 +391,6 @@ public final class ProbeNode extends Node {
 
                 }
             }
-            if (next != null) {
-                next.onReturnExceptional(context, frame, exception);
-            }
         }
 
         protected abstract void innerOnReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception);
@@ -391,7 +401,7 @@ public final class ProbeNode extends Node {
 
         private final ExecutionEventListener listener;
 
-        EventFilterChainNode(EventBinding<?> binding, ExecutionEventListener listener) {
+        EventFilterChainNode(EventBinding.Source<?> binding, ExecutionEventListener listener) {
             super(binding);
             this.listener = listener;
         }
@@ -421,7 +431,7 @@ public final class ProbeNode extends Node {
 
         @Child private ExecutionEventNode eventNode;
 
-        EventProviderChainNode(EventBinding<?> binding, ExecutionEventNode eventNode) {
+        EventProviderChainNode(EventBinding.Source<?> binding, ExecutionEventNode eventNode) {
             super(binding);
             this.eventNode = eventNode;
         }
