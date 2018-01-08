@@ -510,32 +510,14 @@ public class DuSequenceAnalysisTest {
         List<DuPair> actualDuPairs = analysisResult.getDuPairs();
         List<DuSequence> actualDuSequences = analysisResult.getDuSequences();
 
-        assertEqualsDuSequenceWebs(expectedDuSequenceWebs, actualDuSequenceWebs);
-        assertEqualsDuPairs(expectedDuPairs, actualDuPairs);
-        assertEqualsDuSequences(expectedDuSequences, actualDuSequences);
+        assertEqualsList(expectedDuPairs, actualDuPairs);
+        assertEqualsList(expectedDuSequences, actualDuSequences);
+        assertEqualsList(expectedDuSequenceWebs, actualDuSequenceWebs);
     }
 
-    private static void assertEqualsDuPairs(List<DuPair> expected, List<DuPair> actual) {
-        assertEquals("The number of DuPairs do not match.", expected.size(), actual.size());
+    private static <T> void assertEqualsList(List<T> expected, List<T> actual) {
+        assertEquals("The number of elements in the list does not match.", expected.size(), actual.size());
 
-        for (DuPair duPair : expected) {
-            assert actual.stream().anyMatch(x -> x.equals(duPair));
-        }
-    }
-
-    private static void assertEqualsDuSequences(List<DuSequence> expected, List<DuSequence> actual) {
-        assertEquals("The number of DuSequences do not match.", expected.size(), actual.size());
-
-        for (DuSequence duSequence : expected) {
-            assert actual.stream().anyMatch(x -> x.equals(duSequence));
-        }
-    }
-
-    private static void assertEqualsDuSequenceWebs(List<DuSequenceWeb> expected, List<DuSequenceWeb> actual) {
-        assertEquals("The number of DuSequenceWebs do not match.", expected.size(), actual.size());
-
-        for (DuSequenceWeb duSequenceWeb : expected) {
-            assert actual.stream().anyMatch(x -> x.equals(duSequenceWeb));
-        }
+        assert actual.containsAll(expected);
     }
 }
