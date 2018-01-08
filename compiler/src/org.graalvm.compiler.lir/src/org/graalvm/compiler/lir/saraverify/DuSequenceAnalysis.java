@@ -2,17 +2,20 @@ package org.graalvm.compiler.lir.saraverify;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -36,48 +39,65 @@ public class DuSequenceAnalysis {
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
 
-    HashMap<AbstractBlockBase<?>, Map<Value, ArrayList<ValUsage>>> blockValUseInstructions;
+    private static void logInstructions(LIR lir) {
+        DebugContext debug = lir.getDebug();
+
+        try (Indent i1 = debug.indent()) {
+            for (AbstractBlockBase<?> block : lir.getControlFlowGraph().getBlocks()) {
+                debug.log(3, "Visiting Block: " + block.getId());
+                try (Indent i2 = debug.indent()) {
+                    for (LIRInstruction instr : lir.getLIRforBlock(block)) {
+                        debug.log(3, instr.toString());
+                    }
+                }
+            }
+        }
+    }
 
     public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-        HashSet<AbstractBlockBase<?>> blockQueue = new HashSet<>();
+        BitSet blockQueue = new BitSet(blocks.length);
 
         if (!(lir.getControlFlowGraph().getLoops().isEmpty())) {
             // control flow contains one or more loops
             return null;
         }
 
+        logInstructions(lir);
+
         initializeCollections();
 
         // start with leaf blocks
         for (AbstractBlockBase<?> block : blocks) {
             if (block.getSuccessorCount() == 0) {
-                blockQueue.add(block);
+                blockQueue.set(block.getId());
             }
         }
 
-        ArrayList<AbstractBlockBase<?>> visitedBlocks = new ArrayList<>();
-        blockValUseInstructions = new HashMap<>();
+        BitSet visitedBlocks = new BitSet(blocks.length);
+        HashMap<AbstractBlockBase<?>, Map<Value, ArrayList<ValUsage>>> blockValUseInstructions = new HashMap<>();
 
         while (!blockQueue.isEmpty()) {
             // get any block, whose successors have already been visited, remove it from the queue and add its
             // predecessors to the queue
-            AbstractBlockBase<?> block = blockQueue.stream().filter(b -> visitedBlocks.containsAll(Arrays.asList(b.getSuccessors()))).findFirst().get();
-            blockQueue.remove(block);
-            blockQueue.addAll(Arrays.asList(block.getPredecessors()));
-            visitedBlocks.add(block);
+            int blockId = blockQueue.stream().filter(id -> Arrays.asList(blocks[id].getSuccessors()).stream().allMatch(b -> visitedBlocks.get(b.getId()))).findFirst().getAsInt();
+            blockQueue.clear(blockId);
+            visitedBlocks.set(blockId);
+
+            for (AbstractBlockBase<?> predecessor : blocks[blockId].getPredecessors()) {
+                blockQueue.set(predecessor.getId());
+            }
 
             // get instructions of block
-            ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+            ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(blocks[blockId]);
 
-            Map<Value, ArrayList<ValUsage>> valUseInstructions = mergeSuccessorValUseInstructions(block);
-            blockValUseInstructions.put(block, valUseInstructions);
+            Map<Value, ArrayList<ValUsage>> valUseInstructions = mergeSuccessorValUseInstructions(blockValUseInstructions, blocks[blockId].getSuccessors());
+            blockValUseInstructions.put(blocks[blockId], valUseInstructions);
 
             determineDuSequenceWebs(instructions, valUseInstructions);
         }
-
-        assert visitedBlocks.containsAll(Arrays.asList(blocks));
+        assert visitedBlocks.cardinality() == blocks.length && visitedBlocks.stream().allMatch(id -> id < blocks.length);
 
         return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount);
     }
@@ -116,9 +136,7 @@ public class DuSequenceAnalysis {
         instructionUseOperandCount = new IdentityHashMap<>();
     }
 
-    private Map<Value, ArrayList<ValUsage>> mergeSuccessorValUseInstructions(AbstractBlockBase<?> block) {
-        AbstractBlockBase<?>[] successors = block.getSuccessors();
-
+    public Map<Value, ArrayList<ValUsage>> mergeSuccessorValUseInstructions(HashMap<AbstractBlockBase<?>, Map<Value, ArrayList<ValUsage>>> blockValUseInstructions, AbstractBlockBase<?>[] successors) {
         Map<Value, ArrayList<ValUsage>> merged = new TreeMap<>(new SARAVerifyValueComparator());
 
         for (AbstractBlockBase<?> successor : successors) {
@@ -132,7 +150,8 @@ public class DuSequenceAnalysis {
                     merged.put(entry.getKey(), valUsages);
                 }
 
-                valUsages.addAll(entry.getValue());
+                List<ValUsage> entryValUsages = entry.getValue().stream().filter(x -> !(merged.get(entry.getKey()).contains(x))).collect(Collectors.toList());
+                valUsages.addAll(entryValUsages);
             }
         }
         return merged;
@@ -145,7 +164,7 @@ public class DuSequenceAnalysis {
         instruction.visitEachAlive(aliveConsumer);
     }
 
-    static class ValUsage {
+    class ValUsage {
         private LIRInstruction useInstruction;
         private int operandPosition;
 
@@ -160,6 +179,20 @@ public class DuSequenceAnalysis {
 
         public int getOperandPosition() {
             return operandPosition;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj instanceof ValUsage) {
+                ValUsage valUsage = (ValUsage) obj;
+                return this.useInstruction.equals(valUsage.getUseInstruction()) && this.operandPosition == valUsage.getOperandPosition();
+            }
+            return false;
+        }
+
+        @Override
+        public int hashCode() {
+            return super.hashCode();
         }
     }
 
