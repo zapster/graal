@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -38,6 +39,8 @@ public class DuSequenceAnalysis {
 
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
+
+    private SARAVerifyValueComparator saraVerifyValueComparator = new SARAVerifyValueComparator();
 
     private static void logInstructions(LIR lir) {
         DebugContext debug = lir.getDebug();
@@ -76,7 +79,7 @@ public class DuSequenceAnalysis {
         }
 
         BitSet visitedBlocks = new BitSet(blocks.length);
-        HashMap<AbstractBlockBase<?>, Map<Value, ArrayList<ValUsage>>> blockValUseInstructions = new HashMap<>();
+        HashMap<AbstractBlockBase<?>, Map<Value, List<ValUsage>>> blockValUseInstructions = new HashMap<>();
 
         while (!blockQueue.isEmpty()) {
             // get any block, whose successors have already been visited, remove it from the queue and add its
@@ -92,7 +95,7 @@ public class DuSequenceAnalysis {
             // get instructions of block
             ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(blocks[blockId]);
 
-            Map<Value, ArrayList<ValUsage>> valUseInstructions = mergeSuccessorValUseInstructions(blockValUseInstructions, blocks[blockId].getSuccessors());
+            Map<Value, List<ValUsage>> valUseInstructions = mergeMaps(blockValUseInstructions, blocks[blockId].getSuccessors(), saraVerifyValueComparator);
             blockValUseInstructions.put(blocks[blockId], valUseInstructions);
 
             determineDuSequenceWebs(instructions, valUseInstructions);
@@ -107,7 +110,7 @@ public class DuSequenceAnalysis {
         return determineDuSequenceWebs(instructions, new TreeMap<>(new SARAVerifyValueComparator()));
     }
 
-    private AnalysisResult determineDuSequenceWebs(ArrayList<LIRInstruction> instructions, Map<Value, ArrayList<ValUsage>> valUseInstructions) {
+    private AnalysisResult determineDuSequenceWebs(ArrayList<LIRInstruction> instructions, Map<Value, List<ValUsage>> valUseInstructions) {
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(valUseInstructions);
 
@@ -136,25 +139,25 @@ public class DuSequenceAnalysis {
         instructionUseOperandCount = new IdentityHashMap<>();
     }
 
-    public Map<Value, ArrayList<ValUsage>> mergeSuccessorValUseInstructions(HashMap<AbstractBlockBase<?>, Map<Value, ArrayList<ValUsage>>> blockValUseInstructions, AbstractBlockBase<?>[] successors) {
-        Map<Value, ArrayList<ValUsage>> merged = new TreeMap<>(new SARAVerifyValueComparator());
+    public <T, U, V> Map<U, List<V>> mergeMaps(Map<T, Map<U, List<V>>> map, T[] mergeKeys, Comparator<? super U> comparator) {
+        Map<U, List<V>> mergedMap = new TreeMap<>(comparator);
 
-        for (AbstractBlockBase<?> successor : successors) {
-            Map<Value, ArrayList<ValUsage>> successorValUseInstructions = blockValUseInstructions.get(successor);
+        for (T mergeKey : mergeKeys) {
+            Map<U, List<V>> mergeValueMap = map.get(mergeKey);
 
-            for (Entry<Value, ArrayList<ValUsage>> entry : successorValUseInstructions.entrySet()) {
-                ArrayList<ValUsage> valUsages = merged.get(entry.getKey());
+            for (Entry<U, List<V>> entry : mergeValueMap.entrySet()) {
+                List<V> mergedMapValue = mergedMap.get(entry.getKey());
 
-                if (valUsages == null) {
-                    valUsages = new ArrayList<>();
-                    merged.put(entry.getKey(), valUsages);
+                if (mergedMapValue == null) {
+                    mergedMapValue = new ArrayList<>();
+                    mergedMap.put(entry.getKey(), mergedMapValue);
                 }
 
-                List<ValUsage> entryValUsages = entry.getValue().stream().filter(x -> !(merged.get(entry.getKey()).contains(x))).collect(Collectors.toList());
-                valUsages.addAll(entryValUsages);
+                List<V> newValues = entry.getValue().stream().filter(x -> !(mergedMap.get(entry.getKey()).contains(x))).collect(Collectors.toList());
+                mergedMapValue.addAll(newValues);
             }
         }
-        return merged;
+        return mergedMap;
     }
 
     private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,
@@ -198,9 +201,9 @@ public class DuSequenceAnalysis {
 
     class DefInstructionValueConsumer implements InstructionValueConsumer {
 
-        private Map<Value, ArrayList<ValUsage>> valUseInstructions;
+        private Map<Value, List<ValUsage>> valUseInstructions;
 
-        public DefInstructionValueConsumer(Map<Value, ArrayList<ValUsage>> valUseInstructions) {
+        public DefInstructionValueConsumer(Map<Value, List<ValUsage>> valUseInstructions) {
             this.valUseInstructions = valUseInstructions;
         }
 
@@ -212,7 +215,7 @@ public class DuSequenceAnalysis {
                 return;
             }
 
-            ArrayList<ValUsage> useInstructions = valUseInstructions.get(value);
+            List<ValUsage> useInstructions = valUseInstructions.get(value);
             if (useInstructions == null) {
                 // definition of a value, which is not used
                 operandDefPosition++;
@@ -251,9 +254,9 @@ public class DuSequenceAnalysis {
 
     class UseInstructionValueConsumer implements InstructionValueConsumer {
 
-        private Map<Value, ArrayList<ValUsage>> valUseInstructions;
+        private Map<Value, List<ValUsage>> valUseInstructions;
 
-        public UseInstructionValueConsumer(Map<Value, ArrayList<ValUsage>> valUseInstructions) {
+        public UseInstructionValueConsumer(Map<Value, List<ValUsage>> valUseInstructions) {
             this.valUseInstructions = valUseInstructions;
         }
 
@@ -265,7 +268,7 @@ public class DuSequenceAnalysis {
                 return;
             }
 
-            ArrayList<ValUsage> useInstructions = valUseInstructions.get(value);
+            List<ValUsage> useInstructions = valUseInstructions.get(value);
 
             if (useInstructions == null) {
                 useInstructions = new ArrayList<>();
