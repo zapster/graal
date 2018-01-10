@@ -1,5 +1,6 @@
 package org.graalvm.compiler.lir.jtt.saraverify;
 
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.allocatable;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r0;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r1;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r2;
@@ -37,7 +38,9 @@ import org.graalvm.compiler.lir.saraverify.DuSequence;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
 import org.graalvm.compiler.lir.saraverify.DuSequenceWeb;
 import org.graalvm.compiler.lir.saraverify.SARAVerifyValueComparator;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import jdk.vm.ci.code.StackSlot;
 import jdk.vm.ci.meta.JavaConstant;
@@ -45,6 +48,9 @@ import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
 
 public class DuSequenceAnalysisTest {
+
+    @Rule public ExpectedException thrown = ExpectedException.none();
+
     @Test
     public void testDetermineDuPairs0() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
@@ -168,6 +174,7 @@ public class DuSequenceAnalysisTest {
         duSequenceWeb.add(duSequence);
         expectedDuSequenceWebs.add(duSequenceWeb);
 
+        thrown.expect(GraalError.class);
         test(instructions, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
     }
 
@@ -304,7 +311,7 @@ public class DuSequenceAnalysisTest {
         instructions.add(returnOp);
 
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions);
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
         List<DuSequenceWeb> duSequenceWebs = analysisResult.getDuSequenceWebs();
         List<DuPair> duPairs = analysisResult.getDuPairs();
         List<DuSequence> duSequences = analysisResult.getDuSequences();
@@ -565,7 +572,7 @@ public class DuSequenceAnalysisTest {
     private static void test(ArrayList<LIRInstruction> instructions, List<DuPair> expectedDuPairs, List<DuSequence> expectedDuSequences, List<DuSequenceWeb> expectedDuSequenceWebs) {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
 
-        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions);
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
         List<DuSequenceWeb> actualDuSequenceWebs = analysisResult.getDuSequenceWebs();
         List<DuPair> actualDuPairs = analysisResult.getDuPairs();
         List<DuSequence> actualDuSequences = analysisResult.getDuSequences();

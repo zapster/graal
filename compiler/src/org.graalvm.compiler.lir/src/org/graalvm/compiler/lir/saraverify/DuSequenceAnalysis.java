@@ -16,14 +16,18 @@ import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
+import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 
+import jdk.vm.ci.code.Register;
+import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Value;
@@ -42,6 +46,8 @@ public class DuSequenceAnalysis {
 
     private SARAVerifyValueComparator saraVerifyValueComparator = new SARAVerifyValueComparator();
 
+    public static final String ERROR_MSG_PREFIX = "SARA verify error: ";
+
     private static void logInstructions(LIR lir) {
         DebugContext debug = lir.getDebug();
 
@@ -57,7 +63,7 @@ public class DuSequenceAnalysis {
         }
     }
 
-    public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes) {
+    public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes, RegisterArray allocatable) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
         BitSet blockQueue = new BitSet(blocks.length);
@@ -102,15 +108,21 @@ public class DuSequenceAnalysis {
         }
         assert visitedBlocks.cardinality() == blocks.length && visitedBlocks.stream().allMatch(id -> id < blocks.length);
 
+        checkUndefinedValues(blockValUseInstructions.get(blocks[0]), allocatable);
+
         return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount);
     }
 
-    public AnalysisResult determineDuSequenceWebs(ArrayList<LIRInstruction> instructions) {
+    public AnalysisResult determineDuSequenceWebs(ArrayList<LIRInstruction> instructions, RegisterArray allocatable) {
         initializeCollections();
-        return determineDuSequenceWebs(instructions, new TreeMap<>(new SARAVerifyValueComparator()));
+
+        Map<Value, List<ValUsage>> valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
+        determineDuSequenceWebs(instructions, valUseInstructions);
+        checkUndefinedValues(valUseInstructions, allocatable);
+        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount);
     }
 
-    private AnalysisResult determineDuSequenceWebs(ArrayList<LIRInstruction> instructions, Map<Value, List<ValUsage>> valUseInstructions) {
+    private void determineDuSequenceWebs(ArrayList<LIRInstruction> instructions, Map<Value, List<ValUsage>> valUseInstructions) {
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(valUseInstructions);
 
@@ -126,8 +138,6 @@ public class DuSequenceAnalysis {
             instructionDefOperandCount.put(inst, operandDefPosition);
             instructionUseOperandCount.put(inst, operandUsePosition);
         }
-
-        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount);
     }
 
     private void initializeCollections() {
@@ -158,6 +168,25 @@ public class DuSequenceAnalysis {
             }
         }
         return mergedMap;
+    }
+
+    private static void checkUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterArray allocatable) {
+        List<Register> allocatableList = allocatable.asList();
+
+        for (Value value : valUseInstructions.keySet()) {
+            if (LIRValueUtil.isJavaConstant(value)) {
+                // value is constant value
+                // TODO: primitive value
+            } else if (!ValueUtil.isRegister(value)) {
+                GraalError.shouldNotReachHere(ERROR_MSG_PREFIX + "Used value " + value + " is not defined.");
+            } else {
+                Register register = ValueUtil.asRegister(value);
+                if (allocatableList.contains(register)) {
+                    GraalError.shouldNotReachHere(ERROR_MSG_PREFIX + "Used register " + register + " is not defined.");
+                }
+                // TODO: insert of dummy instruction for non-allocatable register
+            }
+        }
     }
 
     private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,

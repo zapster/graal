@@ -35,16 +35,16 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         DebugContext debugContext = lir.getDebug();
 
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes);
+        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getAllocatableRegisters());
         ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         if (!verifyDataFlow(inputDuSequences, outputDuSequences, debugContext)) {
-            throw GraalError.shouldNotReachHere("SARA verify error: Data Flow not equal");
+            throw GraalError.shouldNotReachHere(DuSequenceAnalysis.ERROR_MSG_PREFIX + "Data Flow not equal");
         }
 
         if (!verifyOperandCount(inputResult.getInstructionDefOperandCount(), inputResult.getInstructionUseOperandCount(),
                         outputResult.getInstructionDefOperandCount(), outputResult.getInstructionUseOperandCount())) {
-            throw GraalError.shouldNotReachHere("SARA verify error: Operand numbers not equal");
+            throw GraalError.shouldNotReachHere(DuSequenceAnalysis.ERROR_MSG_PREFIX + "Operand numbers not equal");
         }
     }
 
