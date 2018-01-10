@@ -13,7 +13,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.ConstantValue;
@@ -43,7 +46,7 @@ import jdk.vm.ci.meta.ValueKind;
 
 public class DuSequenceAnalysisTest {
     @Test
-    public void testDetermineDuPairs() {
+    public void testDetermineDuPairs0() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
 
         LabelOp labelOp = new LabelOp(null, true);
@@ -108,7 +111,7 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
-    public void testDetermineDuPairs2() {
+    public void testDetermineDuPairs1() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
 
         LabelOp labelOp = new LabelOp(null, true);
@@ -142,7 +145,7 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
-    public void testDetermineDuPairs3() {
+    public void testDetermineDuPairs2() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
 
         LabelOp labelOp = new LabelOp(null, true);
@@ -170,7 +173,7 @@ public class DuSequenceAnalysisTest {
 
     // test case represents the instructions from BC_iadd3
     @Test
-    public void testDetermineDuPairs4() {
+    public void testDetermineDuPairs3() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
 
         LabelOp i0 = new LabelOp(null, true);
@@ -241,7 +244,7 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
-    public void testDetermineDuPairs5() {
+    public void testDetermineDuPairs4() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
 
         LabelOp labelOp = new LabelOp(null, true);
@@ -307,6 +310,63 @@ public class DuSequenceAnalysisTest {
         List<DuSequence> duSequences = analysisResult.getDuSequences();
 
         throw GraalError.unimplemented();
+    }
+
+    @Test
+    public void testMergeMaps0() {
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+        Map<Integer, List<Integer>> map1 = new HashMap<>();
+        Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
+        map.put(3, map1);
+        map.put(5, map1);
+
+        Map<Integer, List<Integer>> mergedMap = duSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5}, null);
+
+        assertEquals(true, mergedMap.entrySet().stream().allMatch(entry -> entry.getValue().isEmpty()));
+    }
+
+    @Test
+    public void testMergeMaps1() {
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+        List<Integer> list = Arrays.asList(8, 9);
+
+        Map<Integer, List<Integer>> map1 = new HashMap<>();
+        Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
+        map1.put(1, list);
+        map.put(3, map1);
+        map.put(5, new HashMap<>());
+
+        Map<Integer, List<Integer>> mergedMap = duSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5}, null);
+
+        assertEquals(1, mergedMap.keySet().size());
+
+        List<Integer> actualList = mergedMap.get(1);
+        assertNotEquals(null, actualList);
+        assertEqualsList(list, actualList);
+    }
+
+    @Test
+    public void testMergeMaps2() {
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+
+        Map<Integer, List<Integer>> map1 = new HashMap<>();
+        Map<Integer, List<Integer>> map2 = new HashMap<>();
+        map1.put(1, Arrays.asList(10));
+        map1.put(2, Arrays.asList(11, 12));
+        map1.put(3, Arrays.asList(13, 14));
+        map1.put(4, Arrays.asList());
+        map2.put(1, Arrays.asList(10));
+        map2.put(2, Arrays.asList(11, 12, 15));
+        map2.put(4, Arrays.asList(16, 17, 18));
+
+        Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
+        map.put(1, map1);
+        map.put(2, map2);
+        Map<Integer, List<Integer>> mergedMap = duSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2}, null);
+        assertEqualsList(Arrays.asList(10), mergedMap.get(1));
+        assertEqualsList(Arrays.asList(11, 12, 15), mergedMap.get(2));
+        assertEqualsList(Arrays.asList(13, 14), mergedMap.get(3));
+        assertEqualsList(Arrays.asList(16, 17, 18), mergedMap.get(4));
     }
 
     @Test
