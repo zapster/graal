@@ -1,5 +1,7 @@
 package org.graalvm.compiler.lir.saraverify;
 
+import static org.graalvm.compiler.lir.LIRInstruction.OperandFlag.REG;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -23,16 +25,36 @@ import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
+import org.graalvm.compiler.lir.LIRInstructionClass;
 import org.graalvm.compiler.lir.LIRValueUtil;
+import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 
 import jdk.vm.ci.code.Register;
-import jdk.vm.ci.code.RegisterArray;
+import jdk.vm.ci.code.RegisterAttributes;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Value;
 
 public class DuSequenceAnalysis {
+
+    public static class DummyDef extends LIRInstruction {
+        public static final LIRInstructionClass<DummyDef> TYPE = LIRInstructionClass.create(DummyDef.class);
+        @Def({REG}) protected AllocatableValue value;
+
+        public DummyDef(AllocatableValue value) {
+            super(TYPE);
+            this.value = value;
+        }
+
+        public void setValue(AllocatableValue value) {
+            this.value = value;
+        }
+
+        @Override
+        public void emitCode(CompilationResultBuilder crb) {
+        }
+    }
 
     private int operandDefPosition;
     private int operandUsePosition;
@@ -63,7 +85,7 @@ public class DuSequenceAnalysis {
         }
     }
 
-    public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes, RegisterArray allocatable) {
+    public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes, RegisterAttributes[] registerAttributes, Map<Register, DummyDef> dummyDefs) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
         BitSet blockQueue = new BitSet(blocks.length);
@@ -73,9 +95,8 @@ public class DuSequenceAnalysis {
             return null;
         }
 
-        logInstructions(lir);
-
         initializeCollections();
+        logInstructions(lir);
 
         // start with leaf blocks
         for (AbstractBlockBase<?> block : blocks) {
@@ -94,35 +115,41 @@ public class DuSequenceAnalysis {
             blockQueue.clear(blockId);
             visitedBlocks.set(blockId);
 
-            for (AbstractBlockBase<?> predecessor : blocks[blockId].getPredecessors()) {
+            AbstractBlockBase<?> block = blocks[blockId];
+            for (AbstractBlockBase<?> predecessor : block.getPredecessors()) {
                 blockQueue.set(predecessor.getId());
             }
 
             // get instructions of block
-            ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(blocks[blockId]);
+            ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
 
-            Map<Value, List<ValUsage>> valUseInstructions = mergeMaps(blockValUseInstructions, blocks[blockId].getSuccessors(), saraVerifyValueComparator);
-            blockValUseInstructions.put(blocks[blockId], valUseInstructions);
+            Map<Value, List<ValUsage>> valUseInstructions = mergeMaps(blockValUseInstructions, block.getSuccessors(), saraVerifyValueComparator);
+            blockValUseInstructions.put(block, valUseInstructions);
 
             determineDuSequenceWebs(instructions, valUseInstructions);
         }
-        assert visitedBlocks.cardinality() == blocks.length && visitedBlocks.stream().allMatch(id -> id < blocks.length);
+        assert visitedBlocks.length() == visitedBlocks.cardinality() && visitedBlocks.cardinality() == blocks.length && visitedBlocks.stream().allMatch(id -> id < blocks.length);
 
-        checkUndefinedValues(blockValUseInstructions.get(blocks[0]), allocatable);
+        // analysis of dummy instructions
+        analyseUndefinedValues(blockValUseInstructions.get(blocks[0]), registerAttributes, dummyDefs);
 
-        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount);
+        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount, dummyDefs);
     }
 
-    public AnalysisResult determineDuSequenceWebs(ArrayList<LIRInstruction> instructions, RegisterArray allocatable) {
+    public AnalysisResult determineDuSequenceWebs(List<LIRInstruction> instructions, RegisterAttributes[] registerAttributes, Map<Register, DummyDef> dummyDefs) {
         initializeCollections();
 
+        // analysis of given instructions
         Map<Value, List<ValUsage>> valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
         determineDuSequenceWebs(instructions, valUseInstructions);
-        checkUndefinedValues(valUseInstructions, allocatable);
-        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount);
+
+        // analysis of dummy instructions
+        analyseUndefinedValues(valUseInstructions, registerAttributes, dummyDefs);
+
+        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount, dummyDefs);
     }
 
-    private void determineDuSequenceWebs(ArrayList<LIRInstruction> instructions, Map<Value, List<ValUsage>> valUseInstructions) {
+    private void determineDuSequenceWebs(List<LIRInstruction> instructions, Map<Value, List<ValUsage>> valUseInstructions) {
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(valUseInstructions);
 
@@ -149,7 +176,7 @@ public class DuSequenceAnalysis {
         instructionUseOperandCount = new IdentityHashMap<>();
     }
 
-    public <T, U, V> Map<U, List<V>> mergeMaps(Map<T, Map<U, List<V>>> map, T[] mergeKeys, Comparator<? super U> comparator) {
+    public static <T, U, V> Map<U, List<V>> mergeMaps(Map<T, Map<U, List<V>>> map, T[] mergeKeys, Comparator<? super U> comparator) {
         Map<U, List<V>> mergedMap = new TreeMap<>(comparator);
 
         for (T mergeKey : mergeKeys) {
@@ -170,9 +197,13 @@ public class DuSequenceAnalysis {
         return mergedMap;
     }
 
-    private static void checkUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterArray allocatable) {
-        List<Register> allocatableList = allocatable.asList();
+    private void analyseUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterAttributes[] registerAttributes, Map<Register, DummyDef> dummyDefs) {
+        checkUndefinedValues(valUseInstructions, registerAttributes, dummyDefs);
+        List<LIRInstruction> dummyDefsList = dummyDefs.values().stream().collect(Collectors.toList());
+        determineDuSequenceWebs(dummyDefsList, valUseInstructions);
+    }
 
+    private static void checkUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterAttributes[] registerAttributes, Map<Register, DummyDef> dummyDefs) {
         for (Value value : valUseInstructions.keySet()) {
             if (LIRValueUtil.isJavaConstant(value)) {
                 // value is constant value
@@ -181,10 +212,14 @@ public class DuSequenceAnalysis {
                 GraalError.shouldNotReachHere(ERROR_MSG_PREFIX + "Used value " + value + " is not defined.");
             } else {
                 Register register = ValueUtil.asRegister(value);
-                if (allocatableList.contains(register)) {
+                if (registerAttributes[register.number].isAllocatable()) {
                     GraalError.shouldNotReachHere(ERROR_MSG_PREFIX + "Used register " + register + " is not defined.");
                 }
                 // TODO: insert of dummy instruction for non-allocatable register
+                DummyDef dummyDef = dummyDefs.get(register);
+                if (dummyDef == null) {
+                    dummyDefs.put(register, new DummyDef(register.asValue()));
+                }
             }
         }
     }
@@ -291,8 +326,9 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            if (ValueUtil.isIllegal(value)) {
-                // value is part of a composite value
+            // TODO: skip primitive constants and object[null]
+            if (ValueUtil.isIllegal(value) || flags.contains(OperandFlag.UNINITIALIZED)) {
+                // value is part of a composite value or is uninitialized
                 operandUsePosition++;
                 return;
             }

@@ -2,6 +2,7 @@ package org.graalvm.compiler.lir.jtt.saraverify;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 
 import org.graalvm.compiler.core.common.LIRKind;
 import org.graalvm.compiler.core.test.GraalCompilerTest;
@@ -56,7 +57,7 @@ public class SaraVerifyTest extends GraalCompilerTest {
         System.out.println("\n== After Analysis; Before Verification ==");
         // printInstructions(instructions);
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.allocatable);
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>());
         System.out.println(analysisResult.getDuPairs());
     }
 

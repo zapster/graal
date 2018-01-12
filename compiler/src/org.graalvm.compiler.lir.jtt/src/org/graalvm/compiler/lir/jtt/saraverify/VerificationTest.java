@@ -8,10 +8,10 @@ import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v0;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v1;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v2;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v3;
-import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.allocatable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.graalvm.compiler.debug.GraalError;
@@ -53,8 +53,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(addOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), r1.asValue(), rbp.asValue()});
@@ -64,8 +64,8 @@ public class VerificationTest extends JTTTest {
         returnOp.savedRbp = rbp.asValue();
         returnOp.value = r2.asValue();
 
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -85,8 +85,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(addOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r1.asValue(), r0.asValue(), rbp.asValue()});
@@ -96,8 +96,8 @@ public class VerificationTest extends JTTTest {
         returnOp.savedRbp = rbp.asValue();
         returnOp.value = r2.asValue();
 
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -117,8 +117,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(addOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), r1.asValue(), rbp.asValue()});
@@ -128,8 +128,8 @@ public class VerificationTest extends JTTTest {
         returnOp.savedRbp = rbp.asValue();
         returnOp.value = r2.asValue();
 
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -149,8 +149,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(moveOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -159,8 +159,8 @@ public class VerificationTest extends JTTTest {
         returnOp.savedRbp = rbp.asValue();
         returnOp.value = r1.asValue();
 
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -180,8 +180,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(moveOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -190,8 +190,8 @@ public class VerificationTest extends JTTTest {
         returnOp.savedRbp = rbp.asValue();
         returnOp.value = r0.asValue();
 
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -211,8 +211,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(moveOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         TestMoveFromConst moveConstToReg = new TestMoveFromConst(r1.asValue(), JavaConstant.INT_1);
         instructions.add(2, moveConstToReg);
@@ -224,8 +224,8 @@ public class VerificationTest extends JTTTest {
         returnOp.savedRbp = rbp.asValue();
         returnOp.value = r0.asValue();
 
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -245,8 +245,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(moveOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         TestMoveFromConst moveConstToReg = new TestMoveFromConst(r1.asValue(), JavaConstant.INT_1);
         instructions.add(2, moveConstToReg);
@@ -258,8 +258,8 @@ public class VerificationTest extends JTTTest {
         returnOp.savedRbp = rbp.asValue();
         returnOp.value = r1.asValue();
 
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -281,8 +281,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(addOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -294,8 +294,8 @@ public class VerificationTest extends JTTTest {
         returnOp.savedRbp = rbp.asValue();
         returnOp.value = r1.asValue();
 
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -317,8 +317,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(addOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -330,8 +330,8 @@ public class VerificationTest extends JTTTest {
         returnOp.savedRbp = rbp.asValue();
         returnOp.value = r0.asValue();
 
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -353,8 +353,8 @@ public class VerificationTest extends JTTTest {
         instructions.add(addOp);
         instructions.add(returnOp);
 
-        AnalysisResult inputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -364,8 +364,8 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r1.asValue();
 
         thrown.expect(GraalError.class);
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
@@ -505,5 +505,9 @@ public class VerificationTest extends JTTTest {
         outputOperandUseCount.put(returnOp, 2);
 
         assertFalse(VerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+    }
+
+    private static AnalysisResult getAnalysisResult(DuSequenceAnalysis duSequenceAnalysis, List<LIRInstruction> instructions) {
+        return duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>());
     }
 }

@@ -1,6 +1,5 @@
 package org.graalvm.compiler.lir.jtt.saraverify;
 
-import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.allocatable;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r0;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r1;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r2;
@@ -26,9 +25,6 @@ import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.framemap.SimpleVirtualStackSlot;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
-import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinaryConsumerConst;
-import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestCondMove;
-import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromConst;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveToReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
@@ -290,51 +286,19 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
-    public void testDetermineDuPairsConditionalMove() {
-        ArrayList<LIRInstruction> instructions = new ArrayList<>();
-
-        LabelOp labelOp = new LabelOp(null, false);
-        labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
-        TestMoveFromReg moveFromRegOp = new TestMoveFromReg(v0, r0.asValue());
-        TestBinaryConsumerConst compareOp = new TestBinaryConsumerConst(v0, 11);
-        TestMoveFromConst moveFromConstOp = new TestMoveFromConst(v2, JavaConstant.forInt(10));
-        TestCondMove condMoveOp = new TestCondMove(v1, v2, new ConstantValue(ValueKind.Illegal, JavaConstant.forInt(5)));
-        TestMoveFromReg moveFromRegOp2 = new TestMoveFromReg(rax.asValue(), v1);
-        TestReturn returnOp = new TestReturn(rbp.asValue(), rax.asValue());
-
-        instructions.add(labelOp);
-        instructions.add(moveFromRegOp);
-        instructions.add(compareOp);
-        instructions.add(moveFromConstOp);
-        instructions.add(condMoveOp);
-        instructions.add(moveFromRegOp2);
-        instructions.add(returnOp);
-
-        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
-        List<DuSequenceWeb> duSequenceWebs = analysisResult.getDuSequenceWebs();
-        List<DuPair> duPairs = analysisResult.getDuPairs();
-        List<DuSequence> duSequences = analysisResult.getDuSequences();
-
-        throw GraalError.unimplemented();
-    }
-
-    @Test
     public void testMergeMaps0() {
-        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
         Map<Integer, List<Integer>> map1 = new HashMap<>();
         Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
         map.put(3, map1);
         map.put(5, map1);
 
-        Map<Integer, List<Integer>> mergedMap = duSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5}, null);
+        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5}, null);
 
         assertEquals(true, mergedMap.entrySet().stream().allMatch(entry -> entry.getValue().isEmpty()));
     }
 
     @Test
     public void testMergeMaps1() {
-        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
         List<Integer> list = Arrays.asList(8, 9);
 
         Map<Integer, List<Integer>> map1 = new HashMap<>();
@@ -343,7 +307,7 @@ public class DuSequenceAnalysisTest {
         map.put(3, map1);
         map.put(5, new HashMap<>());
 
-        Map<Integer, List<Integer>> mergedMap = duSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5}, null);
+        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5}, null);
 
         assertEquals(1, mergedMap.keySet().size());
 
@@ -354,8 +318,6 @@ public class DuSequenceAnalysisTest {
 
     @Test
     public void testMergeMaps2() {
-        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-
         Map<Integer, List<Integer>> map1 = new HashMap<>();
         Map<Integer, List<Integer>> map2 = new HashMap<>();
         map1.put(1, Arrays.asList(10));
@@ -369,7 +331,7 @@ public class DuSequenceAnalysisTest {
         Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
         map.put(1, map1);
         map.put(2, map2);
-        Map<Integer, List<Integer>> mergedMap = duSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2}, null);
+        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2}, null);
         assertEqualsList(Arrays.asList(10), mergedMap.get(1));
         assertEqualsList(Arrays.asList(11, 12, 15), mergedMap.get(2));
         assertEqualsList(Arrays.asList(13, 14), mergedMap.get(3));
@@ -572,7 +534,7 @@ public class DuSequenceAnalysisTest {
     private static void test(ArrayList<LIRInstruction> instructions, List<DuPair> expectedDuPairs, List<DuSequence> expectedDuSequences, List<DuSequenceWeb> expectedDuSequenceWebs) {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
 
-        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, allocatable);
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>());
         List<DuSequenceWeb> actualDuSequenceWebs = analysisResult.getDuSequenceWebs();
         List<DuPair> actualDuPairs = analysisResult.getDuPairs();
         List<DuSequence> actualDuSequences = analysisResult.getDuSequences();

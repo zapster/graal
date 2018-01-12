@@ -23,13 +23,18 @@
 
 package org.graalvm.compiler.lir.saraverify;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyDef;
 import org.graalvm.compiler.options.Option;
 import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionType;
 
+import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.TargetDescription;
 
 public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationContext> {
@@ -44,7 +49,8 @@ public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationCont
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult result = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getAllocatableRegisters());
+        Map<Register, DummyDef> dummyDefs = new HashMap<>();
+        AnalysisResult result = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), dummyDefs);
         context.contextAdd(result);
     }
 

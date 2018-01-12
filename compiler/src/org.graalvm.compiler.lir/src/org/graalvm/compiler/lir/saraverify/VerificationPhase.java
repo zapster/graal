@@ -1,6 +1,6 @@
 package org.graalvm.compiler.lir.saraverify;
 
-import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -13,7 +13,9 @@ import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyDef;
 
+import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.TargetDescription;
 
 public class VerificationPhase extends LIRPhase<AllocationContext> {
@@ -29,14 +31,16 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             return;
         }
 
-        ArrayList<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        Map<Register, DummyDef> inputDummyDefs = inputResult.getDummyDefs();
 
         LIR lir = lirGenRes.getLIR();
         DebugContext debugContext = lir.getDebug();
 
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getAllocatableRegisters());
-        ArrayList<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), inputDummyDefs);
+
+        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
         if (!verifyDataFlow(inputDuSequences, outputDuSequences, debugContext)) {
             throw GraalError.shouldNotReachHere(DuSequenceAnalysis.ERROR_MSG_PREFIX + "Data Flow not equal");
@@ -48,7 +52,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         }
     }
 
-    public boolean verifyDataFlow(ArrayList<DuSequence> inputDuSequences, ArrayList<DuSequence> outputDuSequences, DebugContext debugContext) {
+    public boolean verifyDataFlow(List<DuSequence> inputDuSequences, List<DuSequence> outputDuSequences, DebugContext debugContext) {
         if (inputDuSequences.size() != outputDuSequences.size()) {
             try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
                 debugContext.logAndIndent(3, "The numbers of du-sequences from the input and output do not match.");
