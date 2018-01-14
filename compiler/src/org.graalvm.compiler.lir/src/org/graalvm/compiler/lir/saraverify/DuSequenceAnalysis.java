@@ -205,21 +205,18 @@ public class DuSequenceAnalysis {
 
     private static void checkUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterAttributes[] registerAttributes, Map<Register, DummyDef> dummyDefs) {
         for (Value value : valUseInstructions.keySet()) {
-            if (LIRValueUtil.isJavaConstant(value)) {
-                // value is constant value
-                // TODO: primitive value
-            } else if (!ValueUtil.isRegister(value)) {
+            if (!ValueUtil.isRegister(value)) {
                 GraalError.shouldNotReachHere(ERROR_MSG_PREFIX + "Used value " + value + " is not defined.");
-            } else {
-                Register register = ValueUtil.asRegister(value);
-                if (registerAttributes[register.number].isAllocatable()) {
-                    GraalError.shouldNotReachHere(ERROR_MSG_PREFIX + "Used register " + register + " is not defined.");
-                }
-                // TODO: insert of dummy instruction for non-allocatable register
-                DummyDef dummyDef = dummyDefs.get(register);
-                if (dummyDef == null) {
-                    dummyDefs.put(register, new DummyDef(register.asValue()));
-                }
+            }
+
+            Register register = ValueUtil.asRegister(value);
+            if (registerAttributes[register.number].isAllocatable()) {
+                GraalError.shouldNotReachHere(ERROR_MSG_PREFIX + "Used register " + register + " is not defined.");
+            }
+
+            DummyDef dummyDef = dummyDefs.get(register);
+            if (dummyDef == null) {
+                dummyDefs.put(register, new DummyDef(register.asValue()));
             }
         }
     }
@@ -326,8 +323,7 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            // TODO: skip primitive constants and object[null]
-            if (ValueUtil.isIllegal(value) || flags.contains(OperandFlag.UNINITIALIZED)) {
+            if (ValueUtil.isIllegal(value) || flags.contains(OperandFlag.UNINITIALIZED) || LIRValueUtil.isJavaConstant(value)) {
                 // value is part of a composite value or is uninitialized
                 operandUsePosition++;
                 return;

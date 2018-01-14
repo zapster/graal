@@ -3,6 +3,7 @@ package org.graalvm.compiler.lir.jtt.saraverify;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r0;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r1;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r2;
+import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.r3;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.rax;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.rbp;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v0;
@@ -32,12 +33,14 @@ import org.graalvm.compiler.lir.saraverify.AnalysisResult;
 import org.graalvm.compiler.lir.saraverify.DuPair;
 import org.graalvm.compiler.lir.saraverify.DuSequence;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyDef;
 import org.graalvm.compiler.lir.saraverify.DuSequenceWeb;
 import org.graalvm.compiler.lir.saraverify.SARAVerifyValueComparator;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.StackSlot;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.Value;
@@ -339,6 +342,54 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
+    public void testNonAllocatableRegisters() {
+        ArrayList<LIRInstruction> instructions = new ArrayList<>();
+
+        LabelOp labelOp = new LabelOp(null, false);
+        labelOp.addIncomingValues(new Value[]{rbp.asValue()});
+        TestMoveFromReg moveFromReg = new TestMoveFromReg(r0.asValue(), r3.asValue());
+        TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
+
+        instructions.add(labelOp);
+        instructions.add(moveFromReg);
+        instructions.add(returnOp);
+
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>());
+        Map<Register, DummyDef> dummyDefs = analysisResult.getDummyDefs();
+        assertEquals(1, dummyDefs.size());
+        assertEquals(true, dummyDefs.containsKey(r3));
+
+        DuPair rbpDuPair = new DuPair(rbp.asValue(), labelOp, returnOp, 0, 0);
+        DuPair r0DuPair = new DuPair(r0.asValue(), moveFromReg, returnOp, 0, 1);
+        DuPair r3DuPair = new DuPair(r3.asValue(), dummyDefs.get(r3), moveFromReg, 0, 0);
+
+        List<DuPair> expectedDuPairs = new ArrayList<>();
+        expectedDuPairs.add(rbpDuPair);
+        expectedDuPairs.add(r0DuPair);
+        expectedDuPairs.add(r3DuPair);
+
+        DuSequence rbpDuSequence = new DuSequence(rbpDuPair);
+        DuSequence r0DuSequence = new DuSequence(r0DuPair);
+        r0DuSequence.addFirst(r3DuPair);
+
+        List<DuSequence> expectedDuSequences = new ArrayList<>();
+        expectedDuSequences.add(rbpDuSequence);
+        expectedDuSequences.add(r0DuSequence);
+
+        DuSequenceWeb rbpDuSequenceWeb = new DuSequenceWeb();
+        rbpDuSequenceWeb.add(rbpDuSequence);
+        DuSequenceWeb r0DuSequenceWeb = new DuSequenceWeb();
+        r0DuSequenceWeb.add(r0DuSequence);
+
+        List<DuSequenceWeb> expectedDuSequenceWebs = new ArrayList<>();
+        expectedDuSequenceWebs.add(rbpDuSequenceWeb);
+        expectedDuSequenceWebs.add(r0DuSequenceWeb);
+
+        test(analysisResult, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
+    }
+
+    @Test
     public void testDuPairEquals() {
         LabelOp labelOp = new LabelOp(null, true);
         TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
@@ -535,6 +586,10 @@ public class DuSequenceAnalysisTest {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
 
         AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>());
+        test(analysisResult, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
+    }
+
+    private static void test(AnalysisResult analysisResult, List<DuPair> expectedDuPairs, List<DuSequence> expectedDuSequences, List<DuSequenceWeb> expectedDuSequenceWebs) {
         List<DuSequenceWeb> actualDuSequenceWebs = analysisResult.getDuSequenceWebs();
         List<DuPair> actualDuPairs = analysisResult.getDuPairs();
         List<DuSequence> actualDuSequences = analysisResult.getDuSequences();
