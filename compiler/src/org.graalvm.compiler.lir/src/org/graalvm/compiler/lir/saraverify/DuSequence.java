@@ -2,85 +2,107 @@ package org.graalvm.compiler.lir.saraverify;
 
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.ListIterator;
 
 import jdk.vm.ci.meta.AllocatableValue;
 
 public class DuSequence {
 
-	private LinkedList<DuPair> duPairs;
+    private LinkedList<DuPair> duPairs;
 
-	public DuSequence(DuPair duPair) {
-		duPairs = new LinkedList<>();
-		duPairs.add(duPair);
-	}
+    public DuSequence(DuPair duPair) {
+        duPairs = new LinkedList<>();
+        duPairs.add(duPair);
+    }
 
-	public void addFirst(DuPair duPair) {
-		duPairs.addFirst(duPair);
-	}
+    public void addFirst(DuPair duPair) {
+        duPairs.addFirst(duPair);
+    }
 
-	public DuPair peekFirst() {
-		return duPairs.peekFirst();
-	}
+    public DuPair peekFirst() {
+        return duPairs.peekFirst();
+    }
 
-	public DuPair peekLast() {
-		return duPairs.peekLast();
-	}
+    public DuPair peekLast() {
+        return duPairs.peekLast();
+    }
 
-	@Override
-	public boolean equals(Object obj) {
-		if (!(obj instanceof DuSequence)) {
-			return false;
-		}
+    @Override
+    public String toString() {
+        String values = "\nValues:";
+        String instructions = "Def at pos ";
 
-		DuSequence duSequence = (DuSequence) obj;
-		if (duSequence.duPairs.size() != this.duPairs.size()) {
-			return false;
-		}
+        Iterator<DuPair> duPairsIterator = duPairs.iterator();
 
-		ListIterator<DuPair> duPairsIterator = this.duPairs.listIterator();
+        DuPair duPair = duPairsIterator.next();
+        AllocatableValue lastValue = duPair.getValue();
+        values = values + " " + lastValue;
+        instructions = instructions + duPair.getOperandDefPosition() + " in: " + duPair.getDefInstruction();
 
-		while (duPairsIterator.hasNext()) {
-			DuPair duPair1 = duSequence.duPairs.get(duPairsIterator.nextIndex());
-			DuPair duPair2 = duPairsIterator.next();
+        while (duPairsIterator.hasNext()) {
+            duPair = duPairsIterator.next();
 
-			if (!(duPair1.equals(duPair2))) {
-				return false;
-			}
-		}
+            lastValue = duPair.getValue();
+            values = values + " -> " + lastValue;
 
-		return true;
-	}
+            instructions = instructions + "\nCopy: " + duPair.getDefInstruction();
+        }
 
-	@Override
-	public String toString() {
-		String values = "\nValues:";
-		String instructions = "Def at pos ";
+        instructions = instructions + "\nUse at pos " + duPair.getOperandUsePosition() + " in: " + duPair.getUseInstruction();
 
-		Iterator<DuPair> duPairsIterator = duPairs.iterator();
+        return values + "\n" + instructions;
+    }
 
-		DuPair duPair = duPairsIterator.next();
-		AllocatableValue lastValue = duPair.getValue();
-		values = values + " " + lastValue;
-		instructions = instructions + duPair.getOperandDefPosition() + " in: " + duPair.getDefInstruction();
+    /**
+     * A DuSequence is equal to another one, if the following properties are equal:
+     * <ul>
+     * <li>The value that is defined in the first definition instruction.
+     * <li>The value that is used in the last use instruction.
+     * <li>The position of the defined value in the first definition.
+     * <li>The position of the used value in the last use.
+     * <li>The first definition instruction.
+     * <li>The last use instruction.
+     * </ul>
+     */
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof DuSequence)) {
+            return false;
+        }
 
-		while (duPairsIterator.hasNext()) {
-			duPair = duPairsIterator.next();
+        DuSequence duSequence = (DuSequence) obj;
 
-			lastValue = duPair.getValue();
-			values = values + " -> " + lastValue;
+        DuPair thisDefInst = this.peekFirst();
+        DuPair duSequenceDefInst = duSequence.peekFirst();
+        DuPair thisUseInst = this.peekLast();
+        DuPair duSequenceUseInst = duSequence.peekLast();
 
-			instructions = instructions + "\nCopy: " + duPair.getDefInstruction();
-		}
+        if (!(thisDefInst.getValue().equals(duSequenceDefInst.getValue()))) {
+            return false;
+        }
 
-		instructions = instructions + "\nUse at pos " + duPair.getOperandUsePosition() + " in: "
-				+ duPair.getUseInstruction();
+        if (!(thisUseInst.getValue().equals(duSequenceUseInst.getValue()))) {
+            return false;
+        }
 
-		return values + "\n" + instructions;
-	}
+        if (thisDefInst.getOperandDefPosition() != duSequenceDefInst.getOperandDefPosition() ||
+                        (thisUseInst.getOperandUsePosition() != duSequenceUseInst.getOperandUsePosition())) {
+            return false;
+        }
 
-	@Override
-	public int hashCode() {
-		return super.hashCode();
-	}
+        return (thisDefInst.getDefInstruction().equals(duSequenceDefInst.getDefInstruction())) &&
+                        (thisUseInst.getUseInstruction().equals(duSequenceUseInst.getUseInstruction()));
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 37;
+        int result = 0;
+        result = prime * result + peekFirst().getValue().hashCode();
+        result = prime * result + peekLast().getValue().hashCode();
+        result = prime * result + peekFirst().getOperandDefPosition();
+        result = prime * result + peekLast().getOperandUsePosition();
+        result = prime * result + System.identityHashCode(peekFirst().getDefInstruction());
+        result = prime * result + System.identityHashCode(peekLast().getUseInstruction());
+        return result;
+    }
 }

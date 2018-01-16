@@ -446,6 +446,21 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
+    public void testDuSequenceHashCode() {
+        LabelOp labelOp = new LabelOp(null, true);
+        TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
+        DuPair duPair = new DuPair(r0.asValue(), labelOp, returnOp, 0, 0);
+        DuSequence duSequence = new DuSequence(duPair);
+
+        DuPair duPair1 = new DuPair(r0.asValue(), labelOp, returnOp, 0, 0);
+        DuSequence duSequence1 = new DuSequence(duPair1);
+
+        assertEquals(duSequence.hashCode(), duSequence.hashCode());
+        assertEquals(duSequence1.hashCode(), duSequence1.hashCode());
+        assertEquals(duSequence.hashCode(), duSequence1.hashCode());
+    }
+
+    @Test
     public void testSARAVerifyValue() {
         SARAVerifyValueComparator comparator = new SARAVerifyValueComparator();
 
