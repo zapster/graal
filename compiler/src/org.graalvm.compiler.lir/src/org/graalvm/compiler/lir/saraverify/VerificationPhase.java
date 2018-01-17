@@ -1,8 +1,11 @@
 package org.graalvm.compiler.lir.saraverify;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugContext.Scope;
@@ -53,35 +56,53 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     }
 
     public boolean verifyDataFlow(List<DuSequence> inputDuSequences, List<DuSequence> outputDuSequences, DebugContext debugContext) {
-        if (inputDuSequences.size() != outputDuSequences.size()) {
-            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                debugContext.logAndIndent(3, "The numbers of du-sequences from the input and output do not match.");
-            }
-            return false;
+        List<DuSequence> matchedOutputDuSequences = new ArrayList<>();
+        List<DuSequence> unmatchedInputDuSequences = new ArrayList<>();
+        List<DuSequence> distinctInputDuSequences = inputDuSequences.stream().distinct().collect(Collectors.toList());
+        List<DuSequence> distinctOutputDuSequences = outputDuSequences.stream().distinct().collect(Collectors.toList());
+
+        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            debugContext.log(3, "Number of distinct input Du-Sequences: " + distinctInputDuSequences.size() + " | Number of distinct output Du-Sequences: " + distinctOutputDuSequences.size());
         }
 
-        assert inputDuSequences.stream().distinct().count() == outputDuSequences.stream().distinct().count();
-
-        for (DuSequence inputDuSequence : inputDuSequences) {
+        for (DuSequence inputDuSequence : distinctInputDuSequences) {
             LIRInstruction inputDefInstruction = inputDuSequence.peekFirst().getDefInstruction();
             LIRInstruction inputUseInstruction = inputDuSequence.peekLast().getUseInstruction();
             int inputOperandDefPosition = inputDuSequence.peekFirst().getOperandDefPosition();
             int inputOperandUsePosition = inputDuSequence.peekLast().getOperandUsePosition();
 
-            boolean match = outputDuSequences.stream().anyMatch(duSequence -> duSequence.peekFirst().getOperandDefPosition() == inputOperandDefPosition &&
+            Optional<DuSequence> match = distinctOutputDuSequences.stream().filter(duSequence -> duSequence.peekFirst().getOperandDefPosition() == inputOperandDefPosition &&
                             duSequence.peekLast().getOperandUsePosition() == inputOperandUsePosition &&
                             duSequence.peekFirst().getDefInstruction().equals(inputDefInstruction) &&
-                            duSequence.peekLast().getUseInstruction().equals(inputUseInstruction));
+                            duSequence.peekLast().getUseInstruction().equals(inputUseInstruction) &&
+                            !matchedOutputDuSequences.contains(duSequence)).findAny();
 
-            if (!match) {
-                try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                    debugContext.logAndIndent(3, "Input Sequence with wrong or missing output sequence: " + inputDuSequence);
-                }
-                return false;
+            if (match.isPresent()) {
+                matchedOutputDuSequences.add(match.get());
+            } else {
+                unmatchedInputDuSequences.add(inputDuSequence);
             }
         }
 
-        return true;
+        List<DuSequence> unmatchedOutputDuSequences = distinctOutputDuSequences.stream().filter(duSequence -> !matchedOutputDuSequences.contains(duSequence)).collect(Collectors.toList());
+
+        // log unmatched input du-sequences
+        if (unmatchedInputDuSequences.size() > 0) {
+            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+                debugContext.log(3, "Unmatched input du-sequences: ");
+                unmatchedInputDuSequences.stream().forEach(duSequence -> debugContext.log(3, duSequence.toString()));
+            }
+        }
+
+        // log unmatched output du-sequences
+        if (unmatchedOutputDuSequences.size() > 0) {
+            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+                debugContext.log(3, "Unmatched output du-sequences: ");
+                unmatchedOutputDuSequences.stream().forEach(duSequence -> debugContext.log(3, duSequence.toString()));
+            }
+        }
+
+        return unmatchedOutputDuSequences.size() == 0 ? true : false;
     }
 
     public static boolean verifyOperandCount(Map<LIRInstruction, Integer> inputInstructionDefOperandCount,
@@ -107,4 +128,5 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         return true;
     }
+
 }

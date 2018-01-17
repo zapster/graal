@@ -1,4 +1,5 @@
 # com.oracle.truffle.sl.test.SLFactorialTest
 com.oracle.truffle.*
+org.graalvm.compiler.jtt.bytecode.BC_multianewarray03
 
 
