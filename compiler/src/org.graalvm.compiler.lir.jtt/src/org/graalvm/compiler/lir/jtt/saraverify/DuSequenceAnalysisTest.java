@@ -26,6 +26,7 @@ import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.framemap.SimpleVirtualStackSlot;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
+import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromConst;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveToReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
@@ -33,7 +34,8 @@ import org.graalvm.compiler.lir.saraverify.AnalysisResult;
 import org.graalvm.compiler.lir.saraverify.DuPair;
 import org.graalvm.compiler.lir.saraverify.DuSequence;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
-import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 import org.graalvm.compiler.lir.saraverify.DuSequenceWeb;
 import org.graalvm.compiler.lir.saraverify.SARAVerifyValueComparator;
 import org.junit.Rule;
@@ -42,6 +44,7 @@ import org.junit.rules.ExpectedException;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.StackSlot;
+import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
@@ -289,6 +292,101 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
+    public void testDetermineDuPairsConstants() {
+        List<LIRInstruction> instructions = new ArrayList<>();
+
+        LabelOp labelOp = new LabelOp(null, false);
+        labelOp.addIncomingValues(new Value[]{rbp.asValue()});
+        TestMoveFromConst testMoveFromConst = new TestMoveFromConst(v0, JavaConstant.INT_0);
+        TestReturn returnOp = new TestReturn(rbp.asValue(), v0);
+
+        instructions.add(labelOp);
+        instructions.add(testMoveFromConst);
+        instructions.add(returnOp);
+
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+        Map<Register, DummyRegDef> dummyRegDefs = new HashMap<>();
+        Map<Constant, DummyConstDef> dummyConstDefs = new HashMap<>();
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), dummyRegDefs, dummyConstDefs);
+
+        DuPair rbpDuPair = new DuPair(rbp.asValue(), labelOp, returnOp, 0, 0);
+        DuPair v0DuPair = new DuPair(v0, testMoveFromConst, returnOp, 0, 1);
+        DuPair constDuPair = new DuPair(dummyConstDefs.get(JavaConstant.INT_0).getValue(), dummyConstDefs.get(JavaConstant.INT_0), testMoveFromConst, 0, 0);
+
+        List<DuPair> expectedDuPairs = new ArrayList<>();
+        expectedDuPairs.add(rbpDuPair);
+        expectedDuPairs.add(v0DuPair);
+        expectedDuPairs.add(constDuPair);
+
+        DuSequence rbpDuSequence = new DuSequence(rbpDuPair);
+        DuSequence constDuSequence = new DuSequence(v0DuPair);
+        constDuSequence.addFirst(constDuPair);
+
+        List<DuSequence> expectedDuSequences = new ArrayList<>();
+        expectedDuSequences.add(rbpDuSequence);
+        expectedDuSequences.add(constDuSequence);
+
+        DuSequenceWeb rbpDuSequenceWeb = new DuSequenceWeb();
+        rbpDuSequenceWeb.add(rbpDuSequence);
+        DuSequenceWeb constDuSequenceWeb = new DuSequenceWeb();
+        constDuSequenceWeb.add(constDuSequence);
+
+        List<DuSequenceWeb> expectedDuSequenceWebs = new ArrayList<>();
+        expectedDuSequenceWebs.add(rbpDuSequenceWeb);
+        expectedDuSequenceWebs.add(constDuSequenceWeb);
+
+        test(analysisResult, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
+    }
+
+    @Test
+    public void testDetermineDuPairsNonAllocatableRegisters() {
+        ArrayList<LIRInstruction> instructions = new ArrayList<>();
+
+        LabelOp labelOp = new LabelOp(null, false);
+        labelOp.addIncomingValues(new Value[]{rbp.asValue()});
+        TestMoveFromReg moveFromReg = new TestMoveFromReg(r0.asValue(), r3.asValue());
+        TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
+
+        instructions.add(labelOp);
+        instructions.add(moveFromReg);
+        instructions.add(returnOp);
+
+        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>(), new HashMap<>());
+        Map<Register, DummyRegDef> dummyDefs = analysisResult.getDummyRegDefs();
+        assertEquals(1, dummyDefs.size());
+        assertEquals(true, dummyDefs.containsKey(r3));
+
+        DuPair rbpDuPair = new DuPair(rbp.asValue(), labelOp, returnOp, 0, 0);
+        DuPair r0DuPair = new DuPair(r0.asValue(), moveFromReg, returnOp, 0, 1);
+        DuPair r3DuPair = new DuPair(r3.asValue(), dummyDefs.get(r3), moveFromReg, 0, 0);
+
+        List<DuPair> expectedDuPairs = new ArrayList<>();
+        expectedDuPairs.add(rbpDuPair);
+        expectedDuPairs.add(r0DuPair);
+        expectedDuPairs.add(r3DuPair);
+
+        DuSequence rbpDuSequence = new DuSequence(rbpDuPair);
+        DuSequence r0DuSequence = new DuSequence(r0DuPair);
+        r0DuSequence.addFirst(r3DuPair);
+
+        List<DuSequence> expectedDuSequences = new ArrayList<>();
+        expectedDuSequences.add(rbpDuSequence);
+        expectedDuSequences.add(r0DuSequence);
+
+        DuSequenceWeb rbpDuSequenceWeb = new DuSequenceWeb();
+        rbpDuSequenceWeb.add(rbpDuSequence);
+        DuSequenceWeb r0DuSequenceWeb = new DuSequenceWeb();
+        r0DuSequenceWeb.add(r0DuSequence);
+
+        List<DuSequenceWeb> expectedDuSequenceWebs = new ArrayList<>();
+        expectedDuSequenceWebs.add(rbpDuSequenceWeb);
+        expectedDuSequenceWebs.add(r0DuSequenceWeb);
+
+        test(analysisResult, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
+    }
+
+    @Test
     public void testMergeMaps0() {
         Map<Integer, List<Integer>> map1 = new HashMap<>();
         Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
@@ -339,54 +437,6 @@ public class DuSequenceAnalysisTest {
         assertEqualsList(Arrays.asList(11, 12, 15), mergedMap.get(2));
         assertEqualsList(Arrays.asList(13, 14), mergedMap.get(3));
         assertEqualsList(Arrays.asList(16, 17, 18), mergedMap.get(4));
-    }
-
-    @Test
-    public void testNonAllocatableRegisters() {
-        ArrayList<LIRInstruction> instructions = new ArrayList<>();
-
-        LabelOp labelOp = new LabelOp(null, false);
-        labelOp.addIncomingValues(new Value[]{rbp.asValue()});
-        TestMoveFromReg moveFromReg = new TestMoveFromReg(r0.asValue(), r3.asValue());
-        TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
-
-        instructions.add(labelOp);
-        instructions.add(moveFromReg);
-        instructions.add(returnOp);
-
-        DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>());
-        Map<Register, DummyDef> dummyDefs = analysisResult.getDummyDefs();
-        assertEquals(1, dummyDefs.size());
-        assertEquals(true, dummyDefs.containsKey(r3));
-
-        DuPair rbpDuPair = new DuPair(rbp.asValue(), labelOp, returnOp, 0, 0);
-        DuPair r0DuPair = new DuPair(r0.asValue(), moveFromReg, returnOp, 0, 1);
-        DuPair r3DuPair = new DuPair(r3.asValue(), dummyDefs.get(r3), moveFromReg, 0, 0);
-
-        List<DuPair> expectedDuPairs = new ArrayList<>();
-        expectedDuPairs.add(rbpDuPair);
-        expectedDuPairs.add(r0DuPair);
-        expectedDuPairs.add(r3DuPair);
-
-        DuSequence rbpDuSequence = new DuSequence(rbpDuPair);
-        DuSequence r0DuSequence = new DuSequence(r0DuPair);
-        r0DuSequence.addFirst(r3DuPair);
-
-        List<DuSequence> expectedDuSequences = new ArrayList<>();
-        expectedDuSequences.add(rbpDuSequence);
-        expectedDuSequences.add(r0DuSequence);
-
-        DuSequenceWeb rbpDuSequenceWeb = new DuSequenceWeb();
-        rbpDuSequenceWeb.add(rbpDuSequence);
-        DuSequenceWeb r0DuSequenceWeb = new DuSequenceWeb();
-        r0DuSequenceWeb.add(r0DuSequence);
-
-        List<DuSequenceWeb> expectedDuSequenceWebs = new ArrayList<>();
-        expectedDuSequenceWebs.add(rbpDuSequenceWeb);
-        expectedDuSequenceWebs.add(r0DuSequenceWeb);
-
-        test(analysisResult, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
     }
 
     @Test
@@ -600,7 +650,7 @@ public class DuSequenceAnalysisTest {
     private static void test(ArrayList<LIRInstruction> instructions, List<DuPair> expectedDuPairs, List<DuSequence> expectedDuSequences, List<DuSequenceWeb> expectedDuSequenceWebs) {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
 
-        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>());
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>(), new HashMap<>());
         test(analysisResult, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
     }
 

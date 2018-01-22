@@ -4,9 +4,11 @@ import java.util.List;
 import java.util.Map;
 
 import org.graalvm.compiler.lir.LIRInstruction;
-import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 
 import jdk.vm.ci.code.Register;
+import jdk.vm.ci.meta.Constant;
 
 public class AnalysisResult {
 
@@ -17,16 +19,18 @@ public class AnalysisResult {
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
 
-    private Map<Register, DummyDef> dummyDefs;
+    private Map<Register, DummyRegDef> dummyRegDefs;
+    private Map<Constant, DummyConstDef> dummyConstDefs;
 
     public AnalysisResult(List<DuPair> duPairs, List<DuSequence> duSequences, List<DuSequenceWeb> duSequenceWebs, Map<LIRInstruction, Integer> instructionDefOperandCount,
-                    Map<LIRInstruction, Integer> instructionUseOperandCount, Map<Register, DummyDef> dummyDefs) {
+                    Map<LIRInstruction, Integer> instructionUseOperandCount, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
         this.duPairs = duPairs;
         this.duSequences = duSequences;
         this.duSequenceWebs = duSequenceWebs;
         this.instructionDefOperandCount = instructionDefOperandCount;
         this.instructionUseOperandCount = instructionUseOperandCount;
-        this.dummyDefs = dummyDefs;
+        this.dummyRegDefs = dummyRegDefs;
+        this.dummyConstDefs = dummyConstDefs;
     }
 
     public List<DuPair> getDuPairs() {
@@ -49,7 +53,11 @@ public class AnalysisResult {
         return instructionUseOperandCount;
     }
 
-    public Map<Register, DummyDef> getDummyDefs() {
-        return dummyDefs;
+    public Map<Register, DummyRegDef> getDummyRegDefs() {
+        return dummyRegDefs;
+    }
+
+    public Map<Constant, DummyConstDef> getDummyConstDefs() {
+        return dummyConstDefs;
     }
 }

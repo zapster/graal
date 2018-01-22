@@ -508,6 +508,6 @@ public class VerificationTest extends JTTTest {
     }
 
     private static AnalysisResult getAnalysisResult(DuSequenceAnalysis duSequenceAnalysis, List<LIRInstruction> instructions) {
-        return duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>());
+        return duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>(), new HashMap<>());
     }
 }

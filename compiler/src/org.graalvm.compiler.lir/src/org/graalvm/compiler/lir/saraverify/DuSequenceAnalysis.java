@@ -20,6 +20,7 @@ import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.debug.Indent;
+import org.graalvm.compiler.lir.ConstantValue;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -27,22 +28,47 @@ import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.LIRInstructionClass;
 import org.graalvm.compiler.lir.LIRValueUtil;
+import org.graalvm.compiler.lir.StandardOp.JumpOp;
+import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
+import org.graalvm.compiler.lir.ssa.SSAUtil;
+import org.graalvm.compiler.lir.ssa.SSAUtil.PhiValueVisitor;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.RegisterAttributes;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
+import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.Value;
+import jdk.vm.ci.meta.ValueKind;
 
 public class DuSequenceAnalysis {
 
-    public static class DummyDef extends LIRInstruction {
-        public static final LIRInstructionClass<DummyDef> TYPE = LIRInstructionClass.create(DummyDef.class);
+    public static class DummyConstDef extends LIRInstruction {
+        public static final LIRInstructionClass<DummyConstDef> TYPE = LIRInstructionClass.create(DummyConstDef.class);
+        protected ConstantValue value;
+
+        public DummyConstDef(ConstantValue value) {
+            super(TYPE);
+            this.value = value;
+        }
+
+        public ConstantValue getValue() {
+            return value;
+        }
+
+        @Override
+        public void emitCode(CompilationResultBuilder crb) {
+        }
+
+    }
+
+    public static class DummyRegDef extends LIRInstruction {
+        public static final LIRInstructionClass<DummyRegDef> TYPE = LIRInstructionClass.create(DummyRegDef.class);
         @Def({REG}) protected AllocatableValue value;
 
-        public DummyDef(AllocatableValue value) {
+        public DummyRegDef(AllocatableValue value) {
             super(TYPE);
             this.value = value;
         }
@@ -85,7 +111,8 @@ public class DuSequenceAnalysis {
         }
     }
 
-    public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes, RegisterAttributes[] registerAttributes, Map<Register, DummyDef> dummyDefs) {
+    public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
+                    Map<Constant, DummyConstDef> dummyConstDefs) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
         BitSet blockQueue = new BitSet(blocks.length);
@@ -126,31 +153,33 @@ public class DuSequenceAnalysis {
             Map<Value, List<ValUsage>> valUseInstructions = mergeMaps(blockValUseInstructions, block.getSuccessors(), saraVerifyValueComparator);
             blockValUseInstructions.put(block, valUseInstructions);
 
-            determineDuSequenceWebs(instructions, valUseInstructions);
+            determineDuSequenceWebs(lir, block, instructions, valUseInstructions, dummyConstDefs);
         }
         assert visitedBlocks.length() == visitedBlocks.cardinality() && visitedBlocks.cardinality() == blocks.length && visitedBlocks.stream().allMatch(id -> id < blocks.length);
 
         // analysis of dummy instructions
-        analyseUndefinedValues(blockValUseInstructions.get(blocks[0]), registerAttributes, dummyDefs);
+        analyseUndefinedValues(blockValUseInstructions.get(blocks[0]), registerAttributes, dummyRegDefs, dummyConstDefs);
 
-        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount, dummyDefs);
+        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
     }
 
-    public AnalysisResult determineDuSequenceWebs(List<LIRInstruction> instructions, RegisterAttributes[] registerAttributes, Map<Register, DummyDef> dummyDefs) {
+    public AnalysisResult determineDuSequenceWebs(List<LIRInstruction> instructions, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
+                    Map<Constant, DummyConstDef> dummyConstDefs) {
         initializeCollections();
 
         // analysis of given instructions
         Map<Value, List<ValUsage>> valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
-        determineDuSequenceWebs(instructions, valUseInstructions);
+        determineDuSequenceWebs(null, null, instructions, valUseInstructions, dummyConstDefs);
 
         // analysis of dummy instructions
-        analyseUndefinedValues(valUseInstructions, registerAttributes, dummyDefs);
+        analyseUndefinedValues(valUseInstructions, registerAttributes, dummyRegDefs, dummyConstDefs);
 
-        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount, dummyDefs);
+        return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
     }
 
-    private void determineDuSequenceWebs(List<LIRInstruction> instructions, Map<Value, List<ValUsage>> valUseInstructions) {
-        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions);
+    private void determineDuSequenceWebs(LIR lir, AbstractBlockBase<?> block, List<LIRInstruction> instructions, Map<Value, List<ValUsage>> valUseInstructions,
+                    Map<Constant, DummyConstDef> dummyConstDefs) {
+        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions, dummyConstDefs);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(valUseInstructions);
 
         List<LIRInstruction> reverseInstructions = new ArrayList<>(instructions);
@@ -159,6 +188,21 @@ public class DuSequenceAnalysis {
         for (LIRInstruction inst : reverseInstructions) {
             operandDefPosition = 0;
             operandUsePosition = 0;
+
+            if (inst instanceof JumpOp) {
+                PhiValueVisitor visitor = new PhiValueVisitor() {
+
+                    @Override
+                    public void visit(Value phiIn, Value phiOut) {
+                        // TODO Auto-generated method stub
+                        System.out.println("Visit Phi-Value: in: " + phiIn + " out: " + phiOut);
+                    }
+                };
+
+                if (((JumpOp) inst).getPhiSize() > 0) {
+                    SSAUtil.forEachPhiValuePair(lir, block.getSuccessors()[0], block, visitor);
+                }
+            }
 
             visitValues(inst, defConsumer, useConsumer, useConsumer);
 
@@ -197,13 +241,16 @@ public class DuSequenceAnalysis {
         return mergedMap;
     }
 
-    private void analyseUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterAttributes[] registerAttributes, Map<Register, DummyDef> dummyDefs) {
-        checkUndefinedValues(valUseInstructions, registerAttributes, dummyDefs);
-        List<LIRInstruction> dummyDefsList = dummyDefs.values().stream().collect(Collectors.toList());
-        determineDuSequenceWebs(dummyDefsList, valUseInstructions);
+    private void analyseUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
+                    Map<Constant, DummyConstDef> dummyConstDefs) {
+        checkUndefinedValues(valUseInstructions, registerAttributes, dummyRegDefs);
+        List<LIRInstruction> dummyRegDefsList = dummyRegDefs.values().stream().collect(Collectors.toList());
+        determineDuSequenceWebs(null, null, dummyRegDefsList, valUseInstructions, dummyConstDefs);
+        assert valUseInstructions.isEmpty();
     }
 
-    private static void checkUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterAttributes[] registerAttributes, Map<Register, DummyDef> dummyDefs) {
+    private static void checkUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs) {
+
         for (Value value : valUseInstructions.keySet()) {
             if (!ValueUtil.isRegister(value)) {
                 GraalError.shouldNotReachHere(ERROR_MSG_PREFIX + "Used value " + value + " is not defined.");
@@ -214,18 +261,23 @@ public class DuSequenceAnalysis {
                 GraalError.shouldNotReachHere(ERROR_MSG_PREFIX + "Used register " + register + " is not defined.");
             }
 
-            DummyDef dummyDef = dummyDefs.get(register);
+            DummyRegDef dummyDef = dummyRegDefs.get(register);
             if (dummyDef == null) {
-                dummyDefs.put(register, new DummyDef(register.asValue()));
+                dummyRegDefs.put(register, new DummyRegDef(register.asValue()));
             }
         }
     }
 
     private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,
                     InstructionValueConsumer useConsumer, InstructionValueConsumer aliveConsumer) {
+        instruction.visitEachAlive(aliveConsumer);
+        // TODO: instruction.forEachState(proc); alive
+
+        // TODO: instruction.visitEachTemp(proc);
+        // TODO: instruction.destroysCallerSavedRegisters()
+        // TODO: for each caller saved register a dummy def
         instruction.visitEachOutput(defConsumer);
         instruction.visitEachInput(useConsumer);
-        instruction.visitEachAlive(aliveConsumer);
     }
 
     class ValUsage {
@@ -264,8 +316,11 @@ public class DuSequenceAnalysis {
 
         private Map<Value, List<ValUsage>> valUseInstructions;
 
-        public DefInstructionValueConsumer(Map<Value, List<ValUsage>> valUseInstructions) {
+        private Map<Constant, DummyConstDef> dummyConstDefs;
+
+        public DefInstructionValueConsumer(Map<Value, List<ValUsage>> valUseInstructions, Map<Constant, DummyConstDef> dummyConstDefs) {
             this.valUseInstructions = valUseInstructions;
+            this.dummyConstDefs = dummyConstDefs;
         }
 
         @Override
@@ -300,6 +355,22 @@ public class DuSequenceAnalysis {
                     duSequences.add(duSequence);
                     duSequenceWeb.add(duSequence);
                 }
+
+                // const move
+                if (instruction.isLoadConstantOp()) {
+                    // TODO: constant move op
+                    Constant constant = ((LoadConstantOp) instruction).getConstant();
+
+                    DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
+                    if (dummyConstDef == null) {
+                        dummyConstDef = new DummyConstDef(new ConstantValue(ValueKind.Illegal, constant));
+                        dummyConstDefs.put(constant, dummyConstDef);
+                    }
+
+                    DuPair duPairConstMove = new DuPair(dummyConstDef.getValue(), dummyConstDef, instruction, 0, 0);
+                    duPairs.add(duPairConstMove);
+                    duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(instruction)).forEach(x -> x.addFirst(duPairConstMove));
+                }
             }
 
             if (duSequenceWeb.size() > 0) {
@@ -323,8 +394,8 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            if (ValueUtil.isIllegal(value) || flags.contains(OperandFlag.UNINITIALIZED) || LIRValueUtil.isJavaConstant(value)) {
-                // value is part of a composite value or is uninitialized
+            if (ValueUtil.isIllegal(value) || flags.contains(OperandFlag.UNINITIALIZED) || LIRValueUtil.isConstantValue(value)) {
+                // value is part of a composite value, uninitialized or a constant
                 operandUsePosition++;
                 return;
             }

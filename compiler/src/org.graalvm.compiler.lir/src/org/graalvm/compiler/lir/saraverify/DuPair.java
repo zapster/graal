@@ -2,17 +2,17 @@ package org.graalvm.compiler.lir.saraverify;
 
 import org.graalvm.compiler.lir.LIRInstruction;
 
-import jdk.vm.ci.meta.AllocatableValue;
+import jdk.vm.ci.meta.Value;
 
 public class DuPair {
 
-    private AllocatableValue value;
+    private Value value;
     private LIRInstruction defInstruction;
     private LIRInstruction useInstruction;
     private int operandDefPosition;
     private int operandUsePosition;
 
-    public DuPair(AllocatableValue value, LIRInstruction defInstruction, LIRInstruction useInstruction, int operandDefPosition, int operandUsePosition) {
+    public DuPair(Value value, LIRInstruction defInstruction, LIRInstruction useInstruction, int operandDefPosition, int operandUsePosition) {
         this.value = value;
         this.defInstruction = defInstruction;
         this.useInstruction = useInstruction;
@@ -20,7 +20,7 @@ public class DuPair {
         this.operandUsePosition = operandUsePosition;
     }
 
-    public AllocatableValue getValue() {
+    public Value getValue() {
         return value;
     }
 

@@ -16,10 +16,12 @@ import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
-import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.TargetDescription;
+import jdk.vm.ci.meta.Constant;
 
 public class VerificationPhase extends LIRPhase<AllocationContext> {
 
@@ -35,13 +37,15 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         }
 
         List<DuSequence> inputDuSequences = inputResult.getDuSequences();
-        Map<Register, DummyDef> inputDummyDefs = inputResult.getDummyDefs();
+        Map<Register, DummyRegDef> inputDummyRegDefs = inputResult.getDummyRegDefs();
+        Map<Constant, DummyConstDef> inputDummyConstDefs = inputResult.getDummyConstDefs();
 
         LIR lir = lirGenRes.getLIR();
         DebugContext debugContext = lir.getDebug();
 
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), inputDummyDefs);
+        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), inputDummyRegDefs,
+                        inputDummyConstDefs);
 
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
@@ -102,7 +106,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             }
         }
 
-        return unmatchedOutputDuSequences.size() == 0 ? true : false;
+        return (unmatchedOutputDuSequences.size() == 0 && unmatchedInputDuSequences.size() == 0) ? true : false;
     }
 
     public static boolean verifyOperandCount(Map<LIRInstruction, Integer> inputInstructionDefOperandCount,

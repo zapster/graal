@@ -57,7 +57,7 @@ public class SaraVerifyTest extends GraalCompilerTest {
         System.out.println("\n== After Analysis; Before Verification ==");
         // printInstructions(instructions);
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>());
+        AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>(), new HashMap<>());
         System.out.println(analysisResult.getDuPairs());
     }
 

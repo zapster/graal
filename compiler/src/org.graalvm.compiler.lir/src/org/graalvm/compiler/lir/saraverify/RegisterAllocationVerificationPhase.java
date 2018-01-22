@@ -29,13 +29,15 @@ import java.util.Map;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
-import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 import org.graalvm.compiler.options.Option;
 import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionType;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.TargetDescription;
+import jdk.vm.ci.meta.Constant;
 
 public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationContext> {
 
@@ -49,8 +51,9 @@ public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationCont
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        Map<Register, DummyDef> dummyDefs = new HashMap<>();
-        AnalysisResult result = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), dummyDefs);
+        Map<Register, DummyRegDef> dummyRegDefs = new HashMap<>();
+        Map<Constant, DummyConstDef> dummyConstDefs = new HashMap<>();
+        AnalysisResult result = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), dummyRegDefs, dummyConstDefs);
         context.contextAdd(result);
     }
 

@@ -3,7 +3,7 @@ package org.graalvm.compiler.lir.saraverify;
 import java.util.Iterator;
 import java.util.LinkedList;
 
-import jdk.vm.ci.meta.AllocatableValue;
+import jdk.vm.ci.meta.Value;
 
 public class DuSequence {
 
@@ -34,7 +34,7 @@ public class DuSequence {
         Iterator<DuPair> duPairsIterator = duPairs.iterator();
 
         DuPair duPair = duPairsIterator.next();
-        AllocatableValue lastValue = duPair.getValue();
+        Value lastValue = duPair.getValue();
         values = values + " " + lastValue;
         instructions = instructions + duPair.getOperandDefPosition() + " in: " + duPair.getDefInstruction();
 
