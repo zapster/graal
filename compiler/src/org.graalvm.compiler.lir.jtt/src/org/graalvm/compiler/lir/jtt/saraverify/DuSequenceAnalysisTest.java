@@ -308,6 +308,7 @@ public class DuSequenceAnalysisTest {
         Map<Register, DummyRegDef> dummyRegDefs = new HashMap<>();
         Map<Constant, DummyConstDef> dummyConstDefs = new HashMap<>();
         AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), dummyRegDefs, dummyConstDefs);
+        assertEquals(true, dummyRegDefs.isEmpty());
 
         DuPair rbpDuPair = new DuPair(rbp.asValue(), labelOp, returnOp, 0, 0);
         DuPair v0DuPair = new DuPair(v0, testMoveFromConst, returnOp, 0, 1);
