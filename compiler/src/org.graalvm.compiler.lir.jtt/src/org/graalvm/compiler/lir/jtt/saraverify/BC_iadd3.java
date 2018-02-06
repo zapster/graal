@@ -39,7 +39,7 @@ public class BC_iadd3 extends InjectorTest {
     @Override
     public Injector getInjectorPhase() {
         Injector injector = new Injector();
-        return injector.new InjectorCopy();
+        return injector.new CopyInjector();
     }
 
     public static int test(short a, short b) {
