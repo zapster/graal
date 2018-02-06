@@ -13,6 +13,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -29,6 +30,7 @@ import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.LIRInstructionClass;
 import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.StandardOp.JumpOp;
+import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
@@ -179,7 +181,7 @@ public class DuSequenceAnalysis {
 
     private void determineDuSequenceWebs(LIR lir, AbstractBlockBase<?> block, List<LIRInstruction> instructions, Map<Value, List<ValUsage>> valUseInstructions,
                     Map<Constant, DummyConstDef> dummyConstDefs) {
-        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions, dummyConstDefs);
+        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(valUseInstructions);
 
         List<LIRInstruction> reverseInstructions = new ArrayList<>(instructions);
@@ -189,25 +191,83 @@ public class DuSequenceAnalysis {
             operandDefPosition = 0;
             operandUsePosition = 0;
 
+            // phi
             if (inst instanceof JumpOp) {
+                JumpOp jumpInst = (JumpOp) inst;
+
                 PhiValueVisitor visitor = new PhiValueVisitor() {
 
                     @Override
                     public void visit(Value phiIn, Value phiOut) {
-                        // TODO Auto-generated method stub
-                        System.out.println("Visit Phi-Value: in: " + phiIn + " out: " + phiOut);
+                        // TODO: Demo
+                        LIRInstruction targetLabelInst = lir.getLIRforBlock(jumpInst.destination().getTargetBlock()).get(0);
+                        DuPair duPair = new DuPair(phiOut, inst, targetLabelInst, 0, 0);
+                        duPairs.add(duPair);
+
+                        List<DuSequence> constJumpDuSequences = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(duPair.getUseInstruction())).collect(
+                                        Collectors.toList());
+                        // constJumpDuSequences.stream().forEach(x -> x.addFirst(duPair));
+                        DuSequence constJumpDuSequence = null;
+                        if (constJumpDuSequences.size() > 0) {
+                            constJumpDuSequence = constJumpDuSequences.get(0);
+                            constJumpDuSequence.addFirst(duPair);
+                        }
+
+                        Constant constant = ((ConstantValue) phiOut).getConstant();
+                        DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
+                        if (dummyConstDef == null) {
+                            dummyConstDef = new DummyConstDef(new ConstantValue(ValueKind.Illegal, constant));
+                            dummyConstDefs.put(constant, dummyConstDef);
+                        }
+
+                        DuPair constJumpDuPair = new DuPair(dummyConstDef.getValue(), dummyConstDef, inst, 0, 0);
+                        duPairs.add(constJumpDuPair);
+                        // constJumpDuSequences.stream().forEach(x -> x.addFirst(constJumpDuPair));
+                        if (constJumpDuSequence != null) {
+                            constJumpDuSequence.addFirst(constJumpDuPair);
+                        }
                     }
                 };
 
-                if (((JumpOp) inst).getPhiSize() > 0) {
+                if (jumpInst.getPhiSize() > 0) {
                     SSAUtil.forEachPhiValuePair(lir, block.getSuccessors()[0], block, visitor);
                 }
             }
-
             visitValues(inst, defConsumer, useConsumer, useConsumer);
 
             instructionDefOperandCount.put(inst, operandDefPosition);
             instructionUseOperandCount.put(inst, operandUsePosition);
+
+            if (inst.isLoadConstantOp()) {
+                // insert du-pair from dummy constant instruction to current instruction
+                Constant constant = ((LoadConstantOp) inst).getConstant();
+
+                DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
+                if (dummyConstDef == null) {
+                    dummyConstDef = new DummyConstDef(new ConstantValue(ValueKind.Illegal, constant));
+                    dummyConstDefs.put(constant, dummyConstDef);
+                }
+
+                ConstantValue constantValue = dummyConstDef.getValue();
+                DuPair duPairConstMove = new DuPair(constantValue, dummyConstDef, inst, 0, 0);
+                duPairs.add(duPairConstMove);
+                duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(inst)).forEach(x -> x.addFirst(duPairConstMove));
+            }
+
+            if (inst instanceof LabelOp) {
+                // TODO: Demo
+                LabelOp labelInst = (LabelOp) inst;
+
+                if (labelInst.getPhiSize() > 0) {
+                    Optional<DuSequence> optionalLabelDuSequence = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(inst)).findAny();
+                    if (optionalLabelDuSequence.isPresent()) {
+                        DuSequence labelDuSequence = optionalLabelDuSequence.get();
+                        for (int i = 1; i < block.getPredecessorCount(); i++) {
+                            duSequences.add(new DuSequence(labelDuSequence.cloneDuPairs()));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -270,6 +330,8 @@ public class DuSequenceAnalysis {
 
     private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,
                     InstructionValueConsumer useConsumer, InstructionValueConsumer aliveConsumer) {
+        // TODO: instruction.isMoveOp
+
         instruction.visitEachAlive(aliveConsumer);
         // TODO: instruction.forEachState(proc); alive
 
@@ -316,11 +378,8 @@ public class DuSequenceAnalysis {
 
         private Map<Value, List<ValUsage>> valUseInstructions;
 
-        private Map<Constant, DummyConstDef> dummyConstDefs;
-
-        public DefInstructionValueConsumer(Map<Value, List<ValUsage>> valUseInstructions, Map<Constant, DummyConstDef> dummyConstDefs) {
+        public DefInstructionValueConsumer(Map<Value, List<ValUsage>> valUseInstructions) {
             this.valUseInstructions = valUseInstructions;
-            this.dummyConstDefs = dummyConstDefs;
         }
 
         @Override
@@ -354,22 +413,6 @@ public class DuSequenceAnalysis {
                     DuSequence duSequence = new DuSequence(duPair);
                     duSequences.add(duSequence);
                     duSequenceWeb.add(duSequence);
-                }
-
-                // const move
-                if (instruction.isLoadConstantOp()) {
-                    // TODO: constant move op
-                    Constant constant = ((LoadConstantOp) instruction).getConstant();
-
-                    DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
-                    if (dummyConstDef == null) {
-                        dummyConstDef = new DummyConstDef(new ConstantValue(ValueKind.Illegal, constant));
-                        dummyConstDefs.put(constant, dummyConstDef);
-                    }
-
-                    DuPair duPairConstMove = new DuPair(dummyConstDef.getValue(), dummyConstDef, instruction, 0, 0);
-                    duPairs.add(duPairConstMove);
-                    duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(instruction)).forEach(x -> x.addFirst(duPairConstMove));
                 }
             }
 

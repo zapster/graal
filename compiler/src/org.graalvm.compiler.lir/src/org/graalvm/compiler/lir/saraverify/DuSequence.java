@@ -14,6 +14,17 @@ public class DuSequence {
         duPairs.add(duPair);
     }
 
+    public DuSequence(LinkedList<DuPair> duPairs) {
+        // TODO: Demo
+        this.duPairs = duPairs;
+    }
+
+    @SuppressWarnings("unchecked")
+    public LinkedList<DuPair> cloneDuPairs() {
+        // TODO: Demo
+        return ((LinkedList<DuPair>) duPairs.clone());
+    }
+
     public void addFirst(DuPair duPair) {
         duPairs.addFirst(duPair);
     }
