@@ -13,7 +13,6 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -195,44 +194,13 @@ public class DuSequenceAnalysis {
             if (inst instanceof JumpOp) {
                 JumpOp jumpInst = (JumpOp) inst;
 
-                PhiValueVisitor visitor = new PhiValueVisitor() {
-
-                    @Override
-                    public void visit(Value phiIn, Value phiOut) {
-                        // TODO: Demo
-                        LIRInstruction targetLabelInst = lir.getLIRforBlock(jumpInst.destination().getTargetBlock()).get(0);
-                        DuPair duPair = new DuPair(phiOut, inst, targetLabelInst, 0, 0);
-                        duPairs.add(duPair);
-
-                        List<DuSequence> constJumpDuSequences = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(duPair.getUseInstruction())).collect(
-                                        Collectors.toList());
-                        // constJumpDuSequences.stream().forEach(x -> x.addFirst(duPair));
-                        DuSequence constJumpDuSequence = null;
-                        if (constJumpDuSequences.size() > 0) {
-                            constJumpDuSequence = constJumpDuSequences.get(0);
-                            constJumpDuSequence.addFirst(duPair);
-                        }
-
-                        Constant constant = ((ConstantValue) phiOut).getConstant();
-                        DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
-                        if (dummyConstDef == null) {
-                            dummyConstDef = new DummyConstDef(new ConstantValue(ValueKind.Illegal, constant));
-                            dummyConstDefs.put(constant, dummyConstDef);
-                        }
-
-                        DuPair constJumpDuPair = new DuPair(dummyConstDef.getValue(), dummyConstDef, inst, 0, 0);
-                        duPairs.add(constJumpDuPair);
-                        // constJumpDuSequences.stream().forEach(x -> x.addFirst(constJumpDuPair));
-                        if (constJumpDuSequence != null) {
-                            constJumpDuSequence.addFirst(constJumpDuPair);
-                        }
-                    }
-                };
-
                 if (jumpInst.getPhiSize() > 0) {
+                    assert jumpInst.getPhiSize() == 1;
+                    PhiValueVisitor visitor = new SARAVerifyPhiValueVisitor(lir, jumpInst, dummyConstDefs);
                     SSAUtil.forEachPhiValuePair(lir, block.getSuccessors()[0], block, visitor);
                 }
             }
+
             visitValues(inst, defConsumer, useConsumer, useConsumer);
 
             instructionDefOperandCount.put(inst, operandDefPosition);
@@ -255,13 +223,11 @@ public class DuSequenceAnalysis {
             }
 
             if (inst instanceof LabelOp) {
-                // TODO: Demo
                 LabelOp labelInst = (LabelOp) inst;
 
                 if (labelInst.getPhiSize() > 0) {
-                    Optional<DuSequence> optionalLabelDuSequence = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(inst)).findAny();
-                    if (optionalLabelDuSequence.isPresent()) {
-                        DuSequence labelDuSequence = optionalLabelDuSequence.get();
+                    List<DuSequence> labelDuSequences = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(inst)).collect(Collectors.toList());
+                    for (DuSequence labelDuSequence : labelDuSequences) {
                         for (int i = 1; i < block.getPredecessorCount(); i++) {
                             duSequences.add(new DuSequence(labelDuSequence.cloneDuPairs()));
                         }
@@ -405,8 +371,8 @@ public class DuSequenceAnalysis {
                                 operandDefPosition, valUsage.getOperandPosition());
                 duPairs.add(duPair);
 
-                if (valUsage.getUseInstruction().isValueMoveOp()) {
-                    // copy use instruction
+                if (valUsage.getUseInstruction().isValueMoveOp() || valUsage.getUseInstruction() instanceof JumpOp) {
+                    // copy use instruction or jump instruction
                     duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(valUsage.getUseInstruction())).forEach(x -> x.addFirst(duPair));
                 } else {
                     // non copy use instruction
@@ -454,6 +420,43 @@ public class DuSequenceAnalysis {
             operandUsePosition++;
         }
 
+    }
+
+    class SARAVerifyPhiValueVisitor implements PhiValueVisitor {
+
+        private LIR lir;
+        private JumpOp jumpInst;
+        private Map<Constant, DummyConstDef> dummyConstDefs;
+
+        public SARAVerifyPhiValueVisitor(LIR lir, JumpOp jumpInst, Map<Constant, DummyConstDef> dummyConstDefs) {
+            this.lir = lir;
+            this.jumpInst = jumpInst;
+            this.dummyConstDefs = dummyConstDefs;
+        }
+
+        @Override
+        public void visit(Value phiIn, Value phiOut) {
+            LIRInstruction targetLabelInst = lir.getLIRforBlock(jumpInst.destination().getTargetBlock()).get(0);
+            DuPair duPair = new DuPair(phiOut, jumpInst, targetLabelInst, 0, 0);
+            duPairs.add(duPair);
+
+            List<DuSequence> phiDuSequences = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(duPair.getUseInstruction())).distinct().collect(
+                            Collectors.toList());
+            phiDuSequences.stream().forEach(x -> x.addFirst(duPair));
+
+            if (LIRValueUtil.isConstantValue(phiOut)) {
+                Constant constant = ((ConstantValue) phiOut).getConstant();
+                DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
+                if (dummyConstDef == null) {
+                    dummyConstDef = new DummyConstDef(new ConstantValue(ValueKind.Illegal, constant));
+                    dummyConstDefs.put(constant, dummyConstDef);
+                }
+
+                DuPair constJumpDuPair = new DuPair(dummyConstDef.getValue(), dummyConstDef, jumpInst, 0, 0);
+                duPairs.add(constJumpDuPair);
+                phiDuSequences.stream().forEach(x -> x.addFirst(constJumpDuPair));
+            }
+        }
     }
 
 }
