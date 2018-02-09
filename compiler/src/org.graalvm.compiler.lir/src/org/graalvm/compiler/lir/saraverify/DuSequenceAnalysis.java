@@ -195,7 +195,6 @@ public class DuSequenceAnalysis {
                 JumpOp jumpInst = (JumpOp) inst;
 
                 if (jumpInst.getPhiSize() > 0) {
-                    assert jumpInst.getPhiSize() == 1;
                     PhiValueVisitor visitor = new SARAVerifyPhiValueVisitor(lir, jumpInst, dummyConstDefs);
                     SSAUtil.forEachPhiValuePair(lir, block.getSuccessors()[0], block, visitor);
                 }
@@ -373,7 +372,8 @@ public class DuSequenceAnalysis {
 
                 if (valUsage.getUseInstruction().isValueMoveOp() || valUsage.getUseInstruction() instanceof JumpOp) {
                     // copy use instruction or jump instruction
-                    duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(valUsage.getUseInstruction())).forEach(x -> x.addFirst(duPair));
+                    duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(valUsage.getUseInstruction()) &&
+                                    duSequence.peekFirst().getOperandDefPosition() == valUsage.operandPosition).forEach(x -> x.addFirst(duPair));
                 } else {
                     // non copy use instruction
                     DuSequence duSequence = new DuSequence(duPair);
@@ -427,21 +427,29 @@ public class DuSequenceAnalysis {
         private LIR lir;
         private JumpOp jumpInst;
         private Map<Constant, DummyConstDef> dummyConstDefs;
+        private int operandPhiPos;
 
         public SARAVerifyPhiValueVisitor(LIR lir, JumpOp jumpInst, Map<Constant, DummyConstDef> dummyConstDefs) {
             this.lir = lir;
             this.jumpInst = jumpInst;
             this.dummyConstDefs = dummyConstDefs;
+            operandPhiPos = 0;
         }
 
         @Override
         public void visit(Value phiIn, Value phiOut) {
             LIRInstruction targetLabelInst = lir.getLIRforBlock(jumpInst.destination().getTargetBlock()).get(0);
-            DuPair duPair = new DuPair(phiOut, jumpInst, targetLabelInst, 0, 0);
+
+            assert targetLabelInst instanceof LabelOp;
+            assert ((LabelOp) targetLabelInst).getIncomingValue(operandPhiPos).equals(phiIn);
+            assert jumpInst.getOutgoingValue(operandPhiPos).equals(phiOut);
+
+            DuPair duPair = new DuPair(phiOut, jumpInst, targetLabelInst, operandPhiPos, operandPhiPos);
             duPairs.add(duPair);
 
-            List<DuSequence> phiDuSequences = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(duPair.getUseInstruction())).distinct().collect(
-                            Collectors.toList());
+            List<DuSequence> phiDuSequences = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(duPair.getUseInstruction()) &&
+                            duSequence.peekFirst().getOperandDefPosition() == operandPhiPos).distinct().collect(
+                                            Collectors.toList());
             phiDuSequences.stream().forEach(x -> x.addFirst(duPair));
 
             if (LIRValueUtil.isConstantValue(phiOut)) {
@@ -452,10 +460,12 @@ public class DuSequenceAnalysis {
                     dummyConstDefs.put(constant, dummyConstDef);
                 }
 
-                DuPair constJumpDuPair = new DuPair(dummyConstDef.getValue(), dummyConstDef, jumpInst, 0, 0);
+                DuPair constJumpDuPair = new DuPair(dummyConstDef.getValue(), dummyConstDef, jumpInst, 0, operandPhiPos);
                 duPairs.add(constJumpDuPair);
                 phiDuSequences.stream().forEach(x -> x.addFirst(constJumpDuPair));
             }
+
+            operandPhiPos++;
         }
     }
 
