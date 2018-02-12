@@ -120,7 +120,7 @@ public class SARAVerifyValueComparator implements Comparator<Value> {
             return 0;
         }
 
-        throw GraalError.unimplemented("JavaConstant compare not implemented for " + c1.getJavaKind() + " and " + c2.getJavaKind());
+        throw GraalError.unimplemented("JavaConstant compare not implemented between " + c1.getJavaKind() + " and " + c2.getJavaKind());
     }
 
 }
