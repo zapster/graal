@@ -1,5 +1,6 @@
 package org.graalvm.compiler.lir.saraverify;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +23,8 @@ public class AnalysisResult {
     private Map<Register, DummyRegDef> dummyRegDefs;
     private Map<Constant, DummyConstDef> dummyConstDefs;
 
+    private Map<DuSequence, String> duSequencesToString;
+
     public AnalysisResult(List<DuPair> duPairs, List<DuSequence> duSequences, List<DuSequenceWeb> duSequenceWebs, Map<LIRInstruction, Integer> instructionDefOperandCount,
                     Map<LIRInstruction, Integer> instructionUseOperandCount, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
         this.duPairs = duPairs;
@@ -31,6 +34,7 @@ public class AnalysisResult {
         this.instructionUseOperandCount = instructionUseOperandCount;
         this.dummyRegDefs = dummyRegDefs;
         this.dummyConstDefs = dummyConstDefs;
+        this.duSequencesToString = generateDuSequencesToStringMap();
     }
 
     public List<DuPair> getDuPairs() {
@@ -59,5 +63,19 @@ public class AnalysisResult {
 
     public Map<Constant, DummyConstDef> getDummyConstDefs() {
         return dummyConstDefs;
+    }
+
+    public Map<DuSequence, String> getDuSequencesToString() {
+        return duSequencesToString;
+    }
+
+    private Map<DuSequence, String> generateDuSequencesToStringMap() {
+        Map<DuSequence, String> map = new HashMap<>();
+
+        for (DuSequence duSequence : duSequences) {
+            map.put(duSequence, duSequence.toString());
+        }
+
+        return map;
     }
 }
