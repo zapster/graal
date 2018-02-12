@@ -18,6 +18,7 @@ import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.meta.AllocatableValue;
+import jdk.vm.ci.meta.Value;
 
 class Injector extends AllocationPhase {
     class CopyInjector extends Injector {
@@ -27,9 +28,6 @@ class Injector extends AllocationPhase {
             LIR lir = lirGenRes.getLIR();
             DebugContext debugContext = lir.getDebug();
             AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-
-            // target.arch.
-            // context.registerAllocationConfig.getAllocatableRegisters(kind)
 
             RegisterArray ra = target.arch.getAvailableValueRegisters();
             RegisterArray ra2 = context.registerAllocationConfig.getAllocatableRegisters();
@@ -79,6 +77,41 @@ class Injector extends AllocationPhase {
             }
         }
 
+    }
+
+    class PhiLabelInjector extends Injector {
+        @Override
+        protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+            LIR lir = lirGenRes.getLIR();
+            AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+
+            for (AbstractBlockBase<?> block : blocks) {
+                ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+
+                LIRInstruction instruction = instructions.get(0);
+
+                if (instruction instanceof LabelOp) {
+                    LabelOp labelOp = (LabelOp) instruction;
+
+                    if (labelOp.getPhiSize() > 1 && labelOp.getIncomingSize() > 1) {
+                        Value[] incomingValues = new Value[labelOp.getIncomingSize()];
+
+                        for (int i = 0; i < labelOp.getIncomingSize(); i++) {
+                            incomingValues[i] = labelOp.getIncomingValue(i);
+                        }
+
+                        Value v0 = incomingValues[0];
+                        Value v1 = incomingValues[1];
+
+                        incomingValues[0] = v1;
+                        incomingValues[1] = v0;
+
+                        labelOp.setIncomingValues(incomingValues);
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     @Override
