@@ -10,11 +10,14 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.function.Supplier;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.DebugContext;
@@ -135,6 +138,7 @@ public class DuSequenceAnalysis {
 
         BitSet visitedBlocks = new BitSet(blocks.length);
         HashMap<AbstractBlockBase<?>, Map<Value, List<ValUsage>>> blockValUseInstructions = new HashMap<>();
+        HashMap<AbstractBlockBase<?>, List<DuSequence>> blockUnfinishedDuSequences = new HashMap<>();
 
         while (!blockQueue.isEmpty()) {
             // get any block, whose successors have already been visited, remove it from the queue and add its
@@ -151,15 +155,20 @@ public class DuSequenceAnalysis {
             // get instructions of block
             ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
 
+            // merging of value uses from multiple predecessors
             Map<Value, List<ValUsage>> valUseInstructions = mergeMaps(blockValUseInstructions, block.getSuccessors(), saraVerifyValueComparator);
             blockValUseInstructions.put(block, valUseInstructions);
 
-            determineDuSequenceWebs(lir, block, instructions, valUseInstructions, dummyConstDefs);
+            // merging of unfinished du-sequences from multiple predecessors
+            List<DuSequence> unfinishedDuSequences = mergeDuSequencesLists(blockUnfinishedDuSequences, block.getSuccessors());
+            blockUnfinishedDuSequences.put(block, unfinishedDuSequences);
+
+            determineDuSequenceWebs(lir, block, instructions, valUseInstructions, unfinishedDuSequences, dummyConstDefs);
         }
         assert visitedBlocks.length() == visitedBlocks.cardinality() && visitedBlocks.cardinality() == blocks.length && visitedBlocks.stream().allMatch(id -> id < blocks.length);
 
         // analysis of dummy instructions
-        analyseUndefinedValues(blockValUseInstructions.get(blocks[0]), registerAttributes, dummyRegDefs, dummyConstDefs);
+        analyseUndefinedValues(blockValUseInstructions.get(blocks[0]), blockUnfinishedDuSequences.get(blocks[0]), registerAttributes, dummyRegDefs, dummyConstDefs);
 
         return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
     }
@@ -170,17 +179,19 @@ public class DuSequenceAnalysis {
 
         // analysis of given instructions
         Map<Value, List<ValUsage>> valUseInstructions = new TreeMap<>(new SARAVerifyValueComparator());
-        determineDuSequenceWebs(null, null, instructions, valUseInstructions, dummyConstDefs);
+        LinkedList<DuSequence> unfinishedDuSequences = new LinkedList<>();
+        determineDuSequenceWebs(null, null, instructions, valUseInstructions, unfinishedDuSequences, dummyConstDefs);
 
         // analysis of dummy instructions
-        analyseUndefinedValues(valUseInstructions, registerAttributes, dummyRegDefs, dummyConstDefs);
+        analyseUndefinedValues(valUseInstructions, unfinishedDuSequences, registerAttributes, dummyRegDefs, dummyConstDefs);
 
         return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
     }
 
     private void determineDuSequenceWebs(LIR lir, AbstractBlockBase<?> block, List<LIRInstruction> instructions, Map<Value, List<ValUsage>> valUseInstructions,
+                    List<DuSequence> unfinishedDuSequences,
                     Map<Constant, DummyConstDef> dummyConstDefs) {
-        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions);
+        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(valUseInstructions, unfinishedDuSequences);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(valUseInstructions);
 
         List<LIRInstruction> reverseInstructions = new ArrayList<>(instructions);
@@ -195,7 +206,7 @@ public class DuSequenceAnalysis {
                 JumpOp jumpInst = (JumpOp) inst;
 
                 if (jumpInst.getPhiSize() > 0) {
-                    PhiValueVisitor visitor = new SARAVerifyPhiValueVisitor(lir, jumpInst, dummyConstDefs);
+                    PhiValueVisitor visitor = new SARAVerifyPhiValueVisitor(lir, jumpInst, dummyConstDefs, unfinishedDuSequences);
                     SSAUtil.forEachPhiValuePair(lir, block.getSuccessors()[0], block, visitor);
                 }
             }
@@ -218,20 +229,9 @@ public class DuSequenceAnalysis {
                 ConstantValue constantValue = dummyConstDef.getValue();
                 DuPair duPairConstMove = new DuPair(constantValue, dummyConstDef, inst, 0, 0);
                 duPairs.add(duPairConstMove);
+
+                // TODO: remove from unfinishedDuSequences
                 duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(inst)).forEach(x -> x.addFirst(duPairConstMove));
-            }
-
-            if (inst instanceof LabelOp) {
-                LabelOp labelInst = (LabelOp) inst;
-
-                if (labelInst.getPhiSize() > 0) {
-                    List<DuSequence> labelDuSequences = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(inst)).collect(Collectors.toList());
-                    for (DuSequence labelDuSequence : labelDuSequences) {
-                        for (int i = 1; i < block.getPredecessorCount(); i++) {
-                            duSequences.add(new DuSequence(labelDuSequence.cloneDuPairs()));
-                        }
-                    }
-                }
             }
         }
     }
@@ -266,11 +266,24 @@ public class DuSequenceAnalysis {
         return mergedMap;
     }
 
-    private void analyseUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
+    private static List<DuSequence> mergeDuSequencesLists(Map<AbstractBlockBase<?>, List<DuSequence>> blockDuSequences, AbstractBlockBase<?>[] mergeBlocks) {
+        List<DuSequence> mergedDuSequences = new ArrayList<>();
+
+        for (AbstractBlockBase<?> block : mergeBlocks) {
+            List<DuSequence> duSequencesList = blockDuSequences.get(block);
+
+            duSequencesList.stream().forEach(duSequence -> mergedDuSequences.add(new DuSequence(duSequence.cloneDuPairs())));
+        }
+
+        return mergedDuSequences.stream().distinct().collect(Collectors.toList());
+    }
+
+    private void analyseUndefinedValues(Map<Value, List<ValUsage>> valUseInstructions, List<DuSequence> unfinishedDuSequences, RegisterAttributes[] registerAttributes,
+                    Map<Register, DummyRegDef> dummyRegDefs,
                     Map<Constant, DummyConstDef> dummyConstDefs) {
         checkUndefinedValues(valUseInstructions, registerAttributes, dummyRegDefs);
         List<LIRInstruction> dummyRegDefsList = dummyRegDefs.values().stream().collect(Collectors.toList());
-        determineDuSequenceWebs(null, null, dummyRegDefsList, valUseInstructions, dummyConstDefs);
+        determineDuSequenceWebs(null, null, dummyRegDefsList, valUseInstructions, unfinishedDuSequences, dummyConstDefs);
         assert valUseInstructions.isEmpty();
     }
 
@@ -342,9 +355,11 @@ public class DuSequenceAnalysis {
     class DefInstructionValueConsumer implements InstructionValueConsumer {
 
         private Map<Value, List<ValUsage>> valUseInstructions;
+        private List<DuSequence> unfinishedDuSequences;
 
-        public DefInstructionValueConsumer(Map<Value, List<ValUsage>> valUseInstructions) {
+        public DefInstructionValueConsumer(Map<Value, List<ValUsage>> valUseInstructions, List<DuSequence> unfinishedDuSequences) {
             this.valUseInstructions = valUseInstructions;
+            this.unfinishedDuSequences = unfinishedDuSequences;
         }
 
         @Override
@@ -372,12 +387,28 @@ public class DuSequenceAnalysis {
 
                 if (valUsage.getUseInstruction().isValueMoveOp() || valUsage.getUseInstruction() instanceof JumpOp) {
                     // copy use instruction or jump instruction
-                    duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(valUsage.getUseInstruction()) &&
-                                    duSequence.peekFirst().getOperandDefPosition() == valUsage.operandPosition).forEach(x -> x.addFirst(duPair));
+                    Supplier<Stream<DuSequence>> copyDuSequencesStreamSupplier = () -> unfinishedDuSequences.stream().filter(
+                                    duSequence -> duSequence.peekFirst().getDefInstruction().equals(valUsage.getUseInstruction()) &&
+                                                    duSequence.peekFirst().getOperandDefPosition() == valUsage.operandPosition);
+
+                    if (instruction.isValueMoveOp() || (instruction instanceof LabelOp && ((LabelOp) instruction).isPhiIn())) {
+                        copyDuSequencesStreamSupplier.get().forEach(duSequence -> duSequence.addFirst(duPair));
+                    } else {
+                        copyDuSequencesStreamSupplier.get().forEach(duSequence -> duSequences.add(duSequence));
+                        copyDuSequencesStreamSupplier.get().forEach(duSequence -> duSequence.addFirst(duPair));
+                        // TODO: remove from unfinishedDuSequences
+                    }
                 } else {
                     // non copy use instruction
                     DuSequence duSequence = new DuSequence(duPair);
-                    duSequences.add(duSequence);
+
+                    if (instruction.isValueMoveOp() || (instruction instanceof LabelOp && ((LabelOp) instruction).isPhiIn())) {
+                        // copy def instruction
+                        unfinishedDuSequences.add(duSequence);
+                    } else {
+                        // non copy def instruction
+                        duSequences.add(duSequence);
+                    }
                     duSequenceWeb.add(duSequence);
                 }
             }
@@ -428,12 +459,14 @@ public class DuSequenceAnalysis {
         private JumpOp jumpInst;
         private Map<Constant, DummyConstDef> dummyConstDefs;
         private int operandPhiPos;
+        private List<DuSequence> unfinishedDuSequences;
 
-        public SARAVerifyPhiValueVisitor(LIR lir, JumpOp jumpInst, Map<Constant, DummyConstDef> dummyConstDefs) {
+        public SARAVerifyPhiValueVisitor(LIR lir, JumpOp jumpInst, Map<Constant, DummyConstDef> dummyConstDefs, List<DuSequence> unfinishedDuSequences) {
             this.lir = lir;
             this.jumpInst = jumpInst;
             this.dummyConstDefs = dummyConstDefs;
             operandPhiPos = 0;
+            this.unfinishedDuSequences = unfinishedDuSequences;
         }
 
         @Override
@@ -447,7 +480,7 @@ public class DuSequenceAnalysis {
             DuPair duPair = new DuPair(phiOut, jumpInst, targetLabelInst, operandPhiPos, operandPhiPos);
             duPairs.add(duPair);
 
-            List<DuSequence> phiDuSequences = duSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(duPair.getUseInstruction()) &&
+            List<DuSequence> phiDuSequences = unfinishedDuSequences.stream().filter(duSequence -> duSequence.peekFirst().getDefInstruction().equals(duPair.getUseInstruction()) &&
                             duSequence.peekFirst().getOperandDefPosition() == operandPhiPos).distinct().collect(
                                             Collectors.toList());
             phiDuSequences.stream().forEach(x -> x.addFirst(duPair));
@@ -463,6 +496,7 @@ public class DuSequenceAnalysis {
                 DuPair constJumpDuPair = new DuPair(dummyConstDef.getValue(), dummyConstDef, jumpInst, 0, operandPhiPos);
                 duPairs.add(constJumpDuPair);
                 phiDuSequences.stream().forEach(x -> x.addFirst(constJumpDuPair));
+                duSequences.addAll(phiDuSequences);
             }
 
             operandPhiPos++;
