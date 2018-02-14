@@ -121,28 +121,34 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         // log unmatched input du-sequences
         if (unmatchedInputDuSequences.size() > 0) {
             try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                debugContext.log(3, "Unmatched input du-sequences: ");
-                unmatchedInputDuSequences.stream().forEach(duSequence -> debugContext.log(3, inputDuSequencesToString.get(duSequence)));
+                debugContext.log(3, "\nUnmatched input du-sequences: ");
+                debugContext.log(3, "============================: ");
+                unmatchedInputDuSequences.stream().forEach(duSequence -> {
+                    String duSequenceToString = inputDuSequencesToString.get(duSequence);
+                    if (duSequenceToString == null) {
+                        duSequenceToString = duSequence.toString();
+                    }
+                    debugContext.log(3, duSequenceToString);
+                });
             }
         }
 
         // log unmatched output du-sequences
         if (unmatchedOutputDuSequences.size() > 0) {
             try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                debugContext.log(3, "Unmatched output du-sequences: ");
+                debugContext.log(3, "\nUnmatched output du-sequences: ");
+                debugContext.log(3, "=============================: ");
                 unmatchedOutputDuSequences.stream().forEach(duSequence -> debugContext.log(3, duSequence.toString()));
             }
         }
 
         boolean validDataFlow = (unmatchedOutputDuSequences.size() == 0 && unmatchedInputDuSequences.size() == 0) ? true : false;
 
-        if (!validDataFlow) {
-            // log matches
-            for (Entry<DuSequence, DuSequence> entry : matches.entrySet()) {
-                try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                    debugContext.log(4, "\n\nInput DuSequence: " + inputDuSequencesToString.get(entry.getKey()));
-                    debugContext.log(4, "\nMatched output du-sequence: " + entry.getValue());
-                }
+        // log matches
+        for (Entry<DuSequence, DuSequence> entry : matches.entrySet()) {
+            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+                debugContext.log(4, "\n\nInput DuSequence: " + inputDuSequencesToString.get(entry.getKey()));
+                debugContext.log(4, "\nMatched output du-sequence: " + entry.getValue());
             }
         }
 

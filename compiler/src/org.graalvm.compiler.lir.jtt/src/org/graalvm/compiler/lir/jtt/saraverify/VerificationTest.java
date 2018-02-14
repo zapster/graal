@@ -67,8 +67,7 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
 
     @Test
@@ -99,8 +98,7 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
 
     @Test
@@ -131,8 +129,7 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
 
     @Test
@@ -162,8 +159,7 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
 
     @Test
@@ -193,8 +189,7 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
 
     @Test
@@ -227,8 +222,7 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
 
     @Test
@@ -261,8 +255,7 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
 
     @Test
@@ -297,8 +290,7 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(true, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
 
     @Test
@@ -333,8 +325,7 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
 
     @Test
@@ -367,16 +358,14 @@ public class VerificationTest extends JTTTest {
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
         List<DuSequence> outputDuSequences = outputResult.getDuSequences();
 
-        VerificationPhase verificationPhase = new VerificationPhase();
-        Assert.assertEquals(false, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
 
     @Test
     public void testVerifyDataFlow() {
-        VerificationPhase verificationPhase = new VerificationPhase();
         ArrayList<DuSequence> duSequences = new ArrayList<>();
 
-        assertTrue(verificationPhase.verifyDataFlow(duSequences, duSequences, this.getDebugContext()));
+        assertVerifyDataFlow(true, duSequences, duSequences);
     }
 
     @Test
@@ -509,5 +498,10 @@ public class VerificationTest extends JTTTest {
 
     private static AnalysisResult getAnalysisResult(DuSequenceAnalysis duSequenceAnalysis, List<LIRInstruction> instructions) {
         return duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>(), new HashMap<>());
+    }
+
+    private void assertVerifyDataFlow(boolean expected, List<DuSequence> inputDuSequences, List<DuSequence> outputDuSequences) {
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Assert.assertEquals(expected, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, new HashMap<>(), this.getDebugContext()));
     }
 }
