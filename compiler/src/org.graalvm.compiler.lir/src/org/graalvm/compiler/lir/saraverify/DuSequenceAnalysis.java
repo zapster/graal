@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.debug.CounterKey;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.debug.Indent;
@@ -100,6 +101,9 @@ public class DuSequenceAnalysis {
 
     public static final String ERROR_MSG_PREFIX = "SARA verify error: ";
 
+    public static final CounterKey skippedCompilationUnits = DebugContext.counter("SARAVerify[skipped]");
+    public static final CounterKey executedCompilationUnits = DebugContext.counter("SARAVerify[executed]");
+
     private static void logInstructions(LIR lir) {
         DebugContext debug = lir.getDebug();
 
@@ -123,8 +127,10 @@ public class DuSequenceAnalysis {
 
         if (!(lir.getControlFlowGraph().getLoops().isEmpty())) {
             // control flow contains one or more loops
+            skippedCompilationUnits.increment(lir.getDebug());
             return null;
         }
+        executedCompilationUnits.increment(lir.getDebug());
 
         initializeCollections();
         logInstructions(lir);

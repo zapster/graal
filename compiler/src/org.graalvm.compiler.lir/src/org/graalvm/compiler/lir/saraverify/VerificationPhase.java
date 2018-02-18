@@ -55,32 +55,11 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             throw GraalError.shouldNotReachHere(DuSequenceAnalysis.ERROR_MSG_PREFIX + "Data Flow not equal");
         }
 
-        // TODO: Operand Count
-// if (!verifyOperandCount(inputResult.getInstructionDefOperandCount(),
-// inputResult.getInstructionUseOperandCount(),
-// outputResult.getInstructionDefOperandCount(), outputResult.getInstructionUseOperandCount())) {
-// throw GraalError.shouldNotReachHere(DuSequenceAnalysis.ERROR_MSG_PREFIX + "Operand numbers not
-// equal");
-// }
-
-        // TODO: logging?
-        // log all du-sequences
-// SARAVerifyValueComparator saraVerifyValueComparator = new SARAVerifyValueComparator();
-// Comparator<DuSequence> duSequenceComparator = new Comparator<DuSequence>() {
-// @Override
-// public int compare(DuSequence ds1, DuSequence ds2) {
-// return saraVerifyValueComparator.compare(ds1.peekFirst().getValue(), ds2.peekFirst().getValue());
-// }
-// };
-// try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-// debugContext.log(4, "Input DuSequences:\n");
-// inputDuSequences.stream().sorted(duSequenceComparator).forEach(duSequence -> debugContext.log(4,
-// duSequence.toString()));
-//
-// debugContext.log(4, "Output DuSequences:\n");
-// outputDuSequences.stream().sorted(duSequenceComparator).forEach(duSequence -> debugContext.log(4,
-// duSequence.toString()));
-// }
+        if (!verifyOperandCount(inputResult.getInstructionDefOperandCount(),
+                        inputResult.getInstructionUseOperandCount(),
+                        outputResult.getInstructionDefOperandCount(), outputResult.getInstructionUseOperandCount())) {
+            throw GraalError.shouldNotReachHere(DuSequenceAnalysis.ERROR_MSG_PREFIX + "Operand numbers not equal");
+        }
     }
 
     public boolean verifyDataFlow(List<DuSequence> inputDuSequences, List<DuSequence> outputDuSequences, Map<DuSequence, String> inputDuSequencesToString, DebugContext debugContext) {
