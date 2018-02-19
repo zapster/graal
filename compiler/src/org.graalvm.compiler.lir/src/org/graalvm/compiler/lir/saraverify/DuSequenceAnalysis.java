@@ -49,7 +49,7 @@ import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
 
 public class DuSequenceAnalysis {
-
+// test
     public static class DummyConstDef extends LIRInstruction {
         public static final LIRInstructionClass<DummyConstDef> TYPE = LIRInstructionClass.create(DummyConstDef.class);
         protected ConstantValue value;
