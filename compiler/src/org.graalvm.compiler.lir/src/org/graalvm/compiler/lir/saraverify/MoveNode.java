@@ -1,5 +1,7 @@
 package org.graalvm.compiler.lir.saraverify;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -20,6 +22,7 @@ public class MoveNode extends Node {
         this.input = input;
         this.resultOperandPosition = resultOperandPosition;
         this.inputOperandPosition = inputOperandPosition;
+        nextNodes = new ArrayList<>();
     }
 
     public Value getResult() {
@@ -44,6 +47,10 @@ public class MoveNode extends Node {
 
     public void addNextNode(Node nextNode) {
         nextNodes.add(nextNode);
+    }
+
+    public void addAllNextNodes(Collection<? extends Node> nextNodesArg) {
+        nextNodes.addAll(nextNodesArg);
     }
 
     @Override

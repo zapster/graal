@@ -79,27 +79,27 @@ public class DuSequenceAnalysisTest {
         DefNode defNodeLabel1 = new DefNode(r1.asValue(), labelOp, 1);
         DefNode defNodeLabel2 = new DefNode(rbp.asValue(), labelOp, 2);
 
-        DefNode defNodeAdd10 = new DefNode(r2.asValue(), addOp, 0);
-        UseNode useNodeAdd10 = new UseNode(r0.asValue(), addOp, 0);
-        UseNode useNodeAdd11 = new UseNode(r1.asValue(), addOp, 1);
+        DefNode defNodeAdd00 = new DefNode(r2.asValue(), addOp, 0);
+        UseNode useNodeAdd00 = new UseNode(r0.asValue(), addOp, 0);
+        UseNode useNodeAdd01 = new UseNode(r1.asValue(), addOp, 1);
 
-        DefNode defNodeAdd20 = new DefNode(r2.asValue(), addOp2, 0);
-        UseNode useNodeAdd20 = new UseNode(r1.asValue(), addOp2, 0);
-        UseNode useNodeAdd21 = new UseNode(r2.asValue(), addOp2, 1);
+        DefNode defNodeAdd10 = new DefNode(r2.asValue(), addOp2, 0);
+        UseNode useNodeAdd10 = new UseNode(r1.asValue(), addOp2, 0);
+        UseNode useNodeAdd11 = new UseNode(r2.asValue(), addOp2, 1);
 
         UseNode useNodeReturn0 = new UseNode(rbp.asValue(), returnOp, 0);
         UseNode useNodeReturn1 = new UseNode(r2.asValue(), returnOp, 1);
 
-        defNodeLabel0.addNextNodes(useNodeAdd10);
-        defNodeLabel1.addNextNodes(useNodeAdd11);
-        defNodeLabel1.addNextNodes(useNodeAdd20);
+        defNodeLabel0.addNextNodes(useNodeAdd00);
+        defNodeLabel1.addNextNodes(useNodeAdd01);
+        defNodeLabel1.addNextNodes(useNodeAdd10);
         defNodeLabel2.addNextNodes(useNodeReturn0);
-        defNodeAdd10.addNextNodes(useNodeAdd21);
-        defNodeAdd20.addNextNodes(useNodeReturn1);
+        defNodeAdd00.addNextNodes(useNodeAdd11);
+        defNodeAdd10.addNextNodes(useNodeReturn1);
 
         List<Node> r0Nodes = Arrays.asList(defNodeLabel0);
         List<Node> r1Nodes = Arrays.asList(defNodeLabel1);
-        List<Node> r2Nodes = Arrays.asList(defNodeAdd10, defNodeAdd20);
+        List<Node> r2Nodes = Arrays.asList(defNodeAdd00, defNodeAdd10);
         List<Node> rbpNodes = Arrays.asList(defNodeLabel2);
 
         Map<Value, List<Node>> expectedDuSequenceWebs = new TreeMap<>(new SARAVerifyValueComparator());
@@ -186,13 +186,42 @@ public class DuSequenceAnalysisTest {
         instructions.add(i5);
         instructions.add(i6);
 
+        DefNode defNodeLabel0 = new DefNode(r0.asValue(), i0, 0);
+        DefNode defNodeLabel1 = new DefNode(r1.asValue(), i0, 1);
+        DefNode defNodeLabel2 = new DefNode(rbp.asValue(), i0, 2);
+        MoveNode moveNodei1 = new MoveNode(v3, rbp.asValue(), i1, 0, 0);
+        MoveNode moveNodei2 = new MoveNode(v0, r0.asValue(), i2, 0, 0);
+        MoveNode moveNodei3 = new MoveNode(v1, r1.asValue(), i3, 0, 0);
+        DefNode defNodeAdd0 = new DefNode(v2, i4, 0);
+        UseNode useNodeAdd0 = new UseNode(v0, i4, 0);
+        UseNode useNodeAdd1 = new UseNode(v1, i4, 1);
+        MoveNode moveNodei5 = new MoveNode(rax.asValue(), v2, i5, 0, 0);
+        UseNode useNodeReturn0 = new UseNode(v3, i6, 0);
+        UseNode useNodeReturn1 = new UseNode(rax.asValue(), i6, 1);
+
+        defNodeLabel0.addNextNodes(moveNodei2);
+        moveNodei2.addNextNode(useNodeAdd0);
+
+        defNodeLabel1.addNextNodes(moveNodei3);
+        moveNodei3.addNextNode(useNodeAdd1);
+
+        defNodeLabel2.addNextNodes(moveNodei1);
+        moveNodei1.addNextNode(useNodeReturn1);
+
+        defNodeAdd0.addNextNodes(moveNodei5);
+        moveNodei5.addNextNode(useNodeReturn0);
+
         Map<Value, List<Node>> expectedDuSequenceWebs = new TreeMap<>(new SARAVerifyValueComparator());
+        expectedDuSequenceWebs.put(r0.asValue(), Arrays.asList(defNodeLabel0));
+        expectedDuSequenceWebs.put(r1.asValue(), Arrays.asList(defNodeLabel1));
+        expectedDuSequenceWebs.put(rbp.asValue(), Arrays.asList(defNodeLabel2));
+        expectedDuSequenceWebs.put(v2, Arrays.asList(defNodeAdd0));
 
         test(instructions, expectedDuSequenceWebs);
     }
 
     @Test
-    public void testDetermineDuPairs4() {
+    public void testDetermineDuSequenceWebs4() {
         ArrayList<LIRInstruction> instructions = new ArrayList<>();
 
         LabelOp labelOp = new LabelOp(null, true);
@@ -204,30 +233,22 @@ public class DuSequenceAnalysisTest {
         instructions.add(moveFromRegOp);
         instructions.add(returnOp);
 
-        List<DuPair> expectedDuPairs = new ArrayList<>();
-        DuPair duPair0 = new DuPair(r1.asValue(), moveFromRegOp, returnOp, 0, 1);
-        DuPair duPair1 = new DuPair(r0.asValue(), labelOp, moveFromRegOp, 0, 0);
-        DuPair duPair2 = new DuPair(rbp.asValue(), labelOp, returnOp, 1, 0);
-        expectedDuPairs.add(duPair0);
-        expectedDuPairs.add(duPair1);
-        expectedDuPairs.add(duPair2);
+        DefNode defNodeLabel0 = new DefNode(r0.asValue(), labelOp, 0);
+        DefNode defNodeLabel1 = new DefNode(rbp.asValue(), labelOp, 1);
+        MoveNode moveNode = new MoveNode(r1.asValue(), r0.asValue(), moveFromRegOp, 0, 0);
+        UseNode useNodeReturn0 = new UseNode(rbp.asValue(), returnOp, 0);
+        UseNode useNodeReturn1 = new UseNode(r1.asValue(), returnOp, 1);
 
-        List<DuSequence> expectedDuSequences = new ArrayList<>();
-        DuSequence duSequence0 = new DuSequence(duPair0);
-        duSequence0.addFirst(duPair1);
-        expectedDuSequences.add(duSequence0);
-        DuSequence duSequence1 = new DuSequence(duPair2);
-        expectedDuSequences.add(duSequence1);
+        defNodeLabel0.addNextNodes(moveNode);
+        moveNode.addNextNode(useNodeReturn1);
 
-        List<DuSequenceWeb> expectedDuSequenceWebs = new ArrayList<>();
-        DuSequenceWeb web0 = new DuSequenceWeb();
-        web0.add(duSequence0);
-        DuSequenceWeb web1 = new DuSequenceWeb();
-        web1.add(duSequence1);
-        expectedDuSequenceWebs.add(web0);
-        expectedDuSequenceWebs.add(web1);
+        defNodeLabel1.addNextNodes(useNodeReturn0);
 
-        test(instructions, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
+        Map<Value, List<Node>> expectedDuSequenceWebs = new TreeMap<>(new SARAVerifyValueComparator());
+        expectedDuSequenceWebs.put(r0.asValue(), Arrays.asList(defNodeLabel0));
+        expectedDuSequenceWebs.put(rbp.asValue(), Arrays.asList(defNodeLabel1));
+
+        test(instructions, expectedDuSequenceWebs);
     }
 
     @Test

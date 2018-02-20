@@ -23,6 +23,7 @@ import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.LIRInstructionClass;
 import org.graalvm.compiler.lir.LIRValueUtil;
+import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
 
 import jdk.vm.ci.code.Register;
@@ -206,8 +207,33 @@ public class DuSequenceAnalysis {
 // SSAUtil.forEachPhiValuePair(lir, block.getSuccessors()[0], block, visitor);
 // }
 // }
+            if (inst.isValueMoveOp()) {
+                ValueMoveOp moveInst = (ValueMoveOp) inst;
+                Value result = moveInst.getResult();
+                Value input = moveInst.getInput();
+                MoveNode moveNode = new MoveNode(result, input, inst, 0, 0);
 
-            visitValues(inst, defConsumer, useConsumer, useConsumer);
+                List<Node> resultNodes = duSequenceWebs.get(result);
+                List<Node> filteredNodes = resultNodes.stream().filter(node -> node instanceof MoveNode || node instanceof UseNode).collect(Collectors.toList());
+                resultNodes.removeAll(filteredNodes);
+                if (resultNodes.isEmpty()) {
+                    duSequenceWebs.remove(result);
+                }
+
+                moveNode.addAllNextNodes(filteredNodes);
+
+                List<Node> inputNodes = duSequenceWebs.get(input);
+                if (inputNodes == null) {
+                    inputNodes = new ArrayList<>();
+                    duSequenceWebs.put(input, inputNodes);
+                }
+                inputNodes.add(moveNode);
+
+                defOperandPosition = 1;
+                useOperandPosition = 1;
+            } else {
+                visitValues(inst, defConsumer, useConsumer, useConsumer);
+            }
 
             instructionDefOperandCount.put(inst, defOperandPosition);
             instructionUseOperandCount.put(inst, useOperandPosition);
