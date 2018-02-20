@@ -10,15 +10,14 @@ public class MoveNode extends Node {
 
     private Value result;
     private Value input;
-    private LIRInstruction moveInstruction;
     private int resultOperandPosition;
     private int inputOperandPosition;
     private List<Node> nextNodes;
 
-    public MoveNode(Value result, Value input, LIRInstruction moveInstruction, int resultOperandPosition, int inputOperandPosition) {
+    public MoveNode(Value result, Value input, LIRInstruction instruction, int resultOperandPosition, int inputOperandPosition) {
+        super(instruction);
         this.result = result;
         this.input = input;
-        this.moveInstruction = moveInstruction;
         this.resultOperandPosition = resultOperandPosition;
         this.inputOperandPosition = inputOperandPosition;
     }
@@ -29,10 +28,6 @@ public class MoveNode extends Node {
 
     public Value getInput() {
         return input;
-    }
-
-    public LIRInstruction getMoveInstruction() {
-        return moveInstruction;
     }
 
     public int getResultOperandPosition() {
@@ -57,7 +52,7 @@ public class MoveNode extends Node {
         int hashCode = 1;
         hashCode = prime * hashCode + input.hashCode();
         hashCode = prime * hashCode + inputOperandPosition;
-        hashCode = prime * hashCode + System.identityHashCode(moveInstruction);
+        hashCode = prime * hashCode + System.identityHashCode(instruction);
         hashCode = prime * hashCode + result.hashCode();
         hashCode = prime * hashCode + resultOperandPosition;
         return hashCode;
@@ -70,8 +65,23 @@ public class MoveNode extends Node {
         }
 
         MoveNode moveNode = (MoveNode) obj;
-        return moveNode.input.equals(this.input) && moveNode.inputOperandPosition == this.inputOperandPosition && moveNode.moveInstruction.equals(this.moveInstruction) &&
+        return moveNode.input.equals(this.input) && moveNode.inputOperandPosition == this.inputOperandPosition && moveNode.instruction.equals(this.instruction) &&
                         moveNode.result.equals(this.result) && moveNode.resultOperandPosition == this.resultOperandPosition ? true : false;
     }
 
+    @Override
+    public String toString() {
+        return "MOVE:" + result + ":" + resultOperandPosition + "=" + input + ":" + inputOperandPosition + ":" + instruction.name();
+    }
+
+    @Override
+    public String duSequenceToString() {
+        String string = "";
+
+        for (Node node : nextNodes) {
+            string = string + " -> " + toString() + node.duSequenceToString() + "\n";
+        }
+
+        return string;
+    }
 }

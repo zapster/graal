@@ -7,21 +7,16 @@ import jdk.vm.ci.meta.Value;
 public class UseNode extends Node {
 
     private Value value;
-    private LIRInstruction useInstruction;
     private int useOperandPosition;
 
-    public UseNode(Value value, LIRInstruction useInstruction, int useOperandPosition) {
+    public UseNode(Value value, LIRInstruction instruction, int useOperandPosition) {
+        super(instruction);
         this.value = value;
-        this.useInstruction = useInstruction;
         this.useOperandPosition = useOperandPosition;
     }
 
     public Value getValue() {
         return value;
-    }
-
-    public LIRInstruction getUseInstruction() {
-        return useInstruction;
     }
 
     public int getUseOperandPosition() {
@@ -32,7 +27,7 @@ public class UseNode extends Node {
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + System.identityHashCode(useInstruction);
+        result = prime * result + System.identityHashCode(instruction);
         result = prime * result + useOperandPosition;
         result = prime * result + value.hashCode();
         return result;
@@ -45,7 +40,16 @@ public class UseNode extends Node {
         }
 
         UseNode useNode = (UseNode) obj;
-        return useNode.value.equals(this.value) && useNode.useInstruction.equals(this.useInstruction) && useNode.useOperandPosition == this.useOperandPosition ? true : false;
+        return useNode.value.equals(this.value) && useNode.instruction.equals(this.instruction) && useNode.useOperandPosition == this.useOperandPosition ? true : false;
     }
 
+    @Override
+    public String toString() {
+        return "USE:" + value + ":" + useOperandPosition + ":" + instruction.name();
+    }
+
+    @Override
+    public String duSequenceToString() {
+        return " -> " + toString();
+    }
 }

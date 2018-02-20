@@ -11,23 +11,18 @@ import jdk.vm.ci.meta.Value;
 public class DefNode extends Node {
 
     private Value value;
-    private LIRInstruction defInstruction;
     private int defOperandPosition;
     private List<Node> nextNodes;
 
-    public DefNode(Value value, LIRInstruction defInstruction, int defOperandPosition) {
+    public DefNode(Value value, LIRInstruction instruction, int defOperandPosition) {
+        super(instruction);
         this.value = value;
-        this.defInstruction = defInstruction;
         this.defOperandPosition = defOperandPosition;
         nextNodes = new ArrayList<>();
     }
 
     public Value getValue() {
         return value;
-    }
-
-    public LIRInstruction getDefInstruction() {
-        return defInstruction;
     }
 
     public int getDefOperandPosition() {
@@ -50,7 +45,7 @@ public class DefNode extends Node {
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + System.identityHashCode(defInstruction);
+        result = prime * result + System.identityHashCode(instruction);
         result = prime * result + defOperandPosition;
         result = prime * result + value.hashCode();
         return result;
@@ -63,6 +58,22 @@ public class DefNode extends Node {
         }
 
         DefNode defNode = (DefNode) obj;
-        return defNode.value.equals(this.value) && defNode.defInstruction.equals(this.defInstruction) && defNode.defOperandPosition == this.defOperandPosition ? true : false;
+        return defNode.value.equals(this.value) && defNode.instruction.equals(this.instruction) && defNode.defOperandPosition == this.defOperandPosition ? true : false;
+    }
+
+    @Override
+    public String toString() {
+        return "DEF:" + value + ":" + defOperandPosition + ":" + instruction.name();
+    }
+
+    @Override
+    public String duSequenceToString() {
+        String string = "";
+
+        for (Node node : nextNodes) {
+            string = string + toString() + node.duSequenceToString() + "\n";
+        }
+
+        return string;
     }
 }
