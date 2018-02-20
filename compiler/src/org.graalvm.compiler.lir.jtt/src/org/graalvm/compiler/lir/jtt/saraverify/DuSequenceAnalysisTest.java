@@ -18,6 +18,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.ConstantValue;
@@ -31,13 +33,17 @@ import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveToReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
 import org.graalvm.compiler.lir.saraverify.AnalysisResult;
+import org.graalvm.compiler.lir.saraverify.DefNode;
 import org.graalvm.compiler.lir.saraverify.DuPair;
 import org.graalvm.compiler.lir.saraverify.DuSequence;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 import org.graalvm.compiler.lir.saraverify.DuSequenceWeb;
+import org.graalvm.compiler.lir.saraverify.MoveNode;
+import org.graalvm.compiler.lir.saraverify.Node;
 import org.graalvm.compiler.lir.saraverify.SARAVerifyValueComparator;
+import org.graalvm.compiler.lir.saraverify.UseNode;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -129,27 +135,24 @@ public class DuSequenceAnalysisTest {
         instructions.add(labelOp);
         instructions.add(returnOp);
 
-        List<DuPair> expectedDuPairs = new ArrayList<>();
-        DuPair duPair0 = new DuPair(rbp.asValue(), instructions.get(0), instructions.get(1), 2, 0);
-        DuPair duPair1 = new DuPair(r0.asValue(), instructions.get(0), instructions.get(1), 0, 1);
-        expectedDuPairs.add(duPair0);
-        expectedDuPairs.add(duPair1);
+        DefNode defNodeLabel0 = new DefNode(r0.asValue(), labelOp, 0);
+        DefNode defNodeLabel2 = new DefNode(rbp.asValue(), labelOp, 2);
+        UseNode useNodeLabel0 = new UseNode(rbp.asValue(), returnOp, 0);
+        UseNode useNodeLabel1 = new UseNode(r0.asValue(), returnOp, 1);
+        defNodeLabel0.addNextNodes(useNodeLabel1);
+        defNodeLabel2.addNextNodes(useNodeLabel0);
 
-        List<DuSequence> expectedDuSequences = new ArrayList<>();
-        DuSequence duSequence0 = new DuSequence(duPair0);
-        DuSequence duSequence1 = new DuSequence(duPair1);
-        expectedDuSequences.add(duSequence0);
-        expectedDuSequences.add(duSequence1);
+        Map<Value, List<Node>> expectedDuSequenceWebs = new TreeMap<>(new SARAVerifyValueComparator());
+        List<Node> r0Nodes = new ArrayList<>();
+        r0Nodes.add(defNodeLabel0);
 
-        List<DuSequenceWeb> expectedDuSequenceWebs = new ArrayList<>();
-        DuSequenceWeb web0 = new DuSequenceWeb();
-        web0.add(duSequence0);
-        DuSequenceWeb web1 = new DuSequenceWeb();
-        web1.add(duSequence1);
-        expectedDuSequenceWebs.add(web0);
-        expectedDuSequenceWebs.add(web1);
+        List<Node> rbpNodes = new ArrayList<>();
+        rbpNodes.add(defNodeLabel2);
 
-        test(instructions, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
+        expectedDuSequenceWebs.put(r0.asValue(), r0Nodes);
+        expectedDuSequenceWebs.put(rbp.asValue(), rbpNodes);
+
+        test(instructions, expectedDuSequenceWebs);
     }
 
     @Test
@@ -441,77 +444,6 @@ public class DuSequenceAnalysisTest {
     }
 
     @Test
-    public void testDuPairEquals() {
-        LabelOp labelOp = new LabelOp(null, true);
-        TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
-        DuPair duPair = new DuPair(r0.asValue(), labelOp, returnOp, 0, 0);
-        assertEquals(duPair, duPair);
-
-        DuPair duPair2 = new DuPair(r1.asValue(), labelOp, returnOp, 0, 0);
-        assertNotEquals(duPair, duPair2);
-
-        DuPair duPair3 = new DuPair(r0.asValue(), labelOp, null, 0, 0);
-        assertNotEquals(duPair, duPair3);
-
-        DuPair duPair4 = new DuPair(r0.asValue(), null, returnOp, 0, 0);
-        assertNotEquals(duPair, duPair4);
-
-        DuPair duPair5 = new DuPair(r0.asValue(), labelOp, returnOp, 1, 0);
-        assertNotEquals(duPair, duPair5);
-
-        DuPair duPair6 = new DuPair(r0.asValue(), labelOp, returnOp, 0, 1);
-        assertNotEquals(duPair, duPair6);
-    }
-
-    @Test
-    public void testDuSequenceEquals() {
-        LabelOp labelOp = new LabelOp(null, true);
-        TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
-        DuPair duPair = new DuPair(r0.asValue(), labelOp, returnOp, 0, 0);
-        DuPair duPair2 = new DuPair(r1.asValue(), labelOp, returnOp, 1, 0);
-        DuPair duPair3 = new DuPair(r2.asValue(), labelOp, returnOp, 2, 0);
-
-        DuSequence duSequence = new DuSequence(duPair);
-        assertEquals(duSequence, duSequence);
-
-        DuSequence duSequence2 = new DuSequence(duPair);
-        assertEquals(duSequence, duSequence2);
-
-        duSequence.addFirst(duPair2);
-        assertNotEquals(duSequence, duSequence2);
-
-        duSequence2.addFirst(duPair2);
-        assertEquals(duSequence, duSequence2);
-
-        duSequence.addFirst(duPair3);
-        assertEquals(duSequence.peekFirst(), duPair3);
-        assertNotEquals(duSequence, duSequence2);
-
-        duSequence2.addFirst(duPair3);
-        assertEquals(duSequence, duSequence2);
-
-        DuSequence duSequence3 = new DuSequence(duPair);
-        duSequence.addFirst(duPair3);
-        duSequence.addFirst(duPair2);
-        assertNotEquals(duSequence, duSequence3);
-    }
-
-    @Test
-    public void testDuSequenceHashCode() {
-        LabelOp labelOp = new LabelOp(null, true);
-        TestReturn returnOp = new TestReturn(rbp.asValue(), r0.asValue());
-        DuPair duPair = new DuPair(r0.asValue(), labelOp, returnOp, 0, 0);
-        DuSequence duSequence = new DuSequence(duPair);
-
-        DuPair duPair1 = new DuPair(r0.asValue(), labelOp, returnOp, 0, 0);
-        DuSequence duSequence1 = new DuSequence(duPair1);
-
-        assertEquals(duSequence.hashCode(), duSequence.hashCode());
-        assertEquals(duSequence1.hashCode(), duSequence1.hashCode());
-        assertEquals(duSequence.hashCode(), duSequence1.hashCode());
-    }
-
-    @Test
     public void testSARAVerifyValue() {
         SARAVerifyValueComparator comparator = new SARAVerifyValueComparator();
 
@@ -648,21 +580,44 @@ public class DuSequenceAnalysisTest {
 
     }
 
-    private static void test(ArrayList<LIRInstruction> instructions, List<DuPair> expectedDuPairs, List<DuSequence> expectedDuSequences, List<DuSequenceWeb> expectedDuSequenceWebs) {
+    private static void test(ArrayList<LIRInstruction> instructions, Map<Value, List<Node>> expectedDuSequenceWebs) {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
 
         AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), new HashMap<>(), new HashMap<>());
-        test(analysisResult, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
+        test(analysisResult, expectedDuSequenceWebs);
     }
 
-    private static void test(AnalysisResult analysisResult, List<DuPair> expectedDuPairs, List<DuSequence> expectedDuSequences, List<DuSequenceWeb> expectedDuSequenceWebs) {
-        List<DuSequenceWeb> actualDuSequenceWebs = analysisResult.getDuSequenceWebs();
-        List<DuPair> actualDuPairs = analysisResult.getDuPairs();
-        List<DuSequence> actualDuSequences = analysisResult.getDuSequences();
+    private static void test(AnalysisResult analysisResult, Map<Value, List<Node>> expectedDuSequenceWebs) {
+        Map<Value, List<Node>> actualDuSequenceWebs = analysisResult.getDuSequenceWebs();
+        assertEquals("The number of key-value pairs does not match.", expectedDuSequenceWebs.size(), actualDuSequenceWebs.size());
 
-        assertEqualsList(expectedDuPairs, actualDuPairs);
-        assertEqualsList(expectedDuSequences, actualDuSequences);
-        assertEqualsList(expectedDuSequenceWebs, actualDuSequenceWebs);
+        for (Entry<Value, List<Node>> entry : expectedDuSequenceWebs.entrySet()) {
+            List<Node> expectedNodes = entry.getValue();
+            List<Node> actualNodes = actualDuSequenceWebs.get(entry.getKey());
+
+            assertNodes(expectedNodes, actualNodes);
+        }
+    }
+
+    private static void assertNodes(List<Node> expectedNodes, List<Node> actualNodes) {
+        assertEquals("The number of nodes does not match.", expectedNodes.size(), actualNodes.size());
+
+        for (Node expectedNode : expectedNodes) {
+            Node actualNode = actualNodes.stream().filter(node -> node.equals(expectedNode)).findAny().get();
+            assertNotEquals("No actual node found for expected node: " + expectedNode, null, actualNode);
+
+            if (expectedNode instanceof DefNode && actualNode instanceof DefNode) {
+                DefNode expectedDefNode = (DefNode) expectedNode;
+                DefNode actualDefNode = (DefNode) actualNode;
+                assertNodes(expectedDefNode.getNextNodes(), actualDefNode.getNextNodes());
+            } else if (expectedNode instanceof MoveNode && actualNode instanceof MoveNode) {
+                MoveNode expectedMoveNode = (MoveNode) expectedNode;
+                MoveNode actualMoveNode = (MoveNode) expectedNode;
+                assertNodes(expectedMoveNode.getNextNodes(), actualMoveNode.getNextNodes());
+            } else {
+                assertEquals("The types of the actual node and the expected node do not match.", true, expectedNode instanceof UseNode && actualNode instanceof UseNode);
+            }
+        }
     }
 
     private static <T> void assertEqualsList(List<T> expected, List<T> actual) {

@@ -6,7 +6,7 @@ import org.graalvm.compiler.lir.LIRInstruction;
 
 import jdk.vm.ci.meta.Value;
 
-public class MoveNode {
+public class MoveNode extends Node {
 
     private Value result;
     private Value input;
@@ -41,6 +41,10 @@ public class MoveNode {
 
     public int getInputOperandPosition() {
         return inputOperandPosition;
+    }
+
+    public List<Node> getNextNodes() {
+        return nextNodes;
     }
 
     public void addNextNode(Node nextNode) {

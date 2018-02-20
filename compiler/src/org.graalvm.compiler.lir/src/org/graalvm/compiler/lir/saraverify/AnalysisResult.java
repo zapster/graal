@@ -1,6 +1,5 @@
 package org.graalvm.compiler.lir.saraverify;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -10,12 +9,11 @@ import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.meta.Constant;
+import jdk.vm.ci.meta.Value;
 
 public class AnalysisResult {
 
-    private List<DuPair> duPairs;
-    private List<DuSequence> duSequences;
-    private List<DuSequenceWeb> duSequenceWebs;
+    private Map<Value, List<Node>> duSequenceWebs;
 
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
@@ -23,29 +21,19 @@ public class AnalysisResult {
     private Map<Register, DummyRegDef> dummyRegDefs;
     private Map<Constant, DummyConstDef> dummyConstDefs;
 
-    private Map<DuSequence, String> duSequencesToString;
+// private Map<DuSequence, String> duSequencesToString;
 
-    public AnalysisResult(List<DuPair> duPairs, List<DuSequence> duSequences, List<DuSequenceWeb> duSequenceWebs, Map<LIRInstruction, Integer> instructionDefOperandCount,
+    public AnalysisResult(Map<Value, List<Node>> duSequenceWebs, Map<LIRInstruction, Integer> instructionDefOperandCount,
                     Map<LIRInstruction, Integer> instructionUseOperandCount, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
-        this.duPairs = duPairs;
-        this.duSequences = duSequences;
         this.duSequenceWebs = duSequenceWebs;
         this.instructionDefOperandCount = instructionDefOperandCount;
         this.instructionUseOperandCount = instructionUseOperandCount;
         this.dummyRegDefs = dummyRegDefs;
         this.dummyConstDefs = dummyConstDefs;
-        this.duSequencesToString = generateDuSequencesToStringMap();
+// this.duSequencesToString = generateDuSequencesToStringMap();
     }
 
-    public List<DuPair> getDuPairs() {
-        return duPairs;
-    }
-
-    public List<DuSequence> getDuSequences() {
-        return duSequences;
-    }
-
-    public List<DuSequenceWeb> getDuSequenceWebs() {
+    public Map<Value, List<Node>> getDuSequenceWebs() {
         return duSequenceWebs;
     }
 
@@ -65,17 +53,17 @@ public class AnalysisResult {
         return dummyConstDefs;
     }
 
-    public Map<DuSequence, String> getDuSequencesToString() {
-        return duSequencesToString;
-    }
+// public Map<DuSequence, String> getDuSequencesToString() {
+// return duSequencesToString;
+// }
 
-    private Map<DuSequence, String> generateDuSequencesToStringMap() {
-        Map<DuSequence, String> map = new HashMap<>();
-
-        for (DuSequence duSequence : duSequences) {
-            map.put(duSequence, duSequence.toString());
-        }
-
-        return map;
-    }
+// private Map<DuSequence, String> generateDuSequencesToStringMap() {
+// Map<DuSequence, String> map = new HashMap<>();
+//
+// for (DuSequence duSequence : duSequences) {
+// map.put(duSequence, duSequence.toString());
+// }
+//
+// return map;
+// }
 }
