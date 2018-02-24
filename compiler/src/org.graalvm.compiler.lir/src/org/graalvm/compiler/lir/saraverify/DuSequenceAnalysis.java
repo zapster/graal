@@ -9,7 +9,6 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.CounterKey;
@@ -23,6 +22,7 @@ import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.LIRInstructionClass;
 import org.graalvm.compiler.lir.LIRValueUtil;
+import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
 
@@ -32,6 +32,7 @@ import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.Value;
+import jdk.vm.ci.meta.ValueKind;
 
 public class DuSequenceAnalysis {
 // test
@@ -176,8 +177,8 @@ public class DuSequenceAnalysis {
         initializeCollections();
 
         // analysis of given instructions
-        Map<Value, List<Node>> duSequenceWebs = new TreeMap<>(new SARAVerifyValueComparator());
-        determineDuSequenceWebs(null, null, instructions, duSequenceWebs, dummyConstDefs);
+        Map<Value, List<DefNode>> duSequenceWebs = new TreeMap<>(saraVerifyValueComparator);
+        determineDuSequenceWebs(null, null, instructions, duSequenceWebs, new TreeMap<>(saraVerifyValueComparator));
 
         // analysis of dummy instructions
 // analyseUndefinedValues(valUseInstructions, unfinishedDuSequences, registerAttributes,
@@ -186,9 +187,10 @@ public class DuSequenceAnalysis {
         return new AnalysisResult(duSequenceWebs, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
     }
 
-    private void determineDuSequenceWebs(LIR lir, AbstractBlockBase<?> block, List<LIRInstruction> instructions, Map<Value, List<Node>> duSequenceWebs, Map<Constant, DummyConstDef> dummyConstDefs) {
-        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(duSequenceWebs);
-        UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(duSequenceWebs);
+    private void determineDuSequenceWebs(LIR lir, AbstractBlockBase<?> block, List<LIRInstruction> instructions, Map<Value, List<DefNode>> duSequenceWebs,
+                    Map<Value, List<Node>> unfinishedDuSequenceWebs) {
+        DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(duSequenceWebs, unfinishedDuSequenceWebs);
+        UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(unfinishedDuSequenceWebs);
 
         List<LIRInstruction> reverseInstructions = new ArrayList<>(instructions);
         Collections.reverse(reverseInstructions);
@@ -209,60 +211,50 @@ public class DuSequenceAnalysis {
 // }
             if (inst.isValueMoveOp()) {
                 ValueMoveOp moveInst = (ValueMoveOp) inst;
-                Value result = moveInst.getResult();
-                Value input = moveInst.getInput();
-                MoveNode moveNode = new MoveNode(result, input, inst, 0, 0);
-
-                List<Node> resultNodes = duSequenceWebs.get(result);
-                List<Node> filteredNodes = resultNodes.stream().filter(node -> node instanceof MoveNode || node instanceof UseNode).collect(Collectors.toList());
-                resultNodes.removeAll(filteredNodes);
-                if (resultNodes.isEmpty()) {
-                    duSequenceWebs.remove(result);
-                }
-
-                moveNode.addAllNextNodes(filteredNodes);
-
-                List<Node> inputNodes = duSequenceWebs.get(input);
-                if (inputNodes == null) {
-                    inputNodes = new ArrayList<>();
-                    duSequenceWebs.put(input, inputNodes);
-                }
-                inputNodes.add(moveNode);
-
-                defOperandPosition = 1;
-                useOperandPosition = 1;
+                insertMoveNode(unfinishedDuSequenceWebs, moveInst.getResult(), moveInst.getInput(), inst);
+            } else if (inst.isLoadConstantOp()) {
+                LoadConstantOp loadConstantOp = (LoadConstantOp) inst;
+                insertMoveNode(unfinishedDuSequenceWebs, loadConstantOp.getResult(), new ConstantValue(ValueKind.Illegal, loadConstantOp.getConstant()), inst);
             } else {
                 visitValues(inst, defConsumer, useConsumer, useConsumer);
             }
 
             instructionDefOperandCount.put(inst, defOperandPosition);
             instructionUseOperandCount.put(inst, useOperandPosition);
-
-// if (inst.isLoadConstantOp()) {
-// // insert du-pair from dummy constant instruction to current instruction
-// Constant constant = ((LoadConstantOp) inst).getConstant();
-//
-// DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
-// if (dummyConstDef == null) {
-// dummyConstDef = new DummyConstDef(new ConstantValue(ValueKind.Illegal, constant));
-// dummyConstDefs.put(constant, dummyConstDef);
-// }
-//
-// ConstantValue constantValue = dummyConstDef.getValue();
-// DuPair duPairConstMove = new DuPair(constantValue, dummyConstDef, inst, 0, 0);
-// duPairs.add(duPairConstMove);
-//
-// // TODO: remove from unfinishedDuSequences
-// duSequences.stream().filter(duSequence ->
-// duSequence.peekFirst().getDefInstruction().equals(inst)).forEach(x ->
-// x.addFirst(duPairConstMove));
-// }
         }
+    }
+
+    private void insertMoveNode(Map<Value, List<Node>> unfinishedDuSequenceWebs, Value result, Value input, LIRInstruction instruction) {
+        MoveNode moveNode = new MoveNode(result, input, instruction, 0, 0);
+
+        List<Node> resultNodes = unfinishedDuSequenceWebs.get(result);
+
+        assert resultNodes.stream().allMatch(node -> !node.isDefNode());
+
+        moveNode.addAllNextNodes(resultNodes);
+        unfinishedDuSequenceWebs.remove(result);
+
+        List<Node> inputNodes = getOrCreateList(unfinishedDuSequenceWebs, input);
+        inputNodes.add(moveNode);
+
+        defOperandPosition = 1;
+        useOperandPosition = 1;
     }
 
     private void initializeCollections() {
         instructionDefOperandCount = new IdentityHashMap<>();
         instructionUseOperandCount = new IdentityHashMap<>();
+    }
+
+    public static <KeyType, ListType> List<ListType> getOrCreateList(Map<KeyType, List<ListType>> map, KeyType key) {
+        List<ListType> list = map.get(key);
+
+        if (list == null) {
+            list = new ArrayList<>();
+            map.put(key, list);
+        }
+
+        return list;
     }
 
 // public static <T, U, V> Map<U, List<V>> mergeMaps(Map<T, Map<U, List<V>>> map, T[] mergeKeys,
@@ -351,10 +343,12 @@ public class DuSequenceAnalysis {
 
     class DefInstructionValueConsumer implements InstructionValueConsumer {
 
-        private Map<Value, List<Node>> duSequenceWebs;
+        Map<Value, List<DefNode>> duSequenceWebs;
+        Map<Value, List<Node>> unfinishedDuSequenceWebs;
 
-        public DefInstructionValueConsumer(Map<Value, List<Node>> duSequenceWebs) {
+        public DefInstructionValueConsumer(Map<Value, List<DefNode>> duSequenceWebs, Map<Value, List<Node>> unfinishedDuSequenceWebs) {
             this.duSequenceWebs = duSequenceWebs;
+            this.unfinishedDuSequenceWebs = unfinishedDuSequenceWebs;
         }
 
         @Override
@@ -365,8 +359,8 @@ public class DuSequenceAnalysis {
                 return;
             }
 
-            List<Node> nodes = duSequenceWebs.get(value);
-            if (nodes == null) {
+            List<Node> unfinishedNodes = unfinishedDuSequenceWebs.get(value);
+            if (unfinishedNodes == null) {
                 // definition of a value, which is not used
                 defOperandPosition++;
                 return;
@@ -374,12 +368,14 @@ public class DuSequenceAnalysis {
 
             AllocatableValue allocatableValue = ValueUtil.asAllocatableValue(value);
 
-            List<Node> filteredNodes = nodes.stream().filter(node -> node instanceof MoveNode || node instanceof UseNode).collect(Collectors.toList());
-            nodes.removeAll(filteredNodes);
+            assert unfinishedNodes.stream().allMatch(node -> !node.isDefNode());
 
             DefNode defNode = new DefNode(allocatableValue, instruction, defOperandPosition);
+            defNode.addAllNextNodes(unfinishedNodes);
+            unfinishedDuSequenceWebs.remove(value);
+
+            List<DefNode> nodes = getOrCreateList(duSequenceWebs, value);
             nodes.add(defNode);
-            defNode.addAllNextNodes(filteredNodes);
 
             defOperandPosition++;
         }
@@ -388,10 +384,10 @@ public class DuSequenceAnalysis {
 
     class UseInstructionValueConsumer implements InstructionValueConsumer {
 
-        private Map<Value, List<Node>> duSequenceWebs;
+        private Map<Value, List<Node>> unfinishedDuSequenceWebs;
 
-        public UseInstructionValueConsumer(Map<Value, List<Node>> duSequenceWebs) {
-            this.duSequenceWebs = duSequenceWebs;
+        public UseInstructionValueConsumer(Map<Value, List<Node>> unfinishedDuSequenceWebs) {
+            this.unfinishedDuSequenceWebs = unfinishedDuSequenceWebs;
         }
 
         @Override
@@ -402,12 +398,8 @@ public class DuSequenceAnalysis {
                 return;
             }
 
-            List<Node> nodes = duSequenceWebs.get(value);
+            List<Node> nodes = getOrCreateList(unfinishedDuSequenceWebs, value);
 
-            if (nodes == null) {
-                nodes = new ArrayList<>();
-                duSequenceWebs.put(value, nodes);
-            }
             nodes.add(new UseNode(value, instruction, useOperandPosition));
 
             useOperandPosition++;

@@ -13,7 +13,7 @@ import jdk.vm.ci.meta.Value;
 
 public class AnalysisResult {
 
-    private Map<Value, List<Node>> duSequenceWebs;
+    private Map<Value, List<DefNode>> duSequenceWebs;
 
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
@@ -23,7 +23,7 @@ public class AnalysisResult {
 
 // private Map<DuSequence, String> duSequencesToString;
 
-    public AnalysisResult(Map<Value, List<Node>> duSequenceWebs, Map<LIRInstruction, Integer> instructionDefOperandCount,
+    public AnalysisResult(Map<Value, List<DefNode>> duSequenceWebs, Map<LIRInstruction, Integer> instructionDefOperandCount,
                     Map<LIRInstruction, Integer> instructionUseOperandCount, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
         this.duSequenceWebs = duSequenceWebs;
         this.instructionDefOperandCount = instructionDefOperandCount;
@@ -33,7 +33,7 @@ public class AnalysisResult {
 // this.duSequencesToString = generateDuSequencesToStringMap();
     }
 
-    public Map<Value, List<Node>> getDuSequenceWebs() {
+    public Map<Value, List<DefNode>> getDuSequenceWebs() {
         return duSequenceWebs;
     }
 

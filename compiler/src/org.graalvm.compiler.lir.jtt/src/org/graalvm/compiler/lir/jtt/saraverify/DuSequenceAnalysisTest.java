@@ -270,33 +270,9 @@ public class DuSequenceAnalysisTest {
         AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequenceWebs(instructions, TestValue.getAttributesMap(), dummyRegDefs, dummyConstDefs);
         assertEquals(true, dummyRegDefs.isEmpty());
 
-        DuPair rbpDuPair = new DuPair(rbp.asValue(), labelOp, returnOp, 0, 0);
-        DuPair v0DuPair = new DuPair(v0, testMoveFromConst, returnOp, 0, 1);
-        DuPair constDuPair = new DuPair(dummyConstDefs.get(JavaConstant.INT_0).getValue(), dummyConstDefs.get(JavaConstant.INT_0), testMoveFromConst, 0, 0);
+        Map<Value, List<Node>> expectedDuSequenceWebs = new TreeMap<>(new SARAVerifyValueComparator());
 
-        List<DuPair> expectedDuPairs = new ArrayList<>();
-        expectedDuPairs.add(rbpDuPair);
-        expectedDuPairs.add(v0DuPair);
-        expectedDuPairs.add(constDuPair);
-
-        DuSequence rbpDuSequence = new DuSequence(rbpDuPair);
-        DuSequence constDuSequence = new DuSequence(v0DuPair);
-        constDuSequence.addFirst(constDuPair);
-
-        List<DuSequence> expectedDuSequences = new ArrayList<>();
-        expectedDuSequences.add(rbpDuSequence);
-        expectedDuSequences.add(constDuSequence);
-
-        DuSequenceWeb rbpDuSequenceWeb = new DuSequenceWeb();
-        rbpDuSequenceWeb.add(rbpDuSequence);
-        DuSequenceWeb constDuSequenceWeb = new DuSequenceWeb();
-        constDuSequenceWeb.add(constDuSequence);
-
-        List<DuSequenceWeb> expectedDuSequenceWebs = new ArrayList<>();
-        expectedDuSequenceWebs.add(rbpDuSequenceWeb);
-        expectedDuSequenceWebs.add(constDuSequenceWeb);
-
-        test(analysisResult, expectedDuPairs, expectedDuSequences, expectedDuSequenceWebs);
+        test(analysisResult, expectedDuSequenceWebs);
     }
 
     @Test
@@ -545,32 +521,45 @@ public class DuSequenceAnalysisTest {
     }
 
     private static void test(AnalysisResult analysisResult, Map<Value, List<Node>> expectedDuSequenceWebs) {
-        Map<Value, List<Node>> actualDuSequenceWebs = analysisResult.getDuSequenceWebs();
+        Map<Value, List<DefNode>> actualDuSequenceWebs = analysisResult.getDuSequenceWebs();
         assertEquals("The number of key-value pairs does not match.", expectedDuSequenceWebs.size(), actualDuSequenceWebs.size());
 
         for (Entry<Value, List<Node>> entry : expectedDuSequenceWebs.entrySet()) {
             List<Node> expectedNodes = entry.getValue();
-            List<Node> actualNodes = actualDuSequenceWebs.get(entry.getKey());
+            List<DefNode> actualNodes = actualDuSequenceWebs.get(entry.getKey());
 
             assertNodes(expectedNodes, actualNodes);
         }
     }
 
-    private static void assertNodes(List<Node> expectedNodes, List<Node> actualNodes) {
+    private static void assertNodes(List<Node> expectedNodes, List<DefNode> actualNodes) {
+        assertEquals("The number of nodes does not match.", expectedNodes.size(), actualNodes.size());
+
+        for (Node expectedNode : expectedNodes) {
+            DefNode actualNode = actualNodes.stream().filter(node -> node.equals(expectedNode)).findAny().get();
+            assertNotEquals("No actual node found for expected node: " + expectedNode, null, actualNode);
+
+            DefNode expectedDefNode = (DefNode) expectedNode;
+            assertNextNodes(expectedDefNode.getNextNodes(), actualNode.getNextNodes());
+
+        }
+    }
+
+    private static void assertNextNodes(List<Node> expectedNodes, List<Node> actualNodes) {
         assertEquals("The number of nodes does not match.", expectedNodes.size(), actualNodes.size());
 
         for (Node expectedNode : expectedNodes) {
             Node actualNode = actualNodes.stream().filter(node -> node.equals(expectedNode)).findAny().get();
             assertNotEquals("No actual node found for expected node: " + expectedNode, null, actualNode);
 
-            if (expectedNode instanceof DefNode && actualNode instanceof DefNode) {
+            if (expectedNode.isDefNode() && actualNode.isDefNode()) {
                 DefNode expectedDefNode = (DefNode) expectedNode;
                 DefNode actualDefNode = (DefNode) actualNode;
-                assertNodes(expectedDefNode.getNextNodes(), actualDefNode.getNextNodes());
+                assertNextNodes(expectedDefNode.getNextNodes(), actualDefNode.getNextNodes());
             } else if (expectedNode instanceof MoveNode && actualNode instanceof MoveNode) {
                 MoveNode expectedMoveNode = (MoveNode) expectedNode;
                 MoveNode actualMoveNode = (MoveNode) expectedNode;
-                assertNodes(expectedMoveNode.getNextNodes(), actualMoveNode.getNextNodes());
+                assertNextNodes(expectedMoveNode.getNextNodes(), actualMoveNode.getNextNodes());
             } else {
                 assertEquals("The types of the actual node and the expected node do not match.", true, expectedNode instanceof UseNode && actualNode instanceof UseNode);
             }
