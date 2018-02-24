@@ -91,4 +91,9 @@ public class MoveNode extends Node {
 
         return string;
     }
+
+    @Override
+    public boolean isDefNode() {
+        return false;
+    }
 }

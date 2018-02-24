@@ -52,4 +52,9 @@ public class UseNode extends Node {
     public String duSequenceToString() {
         return " -> " + toString();
     }
+
+    @Override
+    public boolean isDefNode() {
+        return false;
+    }
 }

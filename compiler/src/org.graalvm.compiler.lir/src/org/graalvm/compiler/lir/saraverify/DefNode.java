@@ -76,4 +76,9 @@ public class DefNode extends Node {
 
         return string;
     }
+
+    @Override
+    public boolean isDefNode() {
+        return true;
+    }
 }

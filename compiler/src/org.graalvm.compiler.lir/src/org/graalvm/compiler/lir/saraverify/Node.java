@@ -14,5 +14,7 @@ public abstract class Node {
         return instruction;
     }
 
+    public abstract boolean isDefNode();
+
     public abstract String duSequenceToString();
 }
