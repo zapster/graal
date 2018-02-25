@@ -45,10 +45,9 @@ public class DefNode extends Node {
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + System.identityHashCode(instruction);
         result = prime * result + defOperandPosition;
         result = prime * result + value.hashCode();
-        return result;
+        return result + super.hashCode();
     }
 
     @Override
@@ -58,7 +57,7 @@ public class DefNode extends Node {
         }
 
         DefNode defNode = (DefNode) obj;
-        return defNode.value.equals(this.value) && defNode.instruction.equals(this.instruction) && defNode.defOperandPosition == this.defOperandPosition ? true : false;
+        return super.equals(defNode) && defNode.value.equals(this.value) && defNode.defOperandPosition == this.defOperandPosition ? true : false;
     }
 
     @Override
@@ -80,5 +79,10 @@ public class DefNode extends Node {
     @Override
     public boolean isDefNode() {
         return true;
+    }
+
+    @Override
+    public boolean isUseNode() {
+        return false;
     }
 }

@@ -27,10 +27,9 @@ public class UseNode extends Node {
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + System.identityHashCode(instruction);
         result = prime * result + useOperandPosition;
         result = prime * result + value.hashCode();
-        return result;
+        return result + super.hashCode();
     }
 
     @Override
@@ -40,7 +39,7 @@ public class UseNode extends Node {
         }
 
         UseNode useNode = (UseNode) obj;
-        return useNode.value.equals(this.value) && useNode.instruction.equals(this.instruction) && useNode.useOperandPosition == this.useOperandPosition ? true : false;
+        return super.equals(useNode) && useNode.value.equals(this.value) && useNode.useOperandPosition == this.useOperandPosition ? true : false;
     }
 
     @Override
@@ -56,5 +55,10 @@ public class UseNode extends Node {
     @Override
     public boolean isDefNode() {
         return false;
+    }
+
+    @Override
+    public boolean isUseNode() {
+        return true;
     }
 }

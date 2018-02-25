@@ -16,7 +16,8 @@ public class MoveNode extends Node {
     private int inputOperandPosition;
     private List<Node> nextNodes;
 
-    public MoveNode(Value result, Value input, LIRInstruction instruction, int resultOperandPosition, int inputOperandPosition) {
+    public MoveNode(Value result, Value input, LIRInstruction instruction, int resultOperandPosition,
+                    int inputOperandPosition) {
         super(instruction);
         this.result = result;
         this.input = input;
@@ -59,10 +60,9 @@ public class MoveNode extends Node {
         int hashCode = 1;
         hashCode = prime * hashCode + input.hashCode();
         hashCode = prime * hashCode + inputOperandPosition;
-        hashCode = prime * hashCode + System.identityHashCode(instruction);
         hashCode = prime * hashCode + result.hashCode();
         hashCode = prime * hashCode + resultOperandPosition;
-        return hashCode;
+        return hashCode + super.hashCode();
     }
 
     @Override
@@ -72,7 +72,7 @@ public class MoveNode extends Node {
         }
 
         MoveNode moveNode = (MoveNode) obj;
-        return moveNode.input.equals(this.input) && moveNode.inputOperandPosition == this.inputOperandPosition && moveNode.instruction.equals(this.instruction) &&
+        return super.equals(moveNode) && moveNode.input.equals(this.input) && moveNode.inputOperandPosition == this.inputOperandPosition &&
                         moveNode.result.equals(this.result) && moveNode.resultOperandPosition == this.resultOperandPosition ? true : false;
     }
 
@@ -94,6 +94,11 @@ public class MoveNode extends Node {
 
     @Override
     public boolean isDefNode() {
+        return false;
+    }
+
+    @Override
+    public boolean isUseNode() {
         return false;
     }
 }
