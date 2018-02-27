@@ -53,7 +53,7 @@ public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationCont
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
         Map<Register, DummyRegDef> dummyRegDefs = new HashMap<>();
         Map<Constant, DummyConstDef> dummyConstDefs = new HashMap<>();
-        AnalysisResult result = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), dummyRegDefs, dummyConstDefs);
+        AnalysisResult result = duSequenceAnalysis.determineDuSequences(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), dummyRegDefs, dummyConstDefs);
         context.contextAdd(result);
     }
 

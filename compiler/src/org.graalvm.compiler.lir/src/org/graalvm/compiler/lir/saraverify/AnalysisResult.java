@@ -13,7 +13,7 @@ import jdk.vm.ci.meta.Value;
 
 public class AnalysisResult {
 
-    private Map<Value, List<DefNode>> duSequenceWebs;
+    private Map<Value, List<DefNode>> duSequences;
 
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
@@ -21,20 +21,17 @@ public class AnalysisResult {
     private Map<Register, DummyRegDef> dummyRegDefs;
     private Map<Constant, DummyConstDef> dummyConstDefs;
 
-// private Map<DuSequence, String> duSequencesToString;
-
-    public AnalysisResult(Map<Value, List<DefNode>> duSequenceWebs, Map<LIRInstruction, Integer> instructionDefOperandCount,
+    public AnalysisResult(Map<Value, List<DefNode>> duSequences, Map<LIRInstruction, Integer> instructionDefOperandCount,
                     Map<LIRInstruction, Integer> instructionUseOperandCount, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
-        this.duSequenceWebs = duSequenceWebs;
+        this.duSequences = duSequences;
         this.instructionDefOperandCount = instructionDefOperandCount;
         this.instructionUseOperandCount = instructionUseOperandCount;
         this.dummyRegDefs = dummyRegDefs;
         this.dummyConstDefs = dummyConstDefs;
-// this.duSequencesToString = generateDuSequencesToStringMap();
     }
 
-    public Map<Value, List<DefNode>> getDuSequenceWebs() {
-        return duSequenceWebs;
+    public Map<Value, List<DefNode>> getDuSequences() {
+        return duSequences;
     }
 
     public Map<LIRInstruction, Integer> getInstructionDefOperandCount() {
@@ -52,18 +49,4 @@ public class AnalysisResult {
     public Map<Constant, DummyConstDef> getDummyConstDefs() {
         return dummyConstDefs;
     }
-
-// public Map<DuSequence, String> getDuSequencesToString() {
-// return duSequencesToString;
-// }
-
-// private Map<DuSequence, String> generateDuSequencesToStringMap() {
-// Map<DuSequence, String> map = new HashMap<>();
-//
-// for (DuSequence duSequence : duSequences) {
-// map.put(duSequence, duSequence.toString());
-// }
-//
-// return map;
-// }
 }

@@ -349,7 +349,7 @@ public class DuSequenceAnalysisTest {
 
         List<Integer> actualList = mergedMap.get(1);
         assertNotEquals(null, actualList);
-        assertEqualsList(list, actualList);
+        assertEquals(true, actualList.equals(list));
     }
 
     @Test
@@ -368,10 +368,10 @@ public class DuSequenceAnalysisTest {
         map.put(1, map1);
         map.put(2, map2);
         Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2}, null);
-        assertEqualsList(Arrays.asList(10), mergedMap.get(1));
-        assertEqualsList(Arrays.asList(11, 12, 15), mergedMap.get(2));
-        assertEqualsList(Arrays.asList(13, 14), mergedMap.get(3));
-        assertEqualsList(Arrays.asList(16, 17, 18), mergedMap.get(4));
+        assertEquals(true, mergedMap.get(1).equals(Arrays.asList(10)));
+        assertEquals(true, mergedMap.get(2).equals(Arrays.asList(11, 12, 15)));
+        assertEquals(true, mergedMap.get(3).equals(Arrays.asList(13, 14)));
+        assertEquals(true, mergedMap.get(4).equals(Arrays.asList(16, 17, 18)));
     }
 
     @Test
@@ -519,7 +519,7 @@ public class DuSequenceAnalysisTest {
     }
 
     private static void test(AnalysisResult analysisResult, Map<Value, List<Node>> expectedDuSequences) {
-        Map<Value, List<DefNode>> actualDuSequences = analysisResult.getDuSequenceWebs();
+        Map<Value, List<DefNode>> actualDuSequences = analysisResult.getDuSequences();
         assertEquals("The number of key-value pairs does not match.", expectedDuSequences.size(), actualDuSequences.size());
 
         for (Entry<Value, List<Node>> entry : expectedDuSequences.entrySet()) {

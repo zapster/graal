@@ -5,13 +5,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.graalvm.compiler.debug.DebugContext;
-import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.debug.GraalError;
-import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
@@ -23,6 +20,7 @@ import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.meta.Constant;
+import jdk.vm.ci.meta.Value;
 
 public class VerificationPhase extends LIRPhase<AllocationContext> {
 
@@ -37,21 +35,20 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             return;
         }
 
-        List<DuSequence> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
         Map<Register, DummyRegDef> inputDummyRegDefs = inputResult.getDummyRegDefs();
         Map<Constant, DummyConstDef> inputDummyConstDefs = inputResult.getDummyConstDefs();
-        Map<DuSequence, String> inputDuSequencesToString = inputResult.getDuSequencesToString();
 
         LIR lir = lirGenRes.getLIR();
         DebugContext debugContext = lir.getDebug();
 
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
-        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequenceWebs(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), inputDummyRegDefs,
+        AnalysisResult outputResult = duSequenceAnalysis.determineDuSequences(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), inputDummyRegDefs,
                         inputDummyConstDefs);
 
-        List<DuSequence> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
-        if (!verifyDataFlow(inputDuSequences, outputDuSequences, inputDuSequencesToString, debugContext)) {
+        if (!verifyDataFlow(inputDuSequences, outputDuSequences, debugContext)) {
             throw GraalError.shouldNotReachHere(DuSequenceAnalysis.ERROR_MSG_PREFIX + "Data Flow not equal");
         }
 
@@ -62,76 +59,17 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         }
     }
 
-    public boolean verifyDataFlow(List<DuSequence> inputDuSequences, List<DuSequence> outputDuSequences, Map<DuSequence, String> inputDuSequencesToString, DebugContext debugContext) {
-        List<DuSequence> matchedOutputDuSequences = new ArrayList<>();
-        List<DuSequence> unmatchedInputDuSequences = new ArrayList<>();
-        List<DuSequence> distinctInputDuSequences = inputDuSequences.stream().distinct().collect(Collectors.toList());
-        List<DuSequence> distinctOutputDuSequences = outputDuSequences.stream().distinct().collect(Collectors.toList());
-        Map<DuSequence, DuSequence> matches = new HashMap<>();
+    public boolean verifyDataFlow(Map<Value, List<DefNode>> inputDuSequences, Map<Value, List<DefNode>> outputDuSequences, DebugContext debugContext) {
+        List<DuSequenceWeb> inputDuSequenceWebs = createDuSequenceWebs(inputDuSequences);
+        List<DuSequenceWeb> outputDuSequenceWebs = createDuSequenceWebs(outputDuSequences);
 
-        // log number of distinct du sequences
-        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-            debugContext.log(3, "Number of distinct input Du-Sequences: " + distinctInputDuSequences.size() + " | Number of distinct output Du-Sequences: " + distinctOutputDuSequences.size());
-        }
-
-        for (DuSequence inputDuSequence : distinctInputDuSequences) {
-            LIRInstruction inputDefInstruction = inputDuSequence.peekFirst().getDefInstruction();
-            LIRInstruction inputUseInstruction = inputDuSequence.peekLast().getUseInstruction();
-            int inputOperandDefPosition = inputDuSequence.peekFirst().getOperandDefPosition();
-            int inputOperandUsePosition = inputDuSequence.peekLast().getOperandUsePosition();
-
-            Optional<DuSequence> match = distinctOutputDuSequences.stream().filter(duSequence -> duSequence.peekFirst().getOperandDefPosition() == inputOperandDefPosition &&
-                            duSequence.peekLast().getOperandUsePosition() == inputOperandUsePosition &&
-                            duSequence.peekFirst().getDefInstruction().equals(inputDefInstruction) &&
-                            duSequence.peekLast().getUseInstruction().equals(inputUseInstruction) &&
-                            !matchedOutputDuSequences.contains(duSequence)).findAny();
-
-            if (match.isPresent()) {
-                DuSequence matchedDuSequence = match.get();
-                matchedOutputDuSequences.add(matchedDuSequence);
-                matches.put(inputDuSequence, matchedDuSequence);
-            } else {
-                unmatchedInputDuSequences.add(inputDuSequence);
+        for (DuSequenceWeb inputDuSequenceWeb : inputDuSequenceWebs) {
+            if (!outputDuSequenceWebs.stream().anyMatch(outputDuSequenceWeb -> outputDuSequenceWeb.equals(inputDuSequenceWeb))) {
+                return false;
             }
         }
 
-        List<DuSequence> unmatchedOutputDuSequences = distinctOutputDuSequences.stream().filter(duSequence -> !matchedOutputDuSequences.contains(duSequence)).collect(Collectors.toList());
-
-        // log unmatched input du-sequences
-        if (unmatchedInputDuSequences.size() > 0) {
-            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                debugContext.log(3, "\nUnmatched input du-sequences: ");
-                debugContext.log(3, "============================: ");
-                unmatchedInputDuSequences.stream().forEach(duSequence -> {
-                    String duSequenceToString = inputDuSequencesToString.get(duSequence);
-                    if (duSequenceToString == null) {
-                        duSequenceToString = duSequence.toString();
-                    }
-                    debugContext.log(3, duSequenceToString);
-                });
-            }
-        }
-
-        // log unmatched output du-sequences
-        if (unmatchedOutputDuSequences.size() > 0) {
-            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                debugContext.log(3, "\nUnmatched output du-sequences: ");
-                debugContext.log(3, "=============================: ");
-                unmatchedOutputDuSequences.stream().forEach(duSequence -> debugContext.log(3, duSequence.toString()));
-            }
-        }
-
-        boolean validDataFlow = (unmatchedOutputDuSequences.size() == 0 && unmatchedInputDuSequences.size() == 0) ? true : false;
-
-        // log matches
-        for (Entry<DuSequence, DuSequence> entry : matches.entrySet()) {
-            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                debugContext.log(4, "\n\nInput DuSequence: " + inputDuSequencesToString.get(entry.getKey()));
-                debugContext.log(4, "\nMatched output du-sequence: " + entry.getValue());
-            }
-        }
-
-        return validDataFlow;
+        return true;
     }
 
     public static boolean verifyOperandCount(Map<LIRInstruction, Integer> inputInstructionDefOperandCount,
@@ -156,6 +94,71 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         }
 
         return true;
+    }
+
+    public List<DuSequenceWeb> createDuSequenceWebs(Map<Value, List<DefNode>> nodes) {
+        List<DuSequenceWeb> duSequenceWebs = new ArrayList<>();
+        Map<Node, DuSequenceWeb> nodeDuSequenceWeb = new HashMap<>();
+
+        for (List<DefNode> nodeList : nodes.values()) {
+            for (DefNode node : nodeList) {
+                DuSequenceWeb duSequenceWeb = createDuSequenceWebs(node, nodeDuSequenceWeb);
+                duSequenceWeb.getDefNodes().add(node);
+                duSequenceWebs.add(duSequenceWeb);
+            }
+        }
+
+        return duSequenceWebs;
+    }
+
+    private static DuSequenceWeb createDuSequenceWebs(Node node, Map<Node, DuSequenceWeb> nodeDuSequenceWeb) {
+        DuSequenceWeb duSequenceWeb = nodeDuSequenceWeb.get(node);
+
+        if (duSequenceWeb != null) {
+            // node already visited
+            return duSequenceWeb;
+        }
+
+        if (node.isUseNode()) {
+            // node is a use node
+            UseNode useNode = (UseNode) node;
+            duSequenceWeb = new DuSequenceWeb();
+            duSequenceWeb.getUseNodes().add(useNode);
+            nodeDuSequenceWeb.put(node, duSequenceWeb);
+            return duSequenceWeb;
+        } else {
+            List<Node> nextNodes;
+
+            if (node.isDefNode()) {
+                DefNode defNode = (DefNode) node;
+                nextNodes = defNode.getNextNodes();
+            } else {
+                MoveNode moveNode = (MoveNode) node;
+                nextNodes = moveNode.getNextNodes();
+            }
+
+            List<DuSequenceWeb> nextNodesDuSequenceWebs = nextNodes.stream() //
+                            .map(nextNode -> createDuSequenceWebs(nextNode, nodeDuSequenceWeb))    //
+                            .collect(Collectors.toList());
+
+            DuSequenceWeb mergedDuSequenceWeb = mergeDuSequenceWebs(nextNodesDuSequenceWebs);
+            nodeDuSequenceWeb.put(node, mergedDuSequenceWeb);
+
+            return mergedDuSequenceWeb;
+        }
+    }
+
+    private static DuSequenceWeb mergeDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs) {
+        DuSequenceWeb duSequenceWeb = new DuSequenceWeb();
+
+        for (DuSequenceWeb web : duSequenceWebs) {
+            assert web != null;
+
+            duSequenceWeb.defNodesAddAll(web.getDefNodes());
+            duSequenceWeb.useNodesAddAll(web.getUseNodes());
+        }
+
+        return duSequenceWeb;
     }
 
 }

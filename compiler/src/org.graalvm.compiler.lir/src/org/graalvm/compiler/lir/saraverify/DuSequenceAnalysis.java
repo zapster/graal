@@ -4,13 +4,17 @@ import static org.graalvm.compiler.lir.LIRInstruction.OperandFlag.REG;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.CounterKey;
@@ -28,6 +32,7 @@ import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
+import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.RegisterAttributes;
@@ -104,76 +109,63 @@ public class DuSequenceAnalysis {
         }
     }
 
-// public AnalysisResult determineDuSequenceWebs(LIRGenerationResult lirGenRes, RegisterAttributes[]
-// registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
-// Map<Constant, DummyConstDef> dummyConstDefs) {
-// LIR lir = lirGenRes.getLIR();
-// AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-// BitSet blockQueue = new BitSet(blocks.length);
-//
-// if (!(lir.getControlFlowGraph().getLoops().isEmpty())) {
-// // control flow contains one or more loops
-// skippedCompilationUnits.increment(lir.getDebug());
-// return null;
-// }
-// executedCompilationUnits.increment(lir.getDebug());
-//
-// initializeCollections();
-// logInstructions(lir);
-//
-// // start with leaf blocks
-// for (AbstractBlockBase<?> block : blocks) {
-// if (block.getSuccessorCount() == 0) {
-// blockQueue.set(block.getId());
-// }
-// }
-//
-// BitSet visitedBlocks = new BitSet(blocks.length);
-// HashMap<AbstractBlockBase<?>, Map<Value, List<ValUsage>>> blockValUseInstructions = new
-// HashMap<>();
-// HashMap<AbstractBlockBase<?>, List<DuSequence>> blockUnfinishedDuSequences = new HashMap<>();
-//
-// while (!blockQueue.isEmpty()) {
-// // get any block, whose successors have already been visited, remove it from the queue and add
-// its
-// // predecessors to the queue
-// int blockId = blockQueue.stream().filter(id ->
-// Arrays.asList(blocks[id].getSuccessors()).stream().allMatch(b ->
-// visitedBlocks.get(b.getId()))).findFirst().getAsInt();
-// blockQueue.clear(blockId);
-// visitedBlocks.set(blockId);
-//
-// AbstractBlockBase<?> block = blocks[blockId];
-// for (AbstractBlockBase<?> predecessor : block.getPredecessors()) {
-// blockQueue.set(predecessor.getId());
-// }
-//
-// // get instructions of block
-// ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
-//
-// // merging of value uses from multiple predecessors
-// Map<Value, List<ValUsage>> valUseInstructions = mergeMaps(blockValUseInstructions,
-// block.getSuccessors(), saraVerifyValueComparator);
-// blockValUseInstructions.put(block, valUseInstructions);
-//
-// // merging of unfinished du-sequences from multiple predecessors
-// List<DuSequence> unfinishedDuSequences = mergeDuSequencesLists(blockUnfinishedDuSequences,
-// block.getSuccessors());
-// blockUnfinishedDuSequences.put(block, unfinishedDuSequences);
-//
-// determineDuSequenceWebs(lir, block, instructions, valUseInstructions, unfinishedDuSequences,
-// dummyConstDefs);
-// }
-// assert visitedBlocks.length() == visitedBlocks.cardinality() && visitedBlocks.cardinality() ==
-// blocks.length && visitedBlocks.stream().allMatch(id -> id < blocks.length);
-//
-// // analysis of dummy instructions
-// analyseUndefinedValues(blockValUseInstructions.get(blocks[0]),
-// blockUnfinishedDuSequences.get(blocks[0]), registerAttributes, dummyRegDefs, dummyConstDefs);
-//
-// return new AnalysisResult(duPairs, duSequences, duSequenceWebs, instructionDefOperandCount,
-// instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
-// }
+    public AnalysisResult determineDuSequences(LIRGenerationResult lirGenRes, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
+                    Map<Constant, DummyConstDef> dummyConstDefs) {
+        LIR lir = lirGenRes.getLIR();
+        AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+        BitSet blockQueue = new BitSet(blocks.length);
+
+        if (!(lir.getControlFlowGraph().getLoops().isEmpty())) {
+            // control flow contains one or more loops
+            skippedCompilationUnits.increment(lir.getDebug());
+            return null;
+        }
+        executedCompilationUnits.increment(lir.getDebug());
+
+        initializeCollections();
+        logInstructions(lir);
+
+        // start with leaf blocks
+        for (AbstractBlockBase<?> block : blocks) {
+            if (block.getSuccessorCount() == 0) {
+                blockQueue.set(block.getId());
+            }
+        }
+
+        BitSet visitedBlocks = new BitSet(blocks.length);
+        HashMap<AbstractBlockBase<?>, Map<Value, List<Node>>> blockUnfinishedDuSequences = new HashMap<>();
+        Map<Value, List<DefNode>> duSequences = new TreeMap<>(saraVerifyValueComparator);
+
+        while (!blockQueue.isEmpty()) {
+            // get any block, whose successors have already been visited, remove it from the queue and add its
+            // predecessors to the queue
+            int blockId = blockQueue.stream().filter(id -> Arrays.asList(blocks[id].getSuccessors()).stream().allMatch(b -> visitedBlocks.get(b.getId()))).findFirst().getAsInt();
+            blockQueue.clear(blockId);
+            visitedBlocks.set(blockId);
+
+            AbstractBlockBase<?> block = blocks[blockId];
+            for (AbstractBlockBase<?> predecessor : block.getPredecessors()) {
+                blockQueue.set(predecessor.getId());
+            }
+
+            // get instructions of block
+            ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+
+            // merging of value uses from multiple predecessors
+            Map<Value, List<Node>> mergedUnfinishedDuSequences = mergeMaps(blockUnfinishedDuSequences,
+                            block.getSuccessors(), saraVerifyValueComparator);
+            blockUnfinishedDuSequences.put(block, mergedUnfinishedDuSequences);
+
+            determineDuSequences(lir, block, instructions, duSequences, mergedUnfinishedDuSequences);
+        }
+        assert visitedBlocks.length() == visitedBlocks.cardinality() && visitedBlocks.cardinality() == blocks.length && visitedBlocks.stream().allMatch(id -> id < blocks.length);
+
+        // analysis of dummy instructions
+        analyseUndefinedValues(duSequences, blockUnfinishedDuSequences.get(blocks[0]), registerAttributes, dummyRegDefs, dummyConstDefs);
+
+        return new AnalysisResult(duSequences, instructionDefOperandCount,
+                        instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
+    }
 
     public AnalysisResult determineDuSequences(List<LIRInstruction> instructions, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
                     Map<Constant, DummyConstDef> dummyConstDefs) {
@@ -261,42 +253,27 @@ public class DuSequenceAnalysis {
         return list;
     }
 
-// public static <T, U, V> Map<U, List<V>> mergeMaps(Map<T, Map<U, List<V>>> map, T[] mergeKeys,
-// Comparator<? super U> comparator) {
-// Map<U, List<V>> mergedMap = new TreeMap<>(comparator);
-//
-// for (T mergeKey : mergeKeys) {
-// Map<U, List<V>> mergeValueMap = map.get(mergeKey);
-//
-// for (Entry<U, List<V>> entry : mergeValueMap.entrySet()) {
-// List<V> mergedMapValue = mergedMap.get(entry.getKey());
-//
-// if (mergedMapValue == null) {
-// mergedMapValue = new ArrayList<>();
-// mergedMap.put(entry.getKey(), mergedMapValue);
-// }
-//
-// List<V> newValues = entry.getValue().stream().filter(x ->
-// !(mergedMap.get(entry.getKey()).contains(x))).collect(Collectors.toList());
-// mergedMapValue.addAll(newValues);
-// }
-// }
-// return mergedMap;
-// }
+    public static <T, U, V> Map<U, List<V>> mergeMaps(Map<T, Map<U, List<V>>> map, T[] mergeKeys,
+                    Comparator<? super U> comparator) {
+        Map<U, List<V>> mergedMap = new TreeMap<>(comparator);
 
-// private static List<DuSequence> mergeDuSequencesLists(Map<AbstractBlockBase<?>, List<DuSequence>>
-// blockDuSequences, AbstractBlockBase<?>[] mergeBlocks) {
-// List<DuSequence> mergedDuSequences = new ArrayList<>();
-//
-// for (AbstractBlockBase<?> block : mergeBlocks) {
-// List<DuSequence> duSequencesList = blockDuSequences.get(block);
-//
-// duSequencesList.stream().forEach(duSequence -> mergedDuSequences.add(new
-// DuSequence(duSequence.cloneDuPairs())));
-// }
-//
-// return mergedDuSequences.stream().distinct().collect(Collectors.toList());
-// }
+        for (T mergeKey : mergeKeys) {
+            Map<U, List<V>> mergeValueMap = map.get(mergeKey);
+
+            for (Entry<U, List<V>> entry : mergeValueMap.entrySet()) {
+                List<V> mergedMapValue = mergedMap.get(entry.getKey());
+
+                if (mergedMapValue == null) {
+                    mergedMapValue = new ArrayList<>();
+                    mergedMap.put(entry.getKey(), mergedMapValue);
+                }
+
+                List<V> newValues = entry.getValue().stream().filter(x -> !(mergedMap.get(entry.getKey()).contains(x))).collect(Collectors.toList());
+                mergedMapValue.addAll(newValues);
+            }
+        }
+        return mergedMap;
+    }
 
     private static void analyseUndefinedValues(Map<Value, List<DefNode>> duSequences, Map<Value, List<Node>> unfinishedDuSequences,
                     RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
