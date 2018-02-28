@@ -85,4 +85,8 @@ public class DefNode extends Node {
     public boolean isUseNode() {
         return false;
     }
+
+    public boolean verify(DefNode defNode) {
+        return super.equals(defNode) && this.defOperandPosition == defNode.defOperandPosition;
+    }
 }

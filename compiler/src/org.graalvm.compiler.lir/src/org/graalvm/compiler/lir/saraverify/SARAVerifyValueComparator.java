@@ -96,6 +96,12 @@ public class SARAVerifyValueComparator implements Comparator<Value> {
     }
 
     private static int compareJavaConstant(JavaConstant c1, JavaConstant c2) {
+        if (!c1.getJavaKind().equals(c2.getJavaKind())) {
+            JavaKind javaKind1 = c1.getJavaKind();
+            JavaKind javaKind2 = c2.getJavaKind();
+            return javaKind1.ordinal() - javaKind2.ordinal();
+        }
+
         if (c1.getJavaKind().equals(JavaKind.Int) && c2.getJavaKind().equals(JavaKind.Int)) {
             return c1.asInt() - c2.asInt();
         }

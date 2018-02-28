@@ -225,6 +225,13 @@ public class DuSequenceAnalysis {
 
         List<Node> resultNodes = unfinishedDuSequences.get(result);
 
+        if (resultNodes == null) {
+            // no usage for copied value
+            defOperandPosition = 1;
+            useOperandPosition = 1;
+            return;
+        }
+
         assert resultNodes.stream().allMatch(node -> !node.isDefNode());
 
         moveNode.addAllNextNodes(resultNodes);
@@ -316,8 +323,9 @@ public class DuSequenceAnalysis {
             DefNode dummyDefNode = new DefNode(value, dummyDef, 0);
             dummyDefNode.addAllNextNodes(entry.getValue());
             duSequences.put(value, Arrays.asList(dummyDefNode));
-            unfinishedDuSequences.remove(value);
         }
+
+        unfinishedDuSequences.clear();
     }
 
     private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,

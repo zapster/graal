@@ -61,4 +61,8 @@ public class UseNode extends Node {
     public boolean isUseNode() {
         return true;
     }
+
+    public boolean verify(UseNode useNode) {
+        return super.equals(useNode) && this.useOperandPosition == useNode.useOperandPosition;
+    }
 }

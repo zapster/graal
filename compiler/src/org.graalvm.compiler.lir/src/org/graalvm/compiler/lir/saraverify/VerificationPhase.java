@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.graalvm.compiler.debug.DebugContext;
@@ -64,7 +65,28 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         List<DuSequenceWeb> outputDuSequenceWebs = createDuSequenceWebs(outputDuSequences);
 
         for (DuSequenceWeb inputDuSequenceWeb : inputDuSequenceWebs) {
-            if (!outputDuSequenceWebs.stream().anyMatch(outputDuSequenceWeb -> outputDuSequenceWeb.equals(inputDuSequenceWeb))) {
+            if (!outputDuSequenceWebs.stream().anyMatch(outputDuSequenceWeb -> verifyDuSequenceWebs(inputDuSequenceWeb, outputDuSequenceWeb))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static boolean verifyDuSequenceWebs(DuSequenceWeb web1, DuSequenceWeb web2) {
+        Set<DefNode> defNodes1 = web1.getDefNodes();
+        Set<DefNode> defNodes2 = web2.getDefNodes();
+        Set<UseNode> useNodes1 = web1.getUseNodes();
+        Set<UseNode> useNodes2 = web2.getUseNodes();
+
+        for (DefNode defNode : defNodes1) {
+            if (!defNodes2.stream().anyMatch(node -> node.verify(defNode))) {
+                return false;
+            }
+        }
+
+        for (UseNode useNode : useNodes1) {
+            if (!useNodes2.stream().anyMatch(node -> node.verify(useNode))) {
                 return false;
             }
         }
@@ -104,6 +126,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             for (DefNode node : nodeList) {
                 DuSequenceWeb duSequenceWeb = createDuSequenceWebs(node, nodeDuSequenceWeb);
                 duSequenceWeb.getDefNodes().add(node);
+                nodeDuSequenceWeb.put(node, duSequenceWeb);
                 duSequenceWebs.add(duSequenceWeb);
             }
         }
@@ -142,6 +165,13 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                             .collect(Collectors.toList());
 
             DuSequenceWeb mergedDuSequenceWeb = mergeDuSequenceWebs(nextNodesDuSequenceWebs);
+
+            for (Entry<Node, DuSequenceWeb> entry : nodeDuSequenceWeb.entrySet()) {
+                if (nextNodesDuSequenceWebs.contains(entry.getValue())) {
+                    nodeDuSequenceWeb.put(entry.getKey(), mergedDuSequenceWeb);
+                }
+            }
+
             nodeDuSequenceWeb.put(node, mergedDuSequenceWeb);
 
             return mergedDuSequenceWeb;
@@ -149,11 +179,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     }
 
     private static DuSequenceWeb mergeDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs) {
-        DuSequenceWeb duSequenceWeb = new DuSequenceWeb();
+        DuSequenceWeb duSequenceWeb = duSequenceWebs.get(0);
 
         for (DuSequenceWeb web : duSequenceWebs) {
-            assert web != null;
-
             duSequenceWeb.defNodesAddAll(web.getDefNodes());
             duSequenceWeb.useNodesAddAll(web.getUseNodes());
         }
