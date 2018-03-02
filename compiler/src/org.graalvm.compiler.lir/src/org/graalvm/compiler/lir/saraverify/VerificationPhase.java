@@ -124,66 +124,58 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         for (List<DefNode> nodeList : nodes.values()) {
             for (DefNode node : nodeList) {
-                DuSequenceWeb duSequenceWeb = createDuSequenceWebs(node, nodeDuSequenceWeb);
-                duSequenceWeb.getDefNodes().add(node);
-                nodeDuSequenceWeb.put(node, duSequenceWeb);
-                duSequenceWebs.add(duSequenceWeb);
+                List<Node> visitedNodes = new ArrayList<>();
+                DuSequenceWeb web = createDuSequenceWeb(node, nodeDuSequenceWeb, visitedNodes);
+
+                if (web == null) {
+                    web = new DuSequenceWeb();
+                    duSequenceWebs.add(web);
+                }
+                web.addNodes(visitedNodes);
+
+                final DuSequenceWeb finalWeb = web;
+
+                Set<DefNode> defNodes = web.getDefNodes();
+                defNodes.stream().forEach(defNode -> nodeDuSequenceWeb.put(defNode, finalWeb));
+
+                Set<MoveNode> moveNodes = web.getMoveNodes();
+                moveNodes.stream().forEach(moveNode -> nodeDuSequenceWeb.put(moveNode, finalWeb));
+
+                Set<UseNode> useNodes = web.getUseNodes();
+                useNodes.stream().forEach(useNode -> nodeDuSequenceWeb.put(useNode, finalWeb));
             }
         }
 
         return duSequenceWebs;
     }
 
-    private static DuSequenceWeb createDuSequenceWebs(Node node, Map<Node, DuSequenceWeb> nodeDuSequenceWeb) {
-        DuSequenceWeb duSequenceWeb = nodeDuSequenceWeb.get(node);
-
-        if (duSequenceWeb != null) {
-            // node already visited
-            return duSequenceWeb;
+    private DuSequenceWeb createDuSequenceWeb(Node node, Map<Node, DuSequenceWeb> nodeDuSequenceWeb, List<Node> visitedNodes) {
+        if (nodeDuSequenceWeb.containsKey(node)) {
+            return nodeDuSequenceWeb.get(node);
         }
 
-        if (node.isUseNode()) {
-            // node is a use node
-            UseNode useNode = (UseNode) node;
-            duSequenceWeb = new DuSequenceWeb();
-            duSequenceWeb.getUseNodes().add(useNode);
-            nodeDuSequenceWeb.put(node, duSequenceWeb);
-            return duSequenceWeb;
-        } else {
-            List<Node> nextNodes;
+        visitedNodes.add(node);
 
-            if (node.isDefNode()) {
-                DefNode defNode = (DefNode) node;
-                nextNodes = defNode.getNextNodes();
-            } else {
-                MoveNode moveNode = (MoveNode) node;
-                nextNodes = moveNode.getNextNodes();
-            }
+        List<DuSequenceWeb> nextNodeWebs = node.getNextNodes()   //
+                        .stream()                       //
+                        .map(nextNode -> createDuSequenceWeb(nextNode, nodeDuSequenceWeb, visitedNodes)) //
+                        .filter(web -> web != null)             //
+                        .collect(Collectors.toList());
 
-            List<DuSequenceWeb> nextNodesDuSequenceWebs = nextNodes.stream() //
-                            .map(nextNode -> createDuSequenceWebs(nextNode, nodeDuSequenceWeb))    //
-                            .collect(Collectors.toList());
-
-            DuSequenceWeb mergedDuSequenceWeb = mergeDuSequenceWebs(nextNodesDuSequenceWebs);
-
-            for (Entry<Node, DuSequenceWeb> entry : nodeDuSequenceWeb.entrySet()) {
-                if (nextNodesDuSequenceWebs.contains(entry.getValue())) {
-                    nodeDuSequenceWeb.put(entry.getKey(), mergedDuSequenceWeb);
-                }
-            }
-
-            nodeDuSequenceWeb.put(node, mergedDuSequenceWeb);
-
-            return mergedDuSequenceWeb;
-        }
+        return mergeDuSequenceWebs(nextNodeWebs);
     }
 
     private static DuSequenceWeb mergeDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs) {
+        if (duSequenceWebs.isEmpty()) {
+            return null;
+        }
+
         DuSequenceWeb duSequenceWeb = duSequenceWebs.get(0);
 
         for (DuSequenceWeb web : duSequenceWebs) {
-            duSequenceWeb.defNodesAddAll(web.getDefNodes());
-            duSequenceWeb.useNodesAddAll(web.getUseNodes());
+            duSequenceWeb.addDefNodes(web.getDefNodes());
+            duSequenceWeb.addMoveNodes(web.getMoveNodes());
+            duSequenceWeb.addUseNodes(web.getUseNodes());
         }
 
         return duSequenceWeb;

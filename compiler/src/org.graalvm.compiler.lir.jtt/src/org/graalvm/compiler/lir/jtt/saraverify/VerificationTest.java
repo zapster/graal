@@ -10,6 +10,7 @@ import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v2;
 import static org.graalvm.compiler.lir.jtt.saraverify.TestValue.v3;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,12 +21,16 @@ import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestBinary.ArithmeticOpcode;
+import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestDef;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromConst;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestMoveFromReg;
 import org.graalvm.compiler.lir.jtt.saraverify.TestOp.TestReturn;
 import org.graalvm.compiler.lir.saraverify.AnalysisResult;
 import org.graalvm.compiler.lir.saraverify.DefNode;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
+import org.graalvm.compiler.lir.saraverify.DuSequenceWeb;
+import org.graalvm.compiler.lir.saraverify.MoveNode;
+import org.graalvm.compiler.lir.saraverify.UseNode;
 import org.graalvm.compiler.lir.saraverify.VerificationPhase;
 import org.junit.Assert;
 import org.junit.Rule;
@@ -361,12 +366,117 @@ public class VerificationTest extends JTTTest {
         assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
 
-// @Test
-// public void testVerifyDataFlow() {
-// ArrayList<DuSequence> duSequences = new ArrayList<>();
-//
-// assertVerifyDataFlow(true, duSequences, duSequences);
-// }
+    @Test
+    public void testCreateDuSequenceWebs() {
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Map<Value, List<DefNode>> nodes = new HashMap<>();
+
+        TestDef defOp1 = new TestDef(r0.asValue());
+        TestDef defOp2 = new TestDef(v0);
+        TestMoveFromReg moveOp = new TestMoveFromReg(v0, r0.asValue());
+        TestReturn returnOp1 = new TestReturn(null, v0);
+        TestReturn returnOp2 = new TestReturn(null, v0);
+
+        DefNode defNode1 = new DefNode(r0.asValue(), defOp1, 0);
+        DefNode defNode2 = new DefNode(v0, defOp2, 0);
+        MoveNode moveNode = new MoveNode(v0, r0.asValue(), moveOp, 0, 0);
+        UseNode useNode1 = new UseNode(v0, returnOp1, 0);
+        UseNode useNode2 = new UseNode(v0, returnOp2, 0);
+
+        defNode1.addNextNodes(moveNode);
+        moveNode.addNextNodes(useNode1);
+        defNode2.addNextNodes(useNode2);
+
+        nodes.put(r0.asValue(), Arrays.asList(defNode1));
+        nodes.put(v0, Arrays.asList(defNode2));
+
+        DuSequenceWeb web1 = new DuSequenceWeb();
+        web1.addNodes(Arrays.asList(defNode1, moveNode, useNode1));
+
+        DuSequenceWeb web2 = new DuSequenceWeb();
+        web2.addNodes(Arrays.asList(defNode2, useNode2));
+
+        List<DuSequenceWeb> expectedWebs = new ArrayList<>();
+        expectedWebs.add(web1);
+        expectedWebs.add(web2);
+
+        List<DuSequenceWeb> actualWebs = verificationPhase.createDuSequenceWebs(nodes);
+        Assert.assertEquals(2, actualWebs.size());
+
+        assertTrue(actualWebs.contains(web1));
+        assertTrue(actualWebs.contains(web2));
+    }
+
+    @Test
+    public void testCreateDuSequenceWebs2() {
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Map<Value, List<DefNode>> nodes = new HashMap<>();
+
+        TestDef defOp1 = new TestDef(v0);
+        TestDef defOp2 = new TestDef(v0);
+        TestDef defOp3 = new TestDef(v0);
+        TestReturn returnOp1 = new TestReturn(null, v0);
+        TestReturn returnOp2 = new TestReturn(null, v0);
+
+        DefNode defNode1 = new DefNode(v0, defOp1, 0);
+        DefNode defNode2 = new DefNode(v0, defOp2, 0);
+        DefNode defNode3 = new DefNode(v0, defOp3, 0);
+        UseNode useNode1 = new UseNode(v0, returnOp1, 0);
+        UseNode useNode2 = new UseNode(v0, returnOp2, 0);
+
+        defNode1.addNextNodes(useNode1);
+        defNode2.addNextNodes(useNode1);
+        defNode2.addNextNodes(useNode2);
+        defNode3.addNextNodes(useNode2);
+
+        nodes.put(v0, Arrays.asList(defNode1, defNode2, defNode3));
+
+        List<DuSequenceWeb> actualWebs = verificationPhase.createDuSequenceWebs(nodes);
+        DuSequenceWeb expectedWeb = new DuSequenceWeb();
+        expectedWeb.addNodes(Arrays.asList(defNode1, defNode2, defNode3));
+        expectedWeb.addNodes(Arrays.asList(useNode1, useNode2));
+
+        Assert.assertEquals(1, actualWebs.size());
+        assertTrue(expectedWeb.equals(actualWebs.get(0)));
+
+        Map<Value, List<DefNode>> nodes2 = new HashMap<>();
+        nodes2.put(v0, Arrays.asList(defNode2, defNode1, defNode3));
+        List<DuSequenceWeb> actualWebs2 = verificationPhase.createDuSequenceWebs(nodes2);
+
+        Assert.assertEquals(1, actualWebs.size());
+        assertTrue(expectedWeb.equals(actualWebs2.get(0)));
+    }
+
+    @Test
+    public void testCreateDuSequenceWebs3() {
+        VerificationPhase verificationPhase = new VerificationPhase();
+        Map<Value, List<DefNode>> nodes = new HashMap<>();
+
+        TestDef defOp = new TestDef(r0.asValue());
+        TestMoveFromReg move1 = new TestMoveFromReg(v0, r0.asValue());
+        TestMoveFromReg move2 = new TestMoveFromReg(v0, r0.asValue());
+        TestReturn returnOp1 = new TestReturn(null, v0);
+
+        DefNode defNode = new DefNode(r0.asValue(), defOp, 0);
+        MoveNode moveNode1 = new MoveNode(v0, r0.asValue(), move1, 0, 0);
+        MoveNode moveNode2 = new MoveNode(v0, r0.asValue(), move2, 0, 0);
+        UseNode useNode = new UseNode(v0, returnOp1, 0);
+
+        defNode.addNextNodes(moveNode1);
+        defNode.addNextNodes(moveNode2);
+        moveNode1.addNextNodes(useNode);
+        moveNode2.addNextNodes(useNode);
+
+        nodes.put(r0.asValue(), Arrays.asList(defNode));
+
+        DuSequenceWeb web = new DuSequenceWeb();
+        web.addNodes(Arrays.asList(defNode, moveNode1, moveNode2, useNode));
+
+        List<DuSequenceWeb> actualWebs = verificationPhase.createDuSequenceWebs(nodes);
+        Assert.assertEquals(1, actualWebs.size());
+
+        Assert.assertEquals(web, actualWebs.get(0));
+    }
 
     @Test
     public void testVerifyOperandCount() {
