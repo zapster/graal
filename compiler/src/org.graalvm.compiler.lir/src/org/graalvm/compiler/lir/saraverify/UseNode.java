@@ -1,5 +1,9 @@
 package org.graalvm.compiler.lir.saraverify;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
 import org.graalvm.compiler.lir.LIRInstruction;
 
 import jdk.vm.ci.meta.Value;
@@ -21,6 +25,21 @@ public class UseNode extends Node {
 
     public int getUseOperandPosition() {
         return useOperandPosition;
+    }
+
+    @Override
+    public void addNextNodes(Node nextNode) {
+        return;
+    }
+
+    @Override
+    public void addAllNextNodes(Collection<? extends Node> nextNodesArg) {
+        return;
+    }
+
+    @Override
+    public List<Node> getNextNodes() {
+        return new ArrayList<>();
     }
 
     @Override

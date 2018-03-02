@@ -1,9 +1,5 @@
 package org.graalvm.compiler.lir.saraverify;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-
 import org.graalvm.compiler.lir.LIRInstruction;
 
 import jdk.vm.ci.meta.Value;
@@ -12,13 +8,11 @@ public class DefNode extends Node {
 
     private Value value;
     private int defOperandPosition;
-    private List<Node> nextNodes;
 
     public DefNode(Value value, LIRInstruction instruction, int defOperandPosition) {
         super(instruction);
         this.value = value;
         this.defOperandPosition = defOperandPosition;
-        nextNodes = new ArrayList<>();
     }
 
     public Value getValue() {
@@ -27,18 +21,6 @@ public class DefNode extends Node {
 
     public int getDefOperandPosition() {
         return defOperandPosition;
-    }
-
-    public List<Node> getNextNodes() {
-        return nextNodes;
-    }
-
-    public void addNextNodes(Node nextNode) {
-        nextNodes.add(nextNode);
-    }
-
-    public void addAllNextNodes(Collection<? extends Node> nextNodesArg) {
-        nextNodes.addAll(nextNodesArg);
     }
 
     @Override

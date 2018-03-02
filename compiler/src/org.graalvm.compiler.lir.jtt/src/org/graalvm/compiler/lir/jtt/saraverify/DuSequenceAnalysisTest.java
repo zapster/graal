@@ -196,16 +196,16 @@ public class DuSequenceAnalysisTest {
         UseNode useNodeReturn1 = new UseNode(rax.asValue(), i6, 1);
 
         defNodeLabel0.addNextNodes(moveNodei2);
-        moveNodei2.addNextNode(useNodeAdd0);
+        moveNodei2.addNextNodes(useNodeAdd0);
 
         defNodeLabel1.addNextNodes(moveNodei3);
-        moveNodei3.addNextNode(useNodeAdd1);
+        moveNodei3.addNextNodes(useNodeAdd1);
 
         defNodeLabel2.addNextNodes(moveNodei1);
-        moveNodei1.addNextNode(useNodeReturn1);
+        moveNodei1.addNextNodes(useNodeReturn1);
 
         defNodeAdd0.addNextNodes(moveNodei5);
-        moveNodei5.addNextNode(useNodeReturn0);
+        moveNodei5.addNextNodes(useNodeReturn0);
 
         Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
         expectedDuSequences.put(r0.asValue(), Arrays.asList(defNodeLabel0));
@@ -236,7 +236,7 @@ public class DuSequenceAnalysisTest {
         UseNode useNodeReturn1 = new UseNode(r1.asValue(), returnOp, 1);
 
         defNodeLabel0.addNextNodes(moveNode);
-        moveNode.addNextNode(useNodeReturn1);
+        moveNode.addNextNodes(useNodeReturn1);
 
         defNodeLabel1.addNextNodes(useNodeReturn0);
 
@@ -275,7 +275,7 @@ public class DuSequenceAnalysisTest {
 
         defNodeLabel.addNextNodes(useNodeReturn0);
         defNodeConstant.addNextNodes(moveNode);
-        moveNode.addNextNode(useNodeReturn1);
+        moveNode.addNextNodes(useNodeReturn1);
 
         Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
         expectedDuSequences.put(rbp.asValue(), Arrays.asList(defNodeLabel));
@@ -311,7 +311,7 @@ public class DuSequenceAnalysisTest {
 
         defNodeLabel.addNextNodes(useNodeReturn0);
         defNodeR3.addNextNodes(moveNode);
-        moveNode.addNextNode(useNodeReturn1);
+        moveNode.addNextNodes(useNodeReturn1);
 
         Map<Value, List<Node>> expectedDuSequenceWebs = new HashMap<>();
         expectedDuSequenceWebs.put(rbp.asValue(), Arrays.asList(defNodeLabel));
