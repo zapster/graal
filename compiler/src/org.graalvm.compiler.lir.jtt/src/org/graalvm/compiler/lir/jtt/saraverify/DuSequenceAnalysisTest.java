@@ -19,7 +19,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.TreeMap;
 
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.ConstantValue;
@@ -99,7 +98,7 @@ public class DuSequenceAnalysisTest {
         List<Node> r2Nodes = Arrays.asList(defNodeAdd00, defNodeAdd10);
         List<Node> rbpNodes = Arrays.asList(defNodeLabel2);
 
-        Map<Value, List<Node>> expectedDuSequences = new TreeMap<>(new SARAVerifyValueComparator());
+        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
         expectedDuSequences.put(r0.asValue(), r0Nodes);
         expectedDuSequences.put(r1.asValue(), r1Nodes);
         expectedDuSequences.put(r2.asValue(), r2Nodes);
@@ -126,7 +125,7 @@ public class DuSequenceAnalysisTest {
         defNodeLabel0.addNextNodes(useNodeLabel1);
         defNodeLabel2.addNextNodes(useNodeLabel0);
 
-        Map<Value, List<Node>> expectedDuSequences = new TreeMap<>(new SARAVerifyValueComparator());
+        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
         List<Node> r0Nodes = Arrays.asList(defNodeLabel0);
 
         List<Node> rbpNodes = Arrays.asList(defNodeLabel2);
@@ -154,7 +153,7 @@ public class DuSequenceAnalysisTest {
 
         List<Node> rbpNodes = Arrays.asList(defNodeLabel1);
 
-        Map<Value, List<Node>> expectedDuSequences = new TreeMap<>(new SARAVerifyValueComparator());
+        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
         expectedDuSequences.put(rbp.asValue(), rbpNodes);
 
         thrown.expect(GraalError.class);
@@ -208,7 +207,7 @@ public class DuSequenceAnalysisTest {
         defNodeAdd0.addNextNodes(moveNodei5);
         moveNodei5.addNextNode(useNodeReturn0);
 
-        Map<Value, List<Node>> expectedDuSequences = new TreeMap<>(new SARAVerifyValueComparator());
+        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
         expectedDuSequences.put(r0.asValue(), Arrays.asList(defNodeLabel0));
         expectedDuSequences.put(r1.asValue(), Arrays.asList(defNodeLabel1));
         expectedDuSequences.put(rbp.asValue(), Arrays.asList(defNodeLabel2));
@@ -241,7 +240,7 @@ public class DuSequenceAnalysisTest {
 
         defNodeLabel1.addNextNodes(useNodeReturn0);
 
-        Map<Value, List<Node>> expectedDuSequences = new TreeMap<>(new SARAVerifyValueComparator());
+        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
         expectedDuSequences.put(r0.asValue(), Arrays.asList(defNodeLabel0));
         expectedDuSequences.put(rbp.asValue(), Arrays.asList(defNodeLabel1));
 
@@ -278,7 +277,7 @@ public class DuSequenceAnalysisTest {
         defNodeConstant.addNextNodes(moveNode);
         moveNode.addNextNode(useNodeReturn1);
 
-        Map<Value, List<Node>> expectedDuSequences = new TreeMap<>(new SARAVerifyValueComparator());
+        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
         expectedDuSequences.put(rbp.asValue(), Arrays.asList(defNodeLabel));
         expectedDuSequences.put(constantValue0, Arrays.asList(defNodeConstant));
 
@@ -314,7 +313,7 @@ public class DuSequenceAnalysisTest {
         defNodeR3.addNextNodes(moveNode);
         moveNode.addNextNode(useNodeReturn1);
 
-        Map<Value, List<Node>> expectedDuSequenceWebs = new TreeMap<>(new SARAVerifyValueComparator());
+        Map<Value, List<Node>> expectedDuSequenceWebs = new HashMap<>();
         expectedDuSequenceWebs.put(rbp.asValue(), Arrays.asList(defNodeLabel));
         expectedDuSequenceWebs.put(r3.asValue(), Arrays.asList(defNodeR3));
 
@@ -328,7 +327,7 @@ public class DuSequenceAnalysisTest {
         map.put(3, map1);
         map.put(5, map1);
 
-        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5}, null);
+        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
 
         assertEquals(true, mergedMap.entrySet().stream().allMatch(entry -> entry.getValue().isEmpty()));
     }
@@ -343,7 +342,7 @@ public class DuSequenceAnalysisTest {
         map.put(3, map1);
         map.put(5, new HashMap<>());
 
-        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5}, null);
+        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
 
         assertEquals(1, mergedMap.keySet().size());
 
@@ -367,7 +366,7 @@ public class DuSequenceAnalysisTest {
         Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
         map.put(1, map1);
         map.put(2, map2);
-        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2}, null);
+        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2});
         assertEquals(true, mergedMap.get(1).equals(Arrays.asList(10)));
         assertEquals(true, mergedMap.get(2).equals(Arrays.asList(11, 12, 15)));
         assertEquals(true, mergedMap.get(3).equals(Arrays.asList(13, 14)));

@@ -87,8 +87,6 @@ public class DuSequenceAnalysis {
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
 
-    private SARAVerifyValueComparator saraVerifyValueComparator = new SARAVerifyValueComparator();
-
     public static final String ERROR_MSG_PREFIX = "SARA verify error: ";
 
     public static final CounterKey skippedCompilationUnits = DebugContext.counter("SARAVerify[skipped]");
@@ -134,7 +132,7 @@ public class DuSequenceAnalysis {
 
         BitSet visitedBlocks = new BitSet(blocks.length);
         HashMap<AbstractBlockBase<?>, Map<Value, List<Node>>> blockUnfinishedDuSequences = new HashMap<>();
-        Map<Value, List<DefNode>> duSequences = new TreeMap<>(saraVerifyValueComparator);
+        Map<Value, List<DefNode>> duSequences = new HashMap<>();
 
         while (!blockQueue.isEmpty()) {
             // get any block, whose successors have already been visited, remove it from the queue and add its
@@ -153,7 +151,7 @@ public class DuSequenceAnalysis {
 
             // merging of value uses from multiple predecessors
             Map<Value, List<Node>> mergedUnfinishedDuSequences = mergeMaps(blockUnfinishedDuSequences,
-                            block.getSuccessors(), saraVerifyValueComparator);
+                            block.getSuccessors());
             blockUnfinishedDuSequences.put(block, mergedUnfinishedDuSequences);
 
             determineDuSequences(lir, block, instructions, duSequences, mergedUnfinishedDuSequences);
@@ -172,8 +170,8 @@ public class DuSequenceAnalysis {
         initializeCollections();
 
         // analysis of given instructions
-        Map<Value, List<DefNode>> duSequences = new TreeMap<>(saraVerifyValueComparator);
-        Map<Value, List<Node>> unfinishedDuSequences = new TreeMap<>(saraVerifyValueComparator);
+        Map<Value, List<DefNode>> duSequences = new HashMap<>();
+        Map<Value, List<Node>> unfinishedDuSequences = new HashMap<>();
         determineDuSequences(null, null, instructions, duSequences, unfinishedDuSequences);
 
         // analysis of dummy instructions
@@ -260,9 +258,8 @@ public class DuSequenceAnalysis {
         return list;
     }
 
-    public static <T, U, V> Map<U, List<V>> mergeMaps(Map<T, Map<U, List<V>>> map, T[] mergeKeys,
-                    Comparator<? super U> comparator) {
-        Map<U, List<V>> mergedMap = new TreeMap<>(comparator);
+    public static <T, U, V> Map<U, List<V>> mergeMaps(Map<T, Map<U, List<V>>> map, T[] mergeKeys) {
+        Map<U, List<V>> mergedMap = new HashMap<>();
 
         for (T mergeKey : mergeKeys) {
             Map<U, List<V>> mergeValueMap = map.get(mergeKey);
