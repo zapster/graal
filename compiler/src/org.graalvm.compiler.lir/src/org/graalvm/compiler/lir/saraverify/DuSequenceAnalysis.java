@@ -329,7 +329,6 @@ public class DuSequenceAnalysis {
 
     private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,
                     InstructionValueConsumer useConsumer, InstructionValueConsumer aliveConsumer) {
-        // TODO: instruction.isMoveOp
 
         instruction.visitEachAlive(aliveConsumer);
         // TODO: instruction.forEachState(proc); alive

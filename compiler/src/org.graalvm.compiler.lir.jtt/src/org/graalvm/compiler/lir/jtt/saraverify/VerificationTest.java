@@ -445,6 +445,13 @@ public class VerificationTest extends JTTTest {
 
         Assert.assertEquals(1, actualWebs.size());
         assertTrue(expectedWeb.equals(actualWebs2.get(0)));
+
+        Map<Value, List<DefNode>> nodes3 = new HashMap<>();
+        nodes3.put(v0, Arrays.asList(defNode1, defNode3, defNode2));
+        List<DuSequenceWeb> actualWebs3 = verificationPhase.createDuSequenceWebs(nodes3);
+
+        Assert.assertEquals(1, actualWebs3.size());
+        assertTrue(expectedWeb.equals(actualWebs3.get(0)));
     }
 
     @Test

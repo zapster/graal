@@ -125,7 +125,8 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         for (List<DefNode> nodeList : nodes.values()) {
             for (DefNode node : nodeList) {
                 List<Node> visitedNodes = new ArrayList<>();
-                DuSequenceWeb web = createDuSequenceWeb(node, nodeDuSequenceWeb, visitedNodes);
+
+                DuSequenceWeb web = createDuSequenceWeb(node, nodeDuSequenceWeb, visitedNodes, duSequenceWebs);
 
                 if (web == null) {
                     web = new DuSequenceWeb();
@@ -149,7 +150,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         return duSequenceWebs;
     }
 
-    private DuSequenceWeb createDuSequenceWeb(Node node, Map<Node, DuSequenceWeb> nodeDuSequenceWeb, List<Node> visitedNodes) {
+    private DuSequenceWeb createDuSequenceWeb(Node node, Map<Node, DuSequenceWeb> nodeDuSequenceWeb, List<Node> visitedNodes, List<DuSequenceWeb> duSequenceWebs) {
         if (nodeDuSequenceWeb.containsKey(node)) {
             return nodeDuSequenceWeb.get(node);
         }
@@ -158,24 +159,28 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         List<DuSequenceWeb> nextNodeWebs = node.getNextNodes()   //
                         .stream()                       //
-                        .map(nextNode -> createDuSequenceWeb(nextNode, nodeDuSequenceWeb, visitedNodes)) //
+                        .map(nextNode -> createDuSequenceWeb(nextNode, nodeDuSequenceWeb, visitedNodes, duSequenceWebs)) //
                         .filter(web -> web != null)             //
                         .collect(Collectors.toList());
 
-        return mergeDuSequenceWebs(nextNodeWebs);
+        return mergeDuSequenceWebs(nextNodeWebs, duSequenceWebs);
     }
 
-    private static DuSequenceWeb mergeDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs) {
-        if (duSequenceWebs.isEmpty()) {
+    private static DuSequenceWeb mergeDuSequenceWebs(List<DuSequenceWeb> nextNodesDuSequenceWebs, List<DuSequenceWeb> duSequenceWebs) {
+        if (nextNodesDuSequenceWebs.isEmpty()) {
             return null;
         }
 
-        DuSequenceWeb duSequenceWeb = duSequenceWebs.get(0);
+        DuSequenceWeb duSequenceWeb = nextNodesDuSequenceWebs.get(0);
 
-        for (DuSequenceWeb web : duSequenceWebs) {
+        for (int i = 1; i < nextNodesDuSequenceWebs.size(); i++) {
+            DuSequenceWeb web = nextNodesDuSequenceWebs.get(i);
+
             duSequenceWeb.addDefNodes(web.getDefNodes());
             duSequenceWeb.addMoveNodes(web.getMoveNodes());
             duSequenceWeb.addUseNodes(web.getUseNodes());
+
+            duSequenceWebs.remove(web);
         }
 
         return duSequenceWeb;
