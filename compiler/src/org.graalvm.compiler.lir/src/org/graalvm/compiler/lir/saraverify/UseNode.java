@@ -1,8 +1,8 @@
 package org.graalvm.compiler.lir.saraverify;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.graalvm.compiler.lir.LIRInstruction;
 
@@ -38,8 +38,8 @@ public class UseNode extends Node {
     }
 
     @Override
-    public List<Node> getNextNodes() {
-        return new ArrayList<>();
+    public Set<Node> getNextNodes() {
+        return new HashSet<>();
     }
 
     @Override

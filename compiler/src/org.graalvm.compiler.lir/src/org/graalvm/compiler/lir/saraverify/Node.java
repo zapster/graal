@@ -1,26 +1,26 @@
 package org.graalvm.compiler.lir.saraverify;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.graalvm.compiler.lir.LIRInstruction;
 
 public abstract class Node {
 
     protected LIRInstruction instruction;
-    protected List<Node> nextNodes;
+    protected Set<Node> nextNodes;
 
     public Node(LIRInstruction instruction) {
         this.instruction = instruction;
-        this.nextNodes = new ArrayList<>();
+        this.nextNodes = new HashSet<>();
     }
 
     public LIRInstruction getInstruction() {
         return instruction;
     }
 
-    public List<Node> getNextNodes() {
+    public Set<Node> getNextNodes() {
         return nextNodes;
     }
 

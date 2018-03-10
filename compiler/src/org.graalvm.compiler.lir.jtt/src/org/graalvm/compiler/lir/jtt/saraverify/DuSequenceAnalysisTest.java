@@ -19,8 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
+import java.util.Set;
 
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.ConstantValue;
@@ -544,7 +543,7 @@ public class DuSequenceAnalysisTest {
         }
     }
 
-    private static void assertNextNodes(List<Node> expectedNodes, List<Node> actualNodes) {
+    private static void assertNextNodes(Set<Node> expectedNodes, Set<Node> actualNodes) {
         assertEquals("The number of nodes does not match.", expectedNodes.size(), actualNodes.size());
 
         for (Node expectedNode : expectedNodes) {
