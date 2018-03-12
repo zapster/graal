@@ -8,10 +8,13 @@ import java.util.BitSet;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
@@ -89,6 +92,8 @@ public class DuSequenceAnalysis {
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
 
+    private Set<Node> nodes;
+
     public static final String ERROR_MSG_PREFIX = "SARA verify error: ";
 
     public static final CounterKey skippedCompilationUnits = DebugContext.counter("SARAVerify[skipped]");
@@ -108,73 +113,6 @@ public class DuSequenceAnalysis {
             }
         }
     }
-
-// public AnalysisResult determineDuSequences(LIRGenerationResult lirGenRes, RegisterAttributes[]
-// registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
-// Map<Constant, DummyConstDef> dummyConstDefs) {
-// LIR lir = lirGenRes.getLIR();
-// AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-// AbstractBlockBase<?> startBlock = lir.getControlFlowGraph().getStartBlock();
-// BitSet blockQueue = new BitSet(blocks.length);
-//
-// if (!(lir.getControlFlowGraph().getLoops().isEmpty())) {
-// // control flow contains one or more loops
-// skippedCompilationUnits.increment(lir.getDebug());
-// return null;
-// }
-// executedCompilationUnits.increment(lir.getDebug());
-//
-// initializeCollections();
-// logInstructions(lir);
-//
-// // start with leaf blocks
-// for (AbstractBlockBase<?> block : blocks) {
-// if (block.getSuccessorCount() == 0) {
-// blockQueue.set(block.getId());
-// }
-// }
-//
-// BitSet visitedBlocks = new BitSet(blocks.length);
-// HashMap<AbstractBlockBase<?>, Map<Value, List<Node>>> blockUnfinishedDuSequences = new
-// HashMap<>();
-// Map<Value, List<DefNode>> duSequences = new HashMap<>();
-//
-// while (!blockQueue.isEmpty()) {
-// // get any block, whose successors have already been visited, remove it from the queue and add
-// its
-// // predecessors to the queue
-// int blockId = blockQueue.stream().filter(id ->
-// Arrays.asList(blocks[id].getSuccessors()).stream().allMatch(b ->
-// visitedBlocks.get(b.getId()))).findFirst().getAsInt();
-// blockQueue.clear(blockId);
-// visitedBlocks.set(blockId);
-//
-// AbstractBlockBase<?> block = blocks[blockId];
-// for (AbstractBlockBase<?> predecessor : block.getPredecessors()) {
-// blockQueue.set(predecessor.getId());
-// }
-//
-// // get instructions of block
-// ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
-//
-// // merging of value uses from multiple predecessors
-// Map<Value, List<Node>> mergedUnfinishedDuSequences = mergeMaps(blockUnfinishedDuSequences,
-// block.getSuccessors());
-// blockUnfinishedDuSequences.put(block, mergedUnfinishedDuSequences);
-//
-// determineDuSequences(lir, block, instructions, duSequences, mergedUnfinishedDuSequences,
-// startBlock);
-// }
-// assert visitedBlocks.length() == visitedBlocks.cardinality() && visitedBlocks.cardinality() ==
-// blocks.length && visitedBlocks.stream().allMatch(id -> id < blocks.length);
-//
-// // analysis of dummy instructions
-// analyseUndefinedValues(duSequences, blockUnfinishedDuSequences.get(blocks[0]),
-// registerAttributes, dummyRegDefs, dummyConstDefs);
-//
-// return new AnalysisResult(duSequences, instructionDefOperandCount,
-// instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
-// }
 
     public AnalysisResult determineDuSequences(LIRGenerationResult lirGenRes, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
                     Map<Constant, DummyConstDef> dummyConstDefs) {
@@ -280,8 +218,6 @@ public class DuSequenceAnalysis {
     }
 
     private void insertMoveNode(Map<Value, List<Node>> unfinishedDuSequences, Value result, Value input, LIRInstruction instruction) {
-        MoveNode moveNode = new MoveNode(result, input, instruction, 0, 0);
-
         List<Node> resultNodes = unfinishedDuSequences.get(result);
 
         defOperandPosition = 1;
@@ -294,16 +230,25 @@ public class DuSequenceAnalysis {
 
         assert resultNodes.stream().allMatch(node -> !node.isDefNode());
 
-        moveNode.addAllNextNodes(resultNodes);
-        unfinishedDuSequences.remove(result);
+        MoveNode moveNode = new MoveNode(result, input, instruction, 0, 0);
+        Optional<Node> optionalMoveNode = nodes.stream().filter(node -> node.equals(moveNode)).findFirst();
 
-        List<Node> inputNodes = getOrCreateList(unfinishedDuSequences, input);
-        inputNodes.add(moveNode);
+        if (!optionalMoveNode.isPresent()) {
+            moveNode.addAllNextNodes(resultNodes);
+            List<Node> inputNodes = getOrCreateList(unfinishedDuSequences, input);
+            inputNodes.add(moveNode);
+            nodes.add(moveNode);
+        } else {
+            optionalMoveNode.get().addAllNextNodes(resultNodes);
+        }
+
+        unfinishedDuSequences.remove(result);
     }
 
     private void initializeCollections() {
         instructionDefOperandCount = new IdentityHashMap<>();
         instructionUseOperandCount = new IdentityHashMap<>();
+        nodes = new HashSet<>();
     }
 
     public static <KeyType, ListType> List<ListType> getOrCreateList(Map<KeyType, List<ListType>> map, KeyType key) {
@@ -419,7 +364,7 @@ public class DuSequenceAnalysis {
 
             List<Node> unfinishedNodes = unfinishedDuSequences.get(value);
             if (unfinishedNodes == null) {
-                // definition of a value, which is not used
+                // definition of a value, which is not used or usage is not present yet (loops)
                 defOperandPosition++;
                 return;
             }
@@ -429,11 +374,18 @@ public class DuSequenceAnalysis {
             assert unfinishedNodes.stream().allMatch(node -> !node.isDefNode());
 
             DefNode defNode = new DefNode(allocatableValue, instruction, defOperandPosition);
-            defNode.addAllNextNodes(unfinishedNodes);
-            unfinishedDuSequences.remove(value);
+            Optional<Node> optionalDefNode = nodes.stream().filter(node -> node.equals(defNode)).findFirst();
 
-            List<DefNode> nodes = getOrCreateList(duSequences, value);
-            nodes.add(defNode);
+            if (!optionalDefNode.isPresent()) {
+                List<DefNode> defNodes = getOrCreateList(duSequences, value);
+                defNodes.add(defNode);
+                defNode.addAllNextNodes(unfinishedNodes);
+                nodes.add(defNode);
+            } else {
+                optionalDefNode.get().addAllNextNodes(unfinishedNodes);
+            }
+
+            unfinishedDuSequences.remove(value);
 
             defOperandPosition++;
         }
@@ -456,9 +408,14 @@ public class DuSequenceAnalysis {
                 return;
             }
 
-            List<Node> nodes = getOrCreateList(unfinishedDuSequences, value);
+            List<Node> nodesList = getOrCreateList(unfinishedDuSequences, value);
 
-            nodes.add(new UseNode(value, instruction, useOperandPosition));
+            UseNode useNode = new UseNode(value, instruction, useOperandPosition);
+
+            if (!nodes.contains(useNode)) {
+                nodesList.add(useNode);
+                nodes.add(useNode);
+            }
 
             useOperandPosition++;
         }
