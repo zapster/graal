@@ -49,10 +49,10 @@ public class DefNode extends Node {
 
     @Override
     public String duSequenceToString() {
-        String string = "";
+        String string = toString();
 
         for (Node node : nextNodes) {
-            string = string + toString() + node.duSequenceToString() + "\n";
+            string = string + node.duSequenceToString() + "\n";
         }
 
         return string;

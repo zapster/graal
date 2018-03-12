@@ -3,6 +3,7 @@ package org.graalvm.compiler.lir.saraverify;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class DuSequenceWeb {
 
@@ -53,6 +54,21 @@ public class DuSequenceWeb {
 
     public Set<UseNode> getUseNodes() {
         return useNodes;
+    }
+
+    public boolean isEmpty() {
+        return defNodes.isEmpty() && moveNodes.isEmpty() && useNodes.isEmpty();
+    }
+
+    @Override
+    public String toString() {
+        String string = "Definition Nodes:\n";
+        string = string + defNodes.stream().map(defNode -> defNode.toString()).collect(Collectors.joining(", "));
+
+        string = string + "\nUse Nodes:\n";
+        string = string + useNodes.stream().map(useNode -> useNode.toString()).collect(Collectors.joining(", "));
+
+        return string;
     }
 
     @Override

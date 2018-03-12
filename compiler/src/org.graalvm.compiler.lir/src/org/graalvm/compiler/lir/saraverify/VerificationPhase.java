@@ -8,7 +8,9 @@ import java.util.Map.Entry;
 import java.util.Set;
 
 import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.debug.GraalError;
+import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
@@ -62,6 +64,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     public boolean verifyDataFlow(Map<Value, List<DefNode>> inputDuSequences, Map<Value, List<DefNode>> outputDuSequences, DebugContext debugContext) {
         List<DuSequenceWeb> inputDuSequenceWebs = createDuSequenceWebs(inputDuSequences);
         List<DuSequenceWeb> outputDuSequenceWebs = createDuSequenceWebs(outputDuSequences);
+
+        logDuSequenceWebs(inputDuSequenceWebs, debugContext);
+        logDuSequenceWebs(outputDuSequenceWebs, debugContext);
 
         for (DuSequenceWeb inputDuSequenceWeb : inputDuSequenceWebs) {
             if (!outputDuSequenceWebs.stream().anyMatch(outputDuSequenceWeb -> verifyDuSequenceWebs(inputDuSequenceWeb, outputDuSequenceWeb))) {
@@ -176,5 +181,11 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         web1.addUseNodes(web2.getUseNodes());
 
         return web1;
+    }
+
+    private void logDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs, DebugContext debugContext) {
+        try (Scope s = debugContext.scope(DEBUG_SCOPE); Indent i = debugContext.indent()) {
+            duSequenceWebs.stream().forEach(web -> debugContext.log(3, "%s", web.toString() + "\n"));
+        }
     }
 }
