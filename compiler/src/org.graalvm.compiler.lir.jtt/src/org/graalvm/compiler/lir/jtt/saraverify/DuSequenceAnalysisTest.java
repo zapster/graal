@@ -14,12 +14,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.ConstantValue;
@@ -53,6 +54,11 @@ import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
 
 public class DuSequenceAnalysisTest {
+
+    @SuppressWarnings("unchecked")
+    public static <T> Set<T> asSet(T... values) {
+        return Stream.of(values).collect(Collectors.toSet());
+    }
 
     @Rule public ExpectedException thrown = ExpectedException.none();
 
@@ -94,12 +100,12 @@ public class DuSequenceAnalysisTest {
         defNodeAdd00.addNextNodes(useNodeAdd11);
         defNodeAdd10.addNextNodes(useNodeReturn1);
 
-        List<Node> r0Nodes = Arrays.asList(defNodeLabel0);
-        List<Node> r1Nodes = Arrays.asList(defNodeLabel1);
-        List<Node> r2Nodes = Arrays.asList(defNodeAdd00, defNodeAdd10);
-        List<Node> rbpNodes = Arrays.asList(defNodeLabel2);
+        Set<Node> r0Nodes = asSet(defNodeLabel0);
+        Set<Node> r1Nodes = asSet(defNodeLabel1);
+        Set<Node> r2Nodes = asSet(defNodeAdd00, defNodeAdd10);
+        Set<Node> rbpNodes = asSet(defNodeLabel2);
 
-        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
+        Map<Value, Set<Node>> expectedDuSequences = new HashMap<>();
         expectedDuSequences.put(r0.asValue(), r0Nodes);
         expectedDuSequences.put(r1.asValue(), r1Nodes);
         expectedDuSequences.put(r2.asValue(), r2Nodes);
@@ -126,10 +132,10 @@ public class DuSequenceAnalysisTest {
         defNodeLabel0.addNextNodes(useNodeLabel1);
         defNodeLabel2.addNextNodes(useNodeLabel0);
 
-        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
-        List<Node> r0Nodes = Arrays.asList(defNodeLabel0);
+        Map<Value, Set<Node>> expectedDuSequences = new HashMap<>();
+        Set<Node> r0Nodes = asSet(defNodeLabel0);
 
-        List<Node> rbpNodes = Arrays.asList(defNodeLabel2);
+        Set<Node> rbpNodes = asSet(defNodeLabel2);
 
         expectedDuSequences.put(r0.asValue(), r0Nodes);
         expectedDuSequences.put(rbp.asValue(), rbpNodes);
@@ -152,9 +158,9 @@ public class DuSequenceAnalysisTest {
         UseNode useNodeLabel0 = new UseNode(rbp.asValue(), returnOp, 0);
         defNodeLabel1.addNextNodes(useNodeLabel0);
 
-        List<Node> rbpNodes = Arrays.asList(defNodeLabel1);
+        Set<Node> rbpNodes = asSet(defNodeLabel1);
 
-        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
+        Map<Value, Set<Node>> expectedDuSequences = new HashMap<>();
         expectedDuSequences.put(rbp.asValue(), rbpNodes);
 
         thrown.expect(GraalError.class);
@@ -208,11 +214,11 @@ public class DuSequenceAnalysisTest {
         defNodeAdd0.addNextNodes(moveNodei5);
         moveNodei5.addNextNodes(useNodeReturn0);
 
-        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
-        expectedDuSequences.put(r0.asValue(), Arrays.asList(defNodeLabel0));
-        expectedDuSequences.put(r1.asValue(), Arrays.asList(defNodeLabel1));
-        expectedDuSequences.put(rbp.asValue(), Arrays.asList(defNodeLabel2));
-        expectedDuSequences.put(v2, Arrays.asList(defNodeAdd0));
+        Map<Value, Set<Node>> expectedDuSequences = new HashMap<>();
+        expectedDuSequences.put(r0.asValue(), asSet(defNodeLabel0));
+        expectedDuSequences.put(r1.asValue(), asSet(defNodeLabel1));
+        expectedDuSequences.put(rbp.asValue(), asSet(defNodeLabel2));
+        expectedDuSequences.put(v2, asSet(defNodeAdd0));
 
         test(instructions, expectedDuSequences);
     }
@@ -241,9 +247,9 @@ public class DuSequenceAnalysisTest {
 
         defNodeLabel1.addNextNodes(useNodeReturn0);
 
-        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
-        expectedDuSequences.put(r0.asValue(), Arrays.asList(defNodeLabel0));
-        expectedDuSequences.put(rbp.asValue(), Arrays.asList(defNodeLabel1));
+        Map<Value, Set<Node>> expectedDuSequences = new HashMap<>();
+        expectedDuSequences.put(r0.asValue(), asSet(defNodeLabel0));
+        expectedDuSequences.put(rbp.asValue(), asSet(defNodeLabel1));
 
         test(instructions, expectedDuSequences);
     }
@@ -278,9 +284,9 @@ public class DuSequenceAnalysisTest {
         defNodeConstant.addNextNodes(moveNode);
         moveNode.addNextNodes(useNodeReturn1);
 
-        Map<Value, List<Node>> expectedDuSequences = new HashMap<>();
-        expectedDuSequences.put(rbp.asValue(), Arrays.asList(defNodeLabel));
-        expectedDuSequences.put(constantValue0, Arrays.asList(defNodeConstant));
+        Map<Value, Set<Node>> expectedDuSequences = new HashMap<>();
+        expectedDuSequences.put(rbp.asValue(), asSet(defNodeLabel));
+        expectedDuSequences.put(constantValue0, asSet(defNodeConstant));
 
         test(analysisResult, expectedDuSequences);
     }
@@ -314,64 +320,64 @@ public class DuSequenceAnalysisTest {
         defNodeR3.addNextNodes(moveNode);
         moveNode.addNextNodes(useNodeReturn1);
 
-        Map<Value, List<Node>> expectedDuSequenceWebs = new HashMap<>();
-        expectedDuSequenceWebs.put(rbp.asValue(), Arrays.asList(defNodeLabel));
-        expectedDuSequenceWebs.put(r3.asValue(), Arrays.asList(defNodeR3));
+        Map<Value, Set<Node>> expectedDuSequenceWebs = new HashMap<>();
+        expectedDuSequenceWebs.put(rbp.asValue(), asSet(defNodeLabel));
+        expectedDuSequenceWebs.put(r3.asValue(), asSet(defNodeR3));
 
         test(analysisResult, expectedDuSequenceWebs);
     }
 
     @Test
     public void testMergeMaps0() {
-        Map<Integer, List<Integer>> map1 = new HashMap<>();
-        Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
+        Map<Integer, Set<Integer>> map1 = new HashMap<>();
+        Map<Integer, Map<Integer, Set<Integer>>> map = new HashMap<>();
         map.put(3, map1);
         map.put(5, map1);
 
-        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
+        Map<Integer, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
 
         assertEquals(true, mergedMap.entrySet().stream().allMatch(entry -> entry.getValue().isEmpty()));
     }
 
     @Test
     public void testMergeMaps1() {
-        List<Integer> list = Arrays.asList(8, 9);
+        Set<Integer> set = asSet(8, 9);
 
-        Map<Integer, List<Integer>> map1 = new HashMap<>();
-        Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
-        map1.put(1, list);
+        Map<Integer, Set<Integer>> map1 = new HashMap<>();
+        Map<Integer, Map<Integer, Set<Integer>>> map = new HashMap<>();
+        map1.put(1, set);
         map.put(3, map1);
         map.put(5, new HashMap<>());
 
-        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
+        Map<Integer, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
 
         assertEquals(1, mergedMap.keySet().size());
 
-        List<Integer> actualList = mergedMap.get(1);
+        Set<Integer> actualList = mergedMap.get(1);
         assertNotEquals(null, actualList);
-        assertEquals(true, actualList.equals(list));
+        assertEquals(true, actualList.equals(set));
     }
 
     @Test
     public void testMergeMaps2() {
-        Map<Integer, List<Integer>> map1 = new HashMap<>();
-        Map<Integer, List<Integer>> map2 = new HashMap<>();
-        map1.put(1, Arrays.asList(10));
-        map1.put(2, Arrays.asList(11, 12));
-        map1.put(3, Arrays.asList(13, 14));
-        map1.put(4, Arrays.asList());
-        map2.put(1, Arrays.asList(10));
-        map2.put(2, Arrays.asList(11, 12, 15));
-        map2.put(4, Arrays.asList(16, 17, 18));
+        Map<Integer, Set<Integer>> map1 = new HashMap<>();
+        Map<Integer, Set<Integer>> map2 = new HashMap<>();
+        map1.put(1, asSet(10));
+        map1.put(2, asSet(11, 12));
+        map1.put(3, asSet(13, 14));
+        map1.put(4, asSet());
+        map2.put(1, asSet(10));
+        map2.put(2, asSet(11, 12, 15));
+        map2.put(4, asSet(16, 17, 18));
 
-        Map<Integer, Map<Integer, List<Integer>>> map = new HashMap<>();
+        Map<Integer, Map<Integer, Set<Integer>>> map = new HashMap<>();
         map.put(1, map1);
         map.put(2, map2);
-        Map<Integer, List<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2});
-        assertEquals(true, mergedMap.get(1).equals(Arrays.asList(10)));
-        assertEquals(true, mergedMap.get(2).equals(Arrays.asList(11, 12, 15)));
-        assertEquals(true, mergedMap.get(3).equals(Arrays.asList(13, 14)));
-        assertEquals(true, mergedMap.get(4).equals(Arrays.asList(16, 17, 18)));
+        Map<Integer, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2});
+        assertEquals(true, mergedMap.get(1).equals(asSet(10)));
+        assertEquals(true, mergedMap.get(2).equals(asSet(11, 12, 15)));
+        assertEquals(true, mergedMap.get(3).equals(asSet(13, 14)));
+        assertEquals(true, mergedMap.get(4).equals(asSet(16, 17, 18)));
     }
 
     @Test
@@ -511,26 +517,26 @@ public class DuSequenceAnalysisTest {
 
     }
 
-    private static void test(ArrayList<LIRInstruction> instructions, Map<Value, List<Node>> expectedDuSequences) {
+    private static void test(ArrayList<LIRInstruction> instructions, Map<Value, Set<Node>> expectedDuSequences) {
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
 
         AnalysisResult analysisResult = duSequenceAnalysis.determineDuSequences(instructions, TestValue.getAttributesMap(), new HashMap<>(), new HashMap<>());
         test(analysisResult, expectedDuSequences);
     }
 
-    private static void test(AnalysisResult analysisResult, Map<Value, List<Node>> expectedDuSequences) {
-        Map<Value, List<DefNode>> actualDuSequences = analysisResult.getDuSequences();
+    private static void test(AnalysisResult analysisResult, Map<Value, Set<Node>> expectedDuSequences) {
+        Map<Value, Set<DefNode>> actualDuSequences = analysisResult.getDuSequences();
         assertEquals("The number of key-value pairs does not match.", expectedDuSequences.size(), actualDuSequences.size());
 
-        for (Entry<Value, List<Node>> entry : expectedDuSequences.entrySet()) {
-            List<Node> expectedNodes = entry.getValue();
-            List<DefNode> actualNodes = actualDuSequences.get(entry.getKey());
+        for (Entry<Value, Set<Node>> entry : expectedDuSequences.entrySet()) {
+            Set<Node> expectedNodes = entry.getValue();
+            Set<DefNode> actualNodes = actualDuSequences.get(entry.getKey());
 
             assertNodes(expectedNodes, actualNodes);
         }
     }
 
-    private static void assertNodes(List<Node> expectedNodes, List<DefNode> actualNodes) {
+    private static void assertNodes(Set<Node> expectedNodes, Set<DefNode> actualNodes) {
         assertEquals("The number of nodes does not match.", expectedNodes.size(), actualNodes.size());
 
         for (Node expectedNode : expectedNodes) {

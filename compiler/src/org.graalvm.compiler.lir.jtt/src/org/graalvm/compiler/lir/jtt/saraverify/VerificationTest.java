@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.jtt.JTTTest;
@@ -59,7 +60,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), r1.asValue(), rbp.asValue()});
@@ -70,7 +71,7 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r2.asValue();
 
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
@@ -90,7 +91,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r1.asValue(), r0.asValue(), rbp.asValue()});
@@ -101,7 +102,7 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r2.asValue();
 
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
@@ -121,7 +122,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), r1.asValue(), rbp.asValue()});
@@ -132,7 +133,7 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r2.asValue();
 
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
@@ -152,7 +153,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -162,7 +163,7 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r1.asValue();
 
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
@@ -182,7 +183,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -192,7 +193,7 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r0.asValue();
 
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
@@ -212,7 +213,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         TestMoveFromConst moveConstToReg = new TestMoveFromConst(r1.asValue(), JavaConstant.INT_1);
         instructions.add(2, moveConstToReg);
@@ -225,7 +226,7 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r0.asValue();
 
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
@@ -245,7 +246,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         TestMoveFromConst moveConstToReg = new TestMoveFromConst(r1.asValue(), JavaConstant.INT_1);
         instructions.add(2, moveConstToReg);
@@ -258,7 +259,7 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r1.asValue();
 
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
@@ -280,7 +281,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -293,7 +294,7 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r1.asValue();
 
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(true, inputDuSequences, outputDuSequences);
     }
@@ -315,7 +316,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -328,7 +329,7 @@ public class VerificationTest extends JTTTest {
         returnOp.value = r0.asValue();
 
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
@@ -350,7 +351,7 @@ public class VerificationTest extends JTTTest {
         instructions.add(returnOp);
 
         AnalysisResult inputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
 
         labelOp.clearIncomingValues();
         labelOp.addIncomingValues(new Value[]{r0.asValue(), rbp.asValue()});
@@ -361,7 +362,7 @@ public class VerificationTest extends JTTTest {
 
         thrown.expect(GraalError.class);
         AnalysisResult outputResult = getAnalysisResult(duSequenceAnalysis, instructions);
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         assertVerifyDataFlow(false, inputDuSequences, outputDuSequences);
     }
@@ -369,7 +370,7 @@ public class VerificationTest extends JTTTest {
     @Test
     public void testCreateDuSequenceWebs() {
         VerificationPhase verificationPhase = new VerificationPhase();
-        Map<Value, List<DefNode>> nodes = new HashMap<>();
+        Map<Value, Set<DefNode>> nodes = new HashMap<>();
 
         TestDef defOp1 = new TestDef(r0.asValue());
         TestDef defOp2 = new TestDef(v0);
@@ -387,8 +388,8 @@ public class VerificationTest extends JTTTest {
         moveNode.addNextNodes(useNode1);
         defNode2.addNextNodes(useNode2);
 
-        nodes.put(r0.asValue(), Arrays.asList(defNode1));
-        nodes.put(v0, Arrays.asList(defNode2));
+        nodes.put(r0.asValue(), DuSequenceAnalysisTest.asSet(defNode1));
+        nodes.put(v0, DuSequenceAnalysisTest.asSet(defNode2));
 
         DuSequenceWeb web1 = new DuSequenceWeb();
         web1.addNodes(Arrays.asList(defNode1, moveNode, useNode1));
@@ -410,7 +411,7 @@ public class VerificationTest extends JTTTest {
     @Test
     public void testCreateDuSequenceWebs2() {
         VerificationPhase verificationPhase = new VerificationPhase();
-        Map<Value, List<DefNode>> nodes = new HashMap<>();
+        Map<Value, Set<DefNode>> nodes = new HashMap<>();
 
         TestDef defOp1 = new TestDef(v0);
         TestDef defOp2 = new TestDef(v0);
@@ -429,7 +430,7 @@ public class VerificationTest extends JTTTest {
         defNode2.addNextNodes(useNode2);
         defNode3.addNextNodes(useNode2);
 
-        nodes.put(v0, Arrays.asList(defNode1, defNode2, defNode3));
+        nodes.put(v0, DuSequenceAnalysisTest.asSet(defNode1, defNode2, defNode3));
 
         List<DuSequenceWeb> actualWebs = verificationPhase.createDuSequenceWebs(nodes);
         DuSequenceWeb expectedWeb = new DuSequenceWeb();
@@ -439,15 +440,15 @@ public class VerificationTest extends JTTTest {
         Assert.assertEquals(1, actualWebs.size());
         assertTrue(expectedWeb.equals(actualWebs.get(0)));
 
-        Map<Value, List<DefNode>> nodes2 = new HashMap<>();
-        nodes2.put(v0, Arrays.asList(defNode2, defNode1, defNode3));
+        Map<Value, Set<DefNode>> nodes2 = new HashMap<>();
+        nodes2.put(v0, DuSequenceAnalysisTest.asSet(defNode2, defNode1, defNode3));
         List<DuSequenceWeb> actualWebs2 = verificationPhase.createDuSequenceWebs(nodes2);
 
         Assert.assertEquals(1, actualWebs.size());
         assertTrue(expectedWeb.equals(actualWebs2.get(0)));
 
-        Map<Value, List<DefNode>> nodes3 = new HashMap<>();
-        nodes3.put(v0, Arrays.asList(defNode1, defNode3, defNode2));
+        Map<Value, Set<DefNode>> nodes3 = new HashMap<>();
+        nodes3.put(v0, DuSequenceAnalysisTest.asSet(defNode1, defNode3, defNode2));
         List<DuSequenceWeb> actualWebs3 = verificationPhase.createDuSequenceWebs(nodes3);
 
         Assert.assertEquals(1, actualWebs3.size());
@@ -457,7 +458,7 @@ public class VerificationTest extends JTTTest {
     @Test
     public void testCreateDuSequenceWebs3() {
         VerificationPhase verificationPhase = new VerificationPhase();
-        Map<Value, List<DefNode>> nodes = new HashMap<>();
+        Map<Value, Set<DefNode>> nodes = new HashMap<>();
 
         TestDef defOp = new TestDef(r0.asValue());
         TestMoveFromReg move1 = new TestMoveFromReg(v0, r0.asValue());
@@ -474,7 +475,7 @@ public class VerificationTest extends JTTTest {
         moveNode1.addNextNodes(useNode);
         moveNode2.addNextNodes(useNode);
 
-        nodes.put(r0.asValue(), Arrays.asList(defNode));
+        nodes.put(r0.asValue(), DuSequenceAnalysisTest.asSet(defNode));
 
         DuSequenceWeb web = new DuSequenceWeb();
         web.addNodes(Arrays.asList(defNode, moveNode1, moveNode2, useNode));
@@ -617,7 +618,7 @@ public class VerificationTest extends JTTTest {
         return duSequenceAnalysis.determineDuSequences(instructions, TestValue.getAttributesMap(), new HashMap<>(), new HashMap<>());
     }
 
-    private void assertVerifyDataFlow(boolean expected, Map<Value, List<DefNode>> inputDuSequences, Map<Value, List<DefNode>> outputDuSequences) {
+    private void assertVerifyDataFlow(boolean expected, Map<Value, Set<DefNode>> inputDuSequences, Map<Value, Set<DefNode>> outputDuSequences) {
         VerificationPhase verificationPhase = new VerificationPhase();
         Assert.assertEquals(expected, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
     }

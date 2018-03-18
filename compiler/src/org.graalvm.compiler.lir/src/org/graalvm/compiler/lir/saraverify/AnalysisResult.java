@@ -1,7 +1,7 @@
 package org.graalvm.compiler.lir.saraverify;
 
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
@@ -13,7 +13,7 @@ import jdk.vm.ci.meta.Value;
 
 public class AnalysisResult {
 
-    private Map<Value, List<DefNode>> duSequences;
+    private Map<Value, Set<DefNode>> duSequences;
 
     private Map<LIRInstruction, Integer> instructionDefOperandCount;
     private Map<LIRInstruction, Integer> instructionUseOperandCount;
@@ -21,7 +21,7 @@ public class AnalysisResult {
     private Map<Register, DummyRegDef> dummyRegDefs;
     private Map<Constant, DummyConstDef> dummyConstDefs;
 
-    public AnalysisResult(Map<Value, List<DefNode>> duSequences, Map<LIRInstruction, Integer> instructionDefOperandCount,
+    public AnalysisResult(Map<Value, Set<DefNode>> duSequences, Map<LIRInstruction, Integer> instructionDefOperandCount,
                     Map<LIRInstruction, Integer> instructionUseOperandCount, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
         this.duSequences = duSequences;
         this.instructionDefOperandCount = instructionDefOperandCount;
@@ -30,7 +30,7 @@ public class AnalysisResult {
         this.dummyConstDefs = dummyConstDefs;
     }
 
-    public Map<Value, List<DefNode>> getDuSequences() {
+    public Map<Value, Set<DefNode>> getDuSequences() {
         return duSequences;
     }
 

@@ -37,7 +37,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             return;
         }
 
-        Map<Value, List<DefNode>> inputDuSequences = inputResult.getDuSequences();
+        Map<Value, Set<DefNode>> inputDuSequences = inputResult.getDuSequences();
         Map<Register, DummyRegDef> inputDummyRegDefs = inputResult.getDummyRegDefs();
         Map<Constant, DummyConstDef> inputDummyConstDefs = inputResult.getDummyConstDefs();
 
@@ -48,7 +48,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         AnalysisResult outputResult = duSequenceAnalysis.determineDuSequences(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), inputDummyRegDefs,
                         inputDummyConstDefs);
 
-        Map<Value, List<DefNode>> outputDuSequences = outputResult.getDuSequences();
+        Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
         if (!verifyDataFlow(inputDuSequences, outputDuSequences, debugContext)) {
             throw GraalError.shouldNotReachHere(DuSequenceAnalysis.ERROR_MSG_PREFIX + "Data Flow not equal");
@@ -61,7 +61,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         }
     }
 
-    public boolean verifyDataFlow(Map<Value, List<DefNode>> inputDuSequences, Map<Value, List<DefNode>> outputDuSequences, DebugContext debugContext) {
+    public boolean verifyDataFlow(Map<Value, Set<DefNode>> inputDuSequences, Map<Value, Set<DefNode>> outputDuSequences, DebugContext debugContext) {
         List<DuSequenceWeb> inputDuSequenceWebs = createDuSequenceWebs(inputDuSequences);
         List<DuSequenceWeb> outputDuSequenceWebs = createDuSequenceWebs(outputDuSequences);
 
@@ -122,11 +122,11 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         return true;
     }
 
-    public List<DuSequenceWeb> createDuSequenceWebs(Map<Value, List<DefNode>> nodes) {
+    public List<DuSequenceWeb> createDuSequenceWebs(Map<Value, Set<DefNode>> nodes) {
         List<DuSequenceWeb> duSequenceWebs = new ArrayList<>();
         Map<Node, DuSequenceWeb> nodeDuSequenceWeb = new HashMap<>();
 
-        for (List<DefNode> nodeList : nodes.values()) {
+        for (Set<DefNode> nodeList : nodes.values()) {
             for (DefNode node : nodeList) {
                 List<Node> visitedNodes = new ArrayList<>();
 

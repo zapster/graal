@@ -50,6 +50,8 @@ public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationCont
 
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+        // TODO: assertion of unique lir instructions
+
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
         Map<Register, DummyRegDef> dummyRegDefs = new HashMap<>();
         Map<Constant, DummyConstDef> dummyConstDefs = new HashMap<>();
