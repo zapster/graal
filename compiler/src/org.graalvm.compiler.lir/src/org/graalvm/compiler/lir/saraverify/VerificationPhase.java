@@ -30,6 +30,8 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+        UniqueInstructionVerifier.verify(lirGenRes);
+
         AnalysisResult inputResult = context.contextLookup(AnalysisResult.class);
 
         if (inputResult == null) {
