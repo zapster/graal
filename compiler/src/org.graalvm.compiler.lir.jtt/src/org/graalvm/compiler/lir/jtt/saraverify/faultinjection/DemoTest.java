@@ -1,4 +1,4 @@
-package org.graalvm.compiler.lir.jtt.saraverify;
+package org.graalvm.compiler.lir.jtt.saraverify.faultinjection;
 
 import java.util.ListIterator;
 
@@ -33,6 +33,7 @@ public class DemoTest extends JTTTest {
     @Test
     public void run0() throws Throwable {
         thrown.expect(GraalError.class);
+        thrown.expectMessage("Used register rax is not defined.");
         runTest("test", 1);
     }
 

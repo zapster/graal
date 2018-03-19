@@ -1,4 +1,4 @@
-package org.graalvm.compiler.lir.jtt.saraverify;
+package org.graalvm.compiler.lir.jtt.saraverify.faultinjection;
 
 import java.util.ListIterator;
 

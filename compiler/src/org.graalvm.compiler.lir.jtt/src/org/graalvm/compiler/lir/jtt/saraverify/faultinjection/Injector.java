@@ -1,4 +1,4 @@
-package org.graalvm.compiler.lir.jtt.saraverify;
+package org.graalvm.compiler.lir.jtt.saraverify.faultinjection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -76,7 +76,24 @@ class Injector extends AllocationPhase {
                 }
             }
         }
+    }
 
+    class DuplicateInstructionInjector extends Injector {
+        @Override
+        protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+            LIR lir = lirGenRes.getLIR();
+            AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+
+            for (AbstractBlockBase<?> block : blocks) {
+                ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+
+                if (instructions.size() >= 2) {
+                    LIRInstruction instruction = instructions.get(0);
+                    instructions.set(1, instruction);
+                    return;
+                }
+            }
+        }
     }
 
     class PhiLabelInjector extends Injector {

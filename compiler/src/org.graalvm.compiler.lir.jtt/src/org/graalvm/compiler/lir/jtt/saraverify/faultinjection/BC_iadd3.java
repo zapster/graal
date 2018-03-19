@@ -1,4 +1,4 @@
-package org.graalvm.compiler.lir.jtt.saraverify;
+package org.graalvm.compiler.lir.jtt.saraverify.faultinjection;
 
 import org.graalvm.compiler.debug.GraalError;
 import org.junit.Rule;
@@ -36,6 +36,8 @@ import org.junit.rules.ExpectedException;
  */
 public class BC_iadd3 extends InjectorTest {
 
+    private final String UNDEFINED_REGISTER_ERROR_MSG = "Used register rax is not defined.";
+
     @Override
     public Injector getInjectorPhase() {
         Injector injector = new Injector();
@@ -51,48 +53,56 @@ public class BC_iadd3 extends InjectorTest {
     @Test
     public void run0() throws Throwable {
         thrown.expect(GraalError.class);
+        thrown.expectMessage(UNDEFINED_REGISTER_ERROR_MSG);
         runTest("test", ((short) 1), ((short) 2));
     }
 
     @Test
     public void run1() throws Throwable {
         thrown.expect(GraalError.class);
+        thrown.expectMessage(UNDEFINED_REGISTER_ERROR_MSG);
         runTest("test", ((short) 0), ((short) -1));
     }
 
     @Test
     public void run2() throws Throwable {
         thrown.expect(GraalError.class);
+        thrown.expectMessage(UNDEFINED_REGISTER_ERROR_MSG);
         runTest("test", ((short) 33), ((short) 67));
     }
 
     @Test
     public void run3() throws Throwable {
         thrown.expect(GraalError.class);
+        thrown.expectMessage(UNDEFINED_REGISTER_ERROR_MSG);
         runTest("test", ((short) 1), ((short) -1));
     }
 
     @Test
     public void run4() throws Throwable {
         thrown.expect(GraalError.class);
+        thrown.expectMessage(UNDEFINED_REGISTER_ERROR_MSG);
         runTest("test", ((short) -128), ((short) 1));
     }
 
     @Test
     public void run5() throws Throwable {
         thrown.expect(GraalError.class);
+        thrown.expectMessage(UNDEFINED_REGISTER_ERROR_MSG);
         runTest("test", ((short) 127), ((short) 1));
     }
 
     @Test
     public void run6() throws Throwable {
         thrown.expect(GraalError.class);
+        thrown.expectMessage(UNDEFINED_REGISTER_ERROR_MSG);
         runTest("test", ((short) -32768), ((short) 1));
     }
 
     @Test
     public void run7() throws Throwable {
         thrown.expect(GraalError.class);
+        thrown.expectMessage(UNDEFINED_REGISTER_ERROR_MSG);
         runTest("test", ((short) 32767), ((short) 1));
     }
 

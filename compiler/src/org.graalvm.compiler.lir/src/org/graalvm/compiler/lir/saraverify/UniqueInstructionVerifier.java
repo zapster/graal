@@ -16,6 +16,7 @@ public class UniqueInstructionVerifier {
         long instructionsCount = Arrays.stream(blocks)  //
                         .flatMap(block -> lir.getLIRforBlock(block).stream())    //
                         .count();
+
         long distinctCount = Arrays.stream(blocks)      //
                         .flatMap(block -> lir.getLIRforBlock(block).stream())    //
                         .map(instr -> System.identityHashCode(instr))   //

@@ -1,4 +1,4 @@
-package org.graalvm.compiler.lir.jtt.saraverify;
+package org.graalvm.compiler.lir.jtt.saraverify.faultinjection;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.lir.LIR;
