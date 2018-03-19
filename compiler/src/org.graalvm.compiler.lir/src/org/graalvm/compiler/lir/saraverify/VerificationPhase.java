@@ -72,6 +72,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         for (DuSequenceWeb inputDuSequenceWeb : inputDuSequenceWebs) {
             if (!outputDuSequenceWebs.stream().anyMatch(outputDuSequenceWeb -> verifyDuSequenceWebs(inputDuSequenceWeb, outputDuSequenceWeb))) {
+                try (Scope s = debugContext.scope(DEBUG_SCOPE); Indent i = debugContext.indent()) {
+                    debugContext.log(3, "%s", "Unmatched input du-sequence-web:\n" + inputDuSequenceWeb);
+                }
                 return false;
             }
         }
@@ -157,7 +160,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     }
 
     private DuSequenceWeb createDuSequenceWeb(Node node, Map<Node, DuSequenceWeb> nodeDuSequenceWeb, List<Node> visitedNodes, List<DuSequenceWeb> duSequenceWebs) {
-        if (nodeDuSequenceWeb.containsKey(node)) {
+        if (nodeDuSequenceWeb.containsKey(node) || visitedNodes.contains(node)) {
             return nodeDuSequenceWeb.get(node);
         }
 
