@@ -9,7 +9,7 @@ import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 
 public class UniqueInstructionVerifier {
 
-    public static void verify(LIRGenerationResult lirGenRes) {
+    public static boolean verify(LIRGenerationResult lirGenRes) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
@@ -26,5 +26,7 @@ public class UniqueInstructionVerifier {
         if (instructionsCount != distinctCount) {
             GraalError.shouldNotReachHere("LIR instructions are not unique.");
         }
+
+        return true;
     }
 }
