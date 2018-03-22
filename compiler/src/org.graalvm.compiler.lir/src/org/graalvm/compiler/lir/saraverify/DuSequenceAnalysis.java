@@ -51,15 +51,15 @@ public class DuSequenceAnalysis {
 // test
     public static class DummyConstDef extends LIRInstruction {
         public static final LIRInstructionClass<DummyConstDef> TYPE = LIRInstructionClass.create(DummyConstDef.class);
-        protected ConstantValue value;
+        protected Constant constant;
 
-        public DummyConstDef(ConstantValue value) {
+        public DummyConstDef(Constant constant) {
             super(TYPE);
-            this.value = value;
+            this.constant = constant;
         }
 
-        public ConstantValue getValue() {
-            return value;
+        public Constant getValue() {
+            return constant;
         }
 
         @Override
@@ -271,7 +271,7 @@ public class DuSequenceAnalysis {
                 Constant constant = constantValue.getConstant();
                 DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
                 if (dummyConstDef == null) {
-                    dummyConstDef = new DummyConstDef(constantValue);
+                    dummyConstDef = new DummyConstDef(constant);
                     dummyConstDefs.put(constant, dummyConstDef);
                 }
                 dummyDef = dummyConstDef;
@@ -441,7 +441,13 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visit(Value phiIn, Value phiOut) {
-            insertMoveNode(unfinishedDuSequences, phiIn, phiOut, instruction);
+            if (LIRValueUtil.isConstantValue(phiOut)) {
+                ConstantValue phiOutConstantValue = (ConstantValue) phiOut;
+                phiOutConstantValue = new ConstantValue(ValueKind.Illegal, phiOutConstantValue.getConstant());
+                insertMoveNode(unfinishedDuSequences, phiIn, phiOutConstantValue, instruction);
+            } else {
+                insertMoveNode(unfinishedDuSequences, phiIn, phiOut, instruction);
+            }
         }
 
     }
