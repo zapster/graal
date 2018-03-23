@@ -53,6 +53,4 @@ public abstract class Node {
         result = prime * result + System.identityHashCode(instruction);
         return result;
     }
-
-    public abstract String duSequenceToString();
 }

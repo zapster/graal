@@ -64,17 +64,6 @@ public class MoveNode extends Node {
     }
 
     @Override
-    public String duSequenceToString() {
-        String string = "";
-
-        for (Node node : nextNodes) {
-            string = string + " -> " + toString() + node.duSequenceToString() + "\n";
-        }
-
-        return string;
-    }
-
-    @Override
     public boolean isDefNode() {
         return false;
     }

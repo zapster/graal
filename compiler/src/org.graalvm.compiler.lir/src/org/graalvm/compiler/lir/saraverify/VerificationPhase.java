@@ -2,10 +2,12 @@ package org.graalvm.compiler.lir.saraverify;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugContext.Scope;
@@ -26,7 +28,7 @@ import jdk.vm.ci.meta.Value;
 
 public class VerificationPhase extends LIRPhase<AllocationContext> {
 
-    private final String DEBUG_SCOPE = "SARAVerifyVerificationPhase";
+    private final static String DEBUG_SCOPE = "SARAVerifyVerificationPhase";
 
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
@@ -67,8 +69,14 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         List<DuSequenceWeb> inputDuSequenceWebs = createDuSequenceWebs(inputDuSequences);
         List<DuSequenceWeb> outputDuSequenceWebs = createDuSequenceWebs(outputDuSequences);
 
+        assert assertDuSequences(inputDuSequences, outputDuSequences, inputDuSequenceWebs, outputDuSequenceWebs, debugContext);
+
         logDuSequenceWebs(inputDuSequenceWebs, debugContext);
         logDuSequenceWebs(outputDuSequenceWebs, debugContext);
+
+        if (inputDuSequenceWebs.size() != outputDuSequenceWebs.size()) {
+            return false;
+        }
 
         for (DuSequenceWeb inputDuSequenceWeb : inputDuSequenceWebs) {
             if (!outputDuSequenceWebs.stream().anyMatch(outputDuSequenceWeb -> verifyDuSequenceWebs(inputDuSequenceWeb, outputDuSequenceWeb))) {
@@ -78,7 +86,6 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                 return false;
             }
         }
-
         return true;
     }
 
@@ -98,6 +105,34 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             if (!useNodes2.stream().anyMatch(node -> node.verify(useNode))) {
                 return false;
             }
+        }
+
+        return true;
+    }
+
+    private static boolean assertDuSequences(Map<Value, Set<DefNode>> inputDuSequences, Map<Value, Set<DefNode>> outputDuSequences, List<DuSequenceWeb> inputDuSequenceWebs,
+                    List<DuSequenceWeb> outputDuSequenceWebs, DebugContext debugContext) {
+        List<DefNode> inputDefNodes = inputDuSequences.values().stream().flatMap(set -> set.stream()).collect(Collectors.toList());
+        List<DefNode> outputDefNodes = outputDuSequences.values().stream().flatMap(set -> set.stream()).collect(Collectors.toList());
+
+        try (Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            Map<Node, Integer> nodeID = new HashMap<>();
+            Set<Node> visitedNodes = new HashSet<>();
+            inputDefNodes.stream().forEach(node -> logDuSequence(node, nodeID, visitedNodes, debugContext));
+        }
+
+        if (inputDefNodes.size() != outputDefNodes.size()) {
+            return false;
+        }
+
+        List<DefNode> inputWebDefNodes = inputDuSequenceWebs.stream().flatMap(web -> web.getDefNodes().stream()).collect(Collectors.toList());
+        List<DefNode> outputWebDefNodes = outputDuSequenceWebs.stream().flatMap(web -> web.getDefNodes().stream()).collect(Collectors.toList());
+        if (inputWebDefNodes.size() != outputWebDefNodes.size()) {
+            return false;
+        }
+
+        if (inputDefNodes.size() != inputWebDefNodes.size() || outputDefNodes.size() != outputWebDefNodes.size()) {
+            return false;
         }
 
         return true;
@@ -175,7 +210,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     private static DuSequenceWeb mergeDuSequenceWebs(DuSequenceWeb web1, DuSequenceWeb web2, List<DuSequenceWeb> duSequenceWebs) {
         assert web2 != null;
 
-        if (web1 == null) {
+        if (web1 == null || web1 == web2) {
             return web2;
         }
 
@@ -188,9 +223,30 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         return web1;
     }
 
-    private void logDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs, DebugContext debugContext) {
+    private static void logDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs, DebugContext debugContext) {
         try (Scope s = debugContext.scope(DEBUG_SCOPE); Indent i = debugContext.indent()) {
-            duSequenceWebs.stream().forEach(web -> debugContext.log(3, "%s", web.toString() + "\n"));
+            duSequenceWebs.stream().forEach(web -> debugContext.log(4, "%s", web.toString() + "\n"));
+        }
+    }
+
+    private static void logDuSequence(Node node, Map<Node, Integer> nodeID, Set<Node> visitedNodes, DebugContext debugContext) {
+        if (visitedNodes.contains(node)) {
+            return;
+        }
+        visitedNodes.add(node);
+
+        Integer id = nodeID.get(node);
+        if (id == null) {
+            id = nodeID.size();
+            nodeID.put(node, id);
+        }
+
+        try (Indent i = debugContext.indent()) {
+            debugContext.log(3, "%s", node.toString() + " (" + id + ")");
+
+            for (Node nextNode : node.nextNodes) {
+                logDuSequence(nextNode, nodeID, visitedNodes, debugContext);
+            }
         }
     }
 }

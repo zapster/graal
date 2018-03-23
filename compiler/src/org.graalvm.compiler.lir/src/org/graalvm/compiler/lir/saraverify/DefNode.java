@@ -48,17 +48,6 @@ public class DefNode extends Node {
     }
 
     @Override
-    public String duSequenceToString() {
-        String string = toString();
-
-        for (Node node : nextNodes) {
-            string = string + node.duSequenceToString() + "\n";
-        }
-
-        return string;
-    }
-
-    @Override
     public boolean isDefNode() {
         return true;
     }

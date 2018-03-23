@@ -67,11 +67,6 @@ public class UseNode extends Node {
     }
 
     @Override
-    public String duSequenceToString() {
-        return " -> " + toString();
-    }
-
-    @Override
     public boolean isDefNode() {
         return false;
     }
