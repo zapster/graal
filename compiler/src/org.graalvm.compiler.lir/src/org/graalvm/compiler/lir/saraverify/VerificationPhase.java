@@ -50,7 +50,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
         AnalysisResult outputResult = duSequenceAnalysis.determineDuSequences(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), inputDummyRegDefs,
-                        inputDummyConstDefs);
+                        inputDummyConstDefs, debugContext);
 
         Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
@@ -70,6 +70,8 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         List<DuSequenceWeb> outputDuSequenceWebs = createDuSequenceWebs(outputDuSequences);
 
         assert assertDuSequences(inputDuSequences, outputDuSequences, inputDuSequenceWebs, outputDuSequenceWebs, debugContext);
+
+        GraphPrinter.printGraphs(inputDuSequences, inputDuSequenceWebs, outputDuSequences, outputDuSequenceWebs);
 
         logDuSequenceWebs(inputDuSequenceWebs, debugContext);
         logDuSequenceWebs(outputDuSequenceWebs, debugContext);
@@ -122,16 +124,34 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         }
 
         if (inputDefNodes.size() != outputDefNodes.size()) {
-            return false;
+            try (Scope s = debugContext.scope(DEBUG_SCOPE)) {
+                debugContext.log(3, "%s", "The number of input and output definition nodes do not match."   //
+                                + "\nInput definition nodes: " + inputDefNodes.size()   //
+                                + "\nOutput defininition nodes: " + outputDefNodes.size());
+            }
         }
 
         List<DefNode> inputWebDefNodes = inputDuSequenceWebs.stream().flatMap(web -> web.getDefNodes().stream()).collect(Collectors.toList());
         List<DefNode> outputWebDefNodes = outputDuSequenceWebs.stream().flatMap(web -> web.getDefNodes().stream()).collect(Collectors.toList());
         if (inputWebDefNodes.size() != outputWebDefNodes.size()) {
+            try (Scope s = debugContext.scope(DEBUG_SCOPE)) {
+                debugContext.log(3, "%s",
+                                "The number of definition nodes from the input and output webs do not match." //
+                                                + "\nInput webs definition nodes: " + inputWebDefNodes.size()    //
+                                                + "\nOutput webs definition nodes: " + outputWebDefNodes.size());
+            }
             return false;
         }
 
         if (inputDefNodes.size() != inputWebDefNodes.size() || outputDefNodes.size() != outputWebDefNodes.size()) {
+            try (Scope s = debugContext.scope(DEBUG_SCOPE)) {
+                debugContext.log(3, "%s",
+                                "The definition nodes between the du-sequences and the webs do not match." //
+                                                + "\nInput du-sequences definition nodes: " + inputDefNodes.size()    //
+                                                + "\nInput webs definition nodes: " + inputWebDefNodes.size()    //
+                                                + "\nOutput du-sequences definition nodes: " + outputDefNodes.size()    //
+                                                + "\nOutput webs definition nodes: " + outputWebDefNodes.size());
+            }
             return false;
         }
 
@@ -242,9 +262,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         }
 
         try (Indent i = debugContext.indent()) {
-            debugContext.log(3, "%s", node.toString() + " (" + id + ")");
+            debugContext.log(4, "%s", node.toString() + " (" + id + ")");
 
-            for (Node nextNode : node.nextNodes) {
+            for (Node nextNode : node.getNextNodes()) {
                 logDuSequence(nextNode, nodeID, visitedNodes, debugContext);
             }
         }
