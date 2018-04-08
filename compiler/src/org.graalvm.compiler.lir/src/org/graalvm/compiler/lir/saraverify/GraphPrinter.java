@@ -17,9 +17,10 @@ import jdk.vm.ci.meta.Value;
 
 public class GraphPrinter {
 
-    private static Path dir = FileSystems.getDefault().getPath("SARAVerifyGraphs");
+    public static void printGraphs(Map<Value, Set<DefNode>> inputDuSequences, List<DuSequenceWeb> inputDuSequenceWebs,
+                    Map<Value, Set<DefNode>> outputDuSequences, List<DuSequenceWeb> outputDuSequenceWebs) {
+        Path dir = FileSystems.getDefault().getPath("SARAVerifyGraphs");
 
-    public static void printGraphs(Map<Value, Set<DefNode>> duSequences, List<DuSequenceWeb> duSequenceWebs) {
         if (Files.notExists(dir, LinkOption.NOFOLLOW_LINKS)) {
             try {
                 Files.createDirectories(dir);
@@ -29,17 +30,20 @@ public class GraphPrinter {
             }
         }
 
-        printDuSequences(duSequences);
-        printDuSequenceWebs(duSequenceWebs);
+        printDuSequences(inputDuSequences, dir);
+        printDuSequenceWebs(inputDuSequenceWebs, dir);
     }
 
-    private static void printDuSequences(Map<Value, Set<DefNode>> duSequences) {
+    private static void printDuSequences(Map<Value, Set<DefNode>> duSequences, Path dir) {
 
         for (Entry<Value, Set<DefNode>> entry : duSequences.entrySet()) {
             Path file = dir.resolve("DS_" + entry.getKey() + ".gv");
 
             try (BufferedWriter writer = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                writer.write("digraph finite_state_machine {\n" +
+                writer.write("digraph finite_state_machine {\n" +           //
+                                "    graph [ " + "fontname = \"Helvetica-Oblique\",\n" +        //
+                                " fontsize = 18,\n" +                          //
+                                "label=\"\\n\\n\\nDu Sequence of value " + entry.getKey() + "\" ];\n" +         //
                                 "    node [shape = rectangle];\n");
 
                 HashSet<Node> visited = new HashSet<>();
@@ -76,7 +80,7 @@ public class GraphPrinter {
         }
     }
 
-    private static void printNodeLabels(Set<Node> nodes, BufferedWriter writer) throws IOException {
+    private static void printNodeLabels(Set<? extends Node> nodes, BufferedWriter writer) throws IOException {
         for (Node node : nodes) {
             writer.write("\"n" + node.hashCode() + "\" [ label = \"" + getNodeLabel(node) + "\" ];\n");
         }
@@ -96,7 +100,55 @@ public class GraphPrinter {
         }
     }
 
-    private static void printDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs) {
+    private static void printDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs, Path dir) {
+        int i = 0;
 
+        for (DuSequenceWeb duSequenceWeb : duSequenceWebs) {
+            Path file = dir.resolve("DSW_" + i + ".gv");
+
+            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                writer.write("digraph finite_state_machine {\n" +
+                                "    graph [ fontname = \"Helvetica-Oblique\",\n" +        //
+                                " fontsize = 18,\n" +                           //
+                                "label=\"\\n\\n\\nDu Sequence Web " + i + "\" ];\n" +       //
+                                "    node [shape = rectangle];\n");
+
+                printDuSequenceWeb(duSequenceWeb, writer);
+
+                writer.write("}\n");
+            } catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+
+            i++;
+        }
+    }
+
+    private static void printDuSequenceWeb(DuSequenceWeb duSequenceWeb, BufferedWriter writer) throws IOException {
+        printNodeLabels(duSequenceWeb.getDefNodes(), writer);
+        printNodeLabels(duSequenceWeb.getMoveNodes(), writer);
+        printNodeLabels(duSequenceWeb.getUseNodes(), writer);
+
+        for (DefNode node : duSequenceWeb.getDefNodes()) {
+            int nodeHashCode = node.hashCode();
+            for (Node nextNode : node.getNextNodes()) {
+                writer.write("\"n" + nodeHashCode + "\" -> \"n" + nextNode.hashCode() + "\";\n");
+            }
+        }
+
+        for (MoveNode node : duSequenceWeb.getMoveNodes()) {
+            int nodeHashCode = node.hashCode();
+            for (Node nextNode : node.getNextNodes()) {
+                writer.write("\"n" + nodeHashCode + "\" -> \"n" + nextNode.hashCode() + "\";\n");
+            }
+        }
+
+        for (UseNode node : duSequenceWeb.getUseNodes()) {
+            int nodeHashCode = node.hashCode();
+            for (Node nextNode : node.getNextNodes()) {
+                writer.write("\"n" + nodeHashCode + "\" -> \"n" + nextNode.hashCode() + "\";\n");
+            }
+        }
     }
 }
