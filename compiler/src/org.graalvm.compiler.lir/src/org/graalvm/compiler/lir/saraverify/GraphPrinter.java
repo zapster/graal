@@ -13,6 +13,12 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.graalvm.compiler.lir.LIRValueUtil;
+import org.graalvm.compiler.lir.Variable;
+import org.graalvm.compiler.lir.VirtualStackSlot;
+
+import jdk.vm.ci.code.StackSlot;
+import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.Value;
 
 public class GraphPrinter {
@@ -88,17 +94,53 @@ public class GraphPrinter {
     }
 
     private static String getNodeLabel(Node node) {
+        String nodeLabel = "";
+
         if (node.isDefNode()) {
             DefNode defNode = (DefNode) node;
-            return "Def:" + defNode.getDefOperandPosition() + ": " + defNode.getValue() + " " + defNode.getInstruction().name();
+            nodeLabel = "Def:" + defNode.getDefOperandPosition() + ": " + getValueLabel(defNode.getValue());
         } else if (node.isUseNode()) {
             UseNode useNode = (UseNode) node;
-            return "Use:" + useNode.getUseOperandPosition() + ": " + useNode.getValue() + " " + useNode.getInstruction().name();
+            nodeLabel = "Use:" + useNode.getUseOperandPosition() + ": " + getValueLabel(useNode.getValue());
         } else {
             MoveNode moveNode = (MoveNode) node;
-            return "Move:" + moveNode.getResultOperandPosition() + ":" + moveNode.getInputOperandPosition() + ": "  //
-                            + moveNode.getResult() + " = " + moveNode.getInput();
+            nodeLabel = "Move:" + moveNode.getResultOperandPosition() + ":" + moveNode.getInputOperandPosition() + ": "  //
+                            + getValueLabel(moveNode.getResult()) + " = " + getValueLabel(moveNode.getInput());
         }
+
+        return nodeLabel + "\\n" + node.getInstruction().name() + " (" + System.identityHashCode(node.getInstruction()) + ")";
+    }
+
+    private static String getValueLabel(Value value) {
+        if (LIRValueUtil.isVariable(value)) {
+            Variable variable = LIRValueUtil.asVariable(value);
+
+            if (variable.getName() != null) {
+                return variable.getName();
+            } else {
+                return "v" + variable.index;
+            }
+        }
+
+        if (ValueUtil.isStackSlot(value)) {
+            StackSlot stackSlot = ValueUtil.asStackSlot(value);
+            int rawOffset = stackSlot.getRawOffset();
+
+            if (!stackSlot.getRawAddFrameSize()) {
+                return "out:" + rawOffset;
+            } else if (rawOffset >= 0) {
+                return "in:" + rawOffset;
+            } else {
+                return "stack:" + (-rawOffset);
+            }
+        }
+
+        if (LIRValueUtil.isVirtualStackSlot(value)) {
+            VirtualStackSlot virtualStackSlot = LIRValueUtil.asVirtualStackSlot(value);
+            return "vstack:" + virtualStackSlot.getId();
+        }
+
+        return value.toString();
     }
 
     private static void printDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs, Path dir) {
