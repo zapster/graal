@@ -19,19 +19,20 @@ public class GraphPrinter {
 
     public static void printGraphs(Map<Value, Set<DefNode>> inputDuSequences, List<DuSequenceWeb> inputDuSequenceWebs,
                     Map<Value, Set<DefNode>> outputDuSequences, List<DuSequenceWeb> outputDuSequenceWebs) {
-        Path dir = FileSystems.getDefault().getPath("SARAVerifyGraphs");
 
-        if (Files.notExists(dir, LinkOption.NOFOLLOW_LINKS)) {
-            try {
-                Files.createDirectories(dir);
-            } catch (IOException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-        }
+        Path dir = FileSystems.getDefault().getPath("SARAVerifyGraphs").resolve(Long.toString(System.currentTimeMillis()));
 
-        printDuSequences(inputDuSequences, dir);
-        printDuSequenceWebs(inputDuSequenceWebs, dir);
+        // print input graphs
+        Path inputDir = dir.resolve("input");
+        createDirectory(inputDir);
+        printDuSequences(inputDuSequences, inputDir);
+        printDuSequenceWebs(inputDuSequenceWebs, inputDir);
+
+        // print output graphs
+        Path outputDir = dir.resolve("output");
+        createDirectory(outputDir);
+        printDuSequences(outputDuSequences, outputDir);
+        printDuSequenceWebs(outputDuSequenceWebs, outputDir);
     }
 
     private static void printDuSequences(Map<Value, Set<DefNode>> duSequences, Path dir) {
@@ -148,6 +149,17 @@ public class GraphPrinter {
             int nodeHashCode = node.hashCode();
             for (Node nextNode : node.getNextNodes()) {
                 writer.write("\"n" + nodeHashCode + "\" -> \"n" + nextNode.hashCode() + "\";\n");
+            }
+        }
+    }
+
+    private static void createDirectory(Path dir) {
+        if (Files.notExists(dir, LinkOption.NOFOLLOW_LINKS)) {
+            try {
+                Files.createDirectories(dir);
+            } catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
             }
         }
     }
