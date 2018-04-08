@@ -69,9 +69,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         List<DuSequenceWeb> inputDuSequenceWebs = createDuSequenceWebs(inputDuSequences);
         List<DuSequenceWeb> outputDuSequenceWebs = createDuSequenceWebs(outputDuSequences);
 
-        assert assertDuSequences(inputDuSequences, outputDuSequences, inputDuSequenceWebs, outputDuSequenceWebs, debugContext);
+        GraphPrinter.printGraphs(inputDuSequences, inputDuSequenceWebs, outputDuSequences, outputDuSequenceWebs, debugContext);
 
-        GraphPrinter.printGraphs(inputDuSequences, inputDuSequenceWebs, outputDuSequences, outputDuSequenceWebs);
+        assert assertDuSequences(inputDuSequences, outputDuSequences, inputDuSequenceWebs, outputDuSequenceWebs, debugContext);
 
         logDuSequenceWebs(inputDuSequenceWebs, debugContext);
         logDuSequenceWebs(outputDuSequenceWebs, debugContext);

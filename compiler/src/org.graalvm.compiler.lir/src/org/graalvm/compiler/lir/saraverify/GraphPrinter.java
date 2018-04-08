@@ -13,10 +13,12 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.VirtualStackSlot;
 
+import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.StackSlot;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.Value;
@@ -24,9 +26,10 @@ import jdk.vm.ci.meta.Value;
 public class GraphPrinter {
 
     public static void printGraphs(Map<Value, Set<DefNode>> inputDuSequences, List<DuSequenceWeb> inputDuSequenceWebs,
-                    Map<Value, Set<DefNode>> outputDuSequences, List<DuSequenceWeb> outputDuSequenceWebs) {
+                    Map<Value, Set<DefNode>> outputDuSequences, List<DuSequenceWeb> outputDuSequenceWebs, DebugContext debugContext) {
 
-        Path dir = FileSystems.getDefault().getPath("SARAVerifyGraphs").resolve(Long.toString(System.currentTimeMillis()));
+        String dirName = Long.toString(System.currentTimeMillis()) + "_" + debugContext.getDescription().toString();
+        Path dir = FileSystems.getDefault().getPath("SARAVerifyGraphs").resolve(dirName);
 
         // print input graphs
         Path inputDir = dir.resolve("input");
@@ -112,6 +115,11 @@ public class GraphPrinter {
     }
 
     private static String getValueLabel(Value value) {
+        if (ValueUtil.isRegister(value)) {
+            Register register = ValueUtil.asRegister(value);
+            return register.name;
+        }
+
         if (LIRValueUtil.isVariable(value)) {
             Variable variable = LIRValueUtil.asVariable(value);
 
