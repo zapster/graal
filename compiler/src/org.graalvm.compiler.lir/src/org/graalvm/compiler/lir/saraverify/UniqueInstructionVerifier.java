@@ -1,10 +1,12 @@
 package org.graalvm.compiler.lir.saraverify;
 
-import java.util.Arrays;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.LIR;
+import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 
 public class UniqueInstructionVerifier {
@@ -13,20 +15,16 @@ public class UniqueInstructionVerifier {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
-        long instructionsCount = Arrays.stream(blocks)  //
-                        .flatMap(block -> lir.getLIRforBlock(block).stream())    //
-                        .count();
+        Map<LIRInstruction, ?> instructions = new IdentityHashMap<>();
 
-        long distinctCount = Arrays.stream(blocks)      //
-                        .flatMap(block -> lir.getLIRforBlock(block).stream())    //
-                        .map(instr -> System.identityHashCode(instr))   //
-                        .distinct() //
-                        .count();
-
-        if (instructionsCount != distinctCount) {
-            GraalError.shouldNotReachHere("LIR instructions are not unique.");
+        for (AbstractBlockBase<?> block : blocks) {
+            for (LIRInstruction instr : lir.getLIRforBlock(block)) {
+                if (instructions.containsKey(instr)) {
+                    GraalError.shouldNotReachHere("LIR instructions are not unique.");
+                }
+                instructions.put(instr, null);
+            }
         }
-
         return true;
     }
 }
