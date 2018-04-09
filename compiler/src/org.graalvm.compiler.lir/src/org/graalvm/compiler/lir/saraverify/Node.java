@@ -8,8 +8,8 @@ import org.graalvm.compiler.lir.LIRInstruction;
 
 public abstract class Node {
 
-    protected LIRInstruction instruction;
-    protected Set<Node> nextNodes;
+    private LIRInstruction instruction;
+    private Set<Node> nextNodes;
 
     public Node(LIRInstruction instruction) {
         this.instruction = instruction;

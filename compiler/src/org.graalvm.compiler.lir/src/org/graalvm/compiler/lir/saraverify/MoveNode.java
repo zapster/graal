@@ -60,7 +60,7 @@ public class MoveNode extends Node {
 
     @Override
     public String toString() {
-        return "MOVE:" + result + ":" + resultOperandPosition + "=" + input + ":" + inputOperandPosition + ":" + instruction.name();
+        return "MOVE:" + result + ":" + resultOperandPosition + "=" + input + ":" + inputOperandPosition + ":" + getInstruction().name();
     }
 
     @Override

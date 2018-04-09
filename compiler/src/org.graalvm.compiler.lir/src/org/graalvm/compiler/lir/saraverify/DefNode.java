@@ -44,7 +44,7 @@ public class DefNode extends Node {
 
     @Override
     public String toString() {
-        return "DEF:" + value + ":" + defOperandPosition + ":" + instruction.name();
+        return "DEF:" + value + ":" + defOperandPosition + ":" + getInstruction().name();
     }
 
     @Override
