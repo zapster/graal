@@ -21,7 +21,6 @@ import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.CounterKey;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.GraalError;
-import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.ConstantValue;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
@@ -48,7 +47,7 @@ import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
 
 public class DuSequenceAnalysis {
-// test
+
     public static class DummyConstDef extends LIRInstruction {
         public static final LIRInstructionClass<DummyConstDef> TYPE = LIRInstructionClass.create(DummyConstDef.class);
         protected Constant constant;
@@ -99,22 +98,6 @@ public class DuSequenceAnalysis {
     public static final CounterKey skippedCompilationUnits = DebugContext.counter("SARAVerify[skipped]");
     public static final CounterKey executedCompilationUnits = DebugContext.counter("SARAVerify[executed]");
 
-    @SuppressWarnings("unused")
-    private static void logInstructions(LIR lir) {
-        DebugContext debug = lir.getDebug();
-
-        try (Indent i1 = debug.indent()) {
-            for (AbstractBlockBase<?> block : lir.getControlFlowGraph().getBlocks()) {
-                debug.log(3, "Visiting Block: " + block.getId());
-                try (Indent i2 = debug.indent()) {
-                    for (LIRInstruction instr : lir.getLIRforBlock(block)) {
-                        debug.log(3, instr.toString());
-                    }
-                }
-            }
-        }
-    }
-
     public AnalysisResult determineDuSequences(LIRGenerationResult lirGenRes, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
                     Map<Constant, DummyConstDef> dummyConstDefs) {
         LIR lir = lirGenRes.getLIR();
@@ -160,6 +143,10 @@ public class DuSequenceAnalysis {
 
         Map<Value, Set<Node>> startBlockUnfinishedDuSequences = blockUnfinishedDuSequences.get(startBlock);
         analyseUndefinedValues(duSequences, startBlockUnfinishedDuSequences, registerAttributes, dummyRegDefs, dummyConstDefs);
+
+        // TODO: assertion for hashcode collision of nodes
+// assert nodes.size() == nodes.stream().mapToInt(node -> node.hashCode()).distinct().count() //
+// : "Hashcode collision of nodes.";
 
         return new AnalysisResult(duSequences, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
     }
@@ -310,10 +297,10 @@ public class DuSequenceAnalysis {
         instruction.visitEachAlive(aliveConsumer);
         // TODO: instruction.forEachState(proc); alive
 
-        // TODO: instruction.visitEachTemp(proc);
         // TODO: instruction.destroysCallerSavedRegisters()
-        // TODO: for each caller saved register a dummy def
         instruction.visitEachOutput(defConsumer);
+        instruction.visitEachTemp(useConsumer);
+        instruction.visitEachTemp(defConsumer);// TODO: throw error, if open usage (make assertion)
         instruction.visitEachInput(useConsumer);
     }
 

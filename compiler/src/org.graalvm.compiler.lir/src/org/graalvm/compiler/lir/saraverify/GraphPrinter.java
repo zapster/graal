@@ -2,7 +2,6 @@ package org.graalvm.compiler.lir.saraverify;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -17,6 +16,9 @@ import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.VirtualStackSlot;
+import org.graalvm.compiler.options.Option;
+import org.graalvm.compiler.options.OptionKey;
+import org.graalvm.compiler.options.OptionType;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.StackSlot;
@@ -25,11 +27,17 @@ import jdk.vm.ci.meta.Value;
 
 public class GraphPrinter {
 
+    public static class Options {
+        // @formatter:off
+        @Option(help = "Enable printing of SARA Verify Graphs.", type = OptionType.Debug)
+        public static final OptionKey<Boolean> SARAVerifyGraph = new OptionKey<>(false);
+        // @formatter:on
+    }
+
     public static void printGraphs(Map<Value, Set<DefNode>> inputDuSequences, List<DuSequenceWeb> inputDuSequenceWebs,
                     Map<Value, Set<DefNode>> outputDuSequences, List<DuSequenceWeb> outputDuSequenceWebs, DebugContext debugContext) {
 
-        String dirName = Long.toString(System.currentTimeMillis()) + "_" + debugContext.getDescription().toString();
-        Path dir = FileSystems.getDefault().getPath("SARAVerifyGraphs").resolve(dirName);
+        Path dir = debugContext.getDumpPath("_SARAVerifyGraphs", true);
 
         // print input graphs
         Path inputDir = dir.resolve("input");
@@ -176,7 +184,7 @@ public class GraphPrinter {
         }
     }
 
-    private static void printDuSequenceWeb(DuSequenceWeb duSequenceWeb, BufferedWriter writer) throws IOException {
+    public static void printDuSequenceWeb(DuSequenceWeb duSequenceWeb, BufferedWriter writer) throws IOException {
         printNodeLabels(duSequenceWeb.getDefNodes(), writer);
         printNodeLabels(duSequenceWeb.getMoveNodes(), writer);
         printNodeLabels(duSequenceWeb.getUseNodes(), writer);
@@ -203,7 +211,7 @@ public class GraphPrinter {
         }
     }
 
-    private static void createDirectory(Path dir) {
+    public static void createDirectory(Path dir) {
         if (Files.notExists(dir, LinkOption.NOFOLLOW_LINKS)) {
             try {
                 Files.createDirectories(dir);

@@ -1,5 +1,10 @@
 package org.graalvm.compiler.lir.saraverify;
 
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,7 +55,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
         AnalysisResult outputResult = duSequenceAnalysis.determineDuSequences(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), inputDummyRegDefs,
-                        inputDummyConstDefs, debugContext);
+                        inputDummyConstDefs);
 
         Map<Value, Set<DefNode>> outputDuSequences = outputResult.getDuSequences();
 
@@ -66,10 +71,20 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     }
 
     public boolean verifyDataFlow(Map<Value, Set<DefNode>> inputDuSequences, Map<Value, Set<DefNode>> outputDuSequences, DebugContext debugContext) {
+// String dirName = Long.toString(System.currentTimeMillis()) + "_" +
+// debugContext.getDescription().toString();
+// Path dir = FileSystems.getDefault().getPath("SARADuSequenceWebCreation").resolve(dirName);
+// Path inputDir = dir.resolve("input");
+// GraphPrinter.createDirectory(inputDir);
         List<DuSequenceWeb> inputDuSequenceWebs = createDuSequenceWebs(inputDuSequences);
+// Path outputDir = dir.resolve("output");
+// GraphPrinter.createDirectory(outputDir);
         List<DuSequenceWeb> outputDuSequenceWebs = createDuSequenceWebs(outputDuSequences);
 
-        GraphPrinter.printGraphs(inputDuSequences, inputDuSequenceWebs, outputDuSequences, outputDuSequenceWebs, debugContext);
+        if (GraphPrinter.Options.SARAVerifyGraph.getValue(debugContext.getOptions())) {
+            GraphPrinter.printGraphs(inputDuSequences, inputDuSequenceWebs, outputDuSequences,
+                            outputDuSequenceWebs, debugContext);
+        }
 
         assert assertDuSequences(inputDuSequences, outputDuSequences, inputDuSequenceWebs, outputDuSequenceWebs, debugContext);
 
@@ -185,6 +200,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     public List<DuSequenceWeb> createDuSequenceWebs(Map<Value, Set<DefNode>> nodes) {
         List<DuSequenceWeb> duSequenceWebs = new ArrayList<>();
         Map<Node, DuSequenceWeb> nodeDuSequenceWeb = new HashMap<>();
+        // int graphIndex = 0;
 
         for (Set<DefNode> nodeList : nodes.values()) {
             for (DefNode node : nodeList) {
@@ -197,6 +213,15 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                     duSequenceWebs.add(web);
                 }
                 web.addNodes(visitedNodes);
+
+                if (!duSequenceWebs.contains(web)) {
+                    duSequenceWebs.add(web);
+                }
+
+                // TODO
+                // assert duSequenceWebs.contains(web);
+                // printDuSequenceWebGraph(web, node, graphIndex, dir);
+                // graphIndex++;
 
                 final DuSequenceWeb finalWeb = web;
 
@@ -267,6 +292,26 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             for (Node nextNode : node.getNextNodes()) {
                 logDuSequence(nextNode, nodeID, visitedNodes, debugContext);
             }
+        }
+    }
+
+    private static void printDuSequenceWebGraph(DuSequenceWeb web, DefNode actualNode, int graphIndex, Path dir) {
+        Path file = dir.resolve("DSW_" + graphIndex + ".gv");
+
+        try (BufferedWriter writer = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+            writer.write("digraph finite_state_machine {\n" +           //
+                            "    graph [ " + "fontname = \"Helvetica-Oblique\",\n" +        //
+                            " fontsize = 18,\n" +                          //
+                            "label=\"\\n\\n\\nDu Sequence Web " + graphIndex + "\" ];\n" +         //
+                            "    node [shape = rectangle];\n");
+
+            GraphPrinter.printDuSequenceWeb(web, writer);
+            writer.write("\"" + actualNode.toString() + "\" [ shape=circle ] ; \n");
+
+            writer.write("}\n");
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
         }
     }
 }
