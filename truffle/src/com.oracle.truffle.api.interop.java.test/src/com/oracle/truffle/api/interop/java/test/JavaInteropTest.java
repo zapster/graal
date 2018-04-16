@@ -33,20 +33,34 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 import java.lang.reflect.Method;
+import java.util.AbstractList;
+import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.concurrent.Callable;
 
+import org.graalvm.polyglot.Context;
 import org.hamcrest.CoreMatchers;
+import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.ForeignAccess;
@@ -58,13 +72,20 @@ import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
-import com.oracle.truffle.api.interop.java.JavaInterop;
-import com.oracle.truffle.api.interop.java.MethodMessage;
+import com.oracle.truffle.api.interop.UnsupportedTypeException;
+import com.oracle.truffle.api.interop.java.*;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.test.ReflectionUtils;
+import com.oracle.truffle.api.test.polyglot.ValueHostInteropTest;
 
+/**
+ * Important: This test was migrated to {@link ValueHostInteropTest} and
+ * {@link LanguageSPIHostInteropTest}. Please maintain new tests there.
+ */
+@SuppressWarnings("deprecation")
 public class JavaInteropTest {
+
     public class Data {
         public int x;
         public double y;
@@ -89,12 +110,29 @@ public class JavaInteropTest {
     private Data data;
     private XYPlus xyp;
     private boolean assertThisCalled;
+    private Context context;
 
     @Before
     public void initObjects() {
+        context = Context.create();
+        context.enter();
         data = new Data();
         obj = JavaInterop.asTruffleObject(data);
         xyp = JavaInterop.asJavaObject(XYPlus.class, obj);
+    }
+
+    @After
+    public void cleanup() {
+        context.leave();
+        context.close();
+    }
+
+    @Test
+    public void testRecursiveListMarshalling() throws UnknownIdentifierException, UnsupportedMessageException {
+        List<GregorianCalendar> testList = Arrays.asList(new GregorianCalendar());
+        TruffleObject list = JavaInterop.asTruffleObject(testList);
+        Object firstElement = ForeignAccess.sendRead(Message.READ.createNode(), list, 0);
+        assertTrue(JavaInterop.isJavaObject(firstElement));
     }
 
     @Test
@@ -116,6 +154,13 @@ public class JavaInteropTest {
         TruffleObject expected = JavaInterop.asTruffleObject(null);
         TruffleObject computed = JavaInterop.toJavaClass(expected);
         assertEquals(expected, computed);
+    }
+
+    @Test
+    public void nullAsJavaObject() {
+        TruffleObject nullObject = JavaInterop.asTruffleObject(null);
+        assertTrue(JavaInterop.isJavaObject(nullObject));
+        assertNull(JavaInterop.asJavaObject(nullObject));
     }
 
     @Test
@@ -173,7 +218,7 @@ public class JavaInteropTest {
         TruffleObject truffleMap = JavaInterop.asTruffleObject(map);
         TruffleObject ret = sendKeys(truffleMap);
         List<Object> list = JavaInterop.asJavaObject(List.class, ret);
-        assertThat(list, CoreMatchers.hasItems("one", "null", "three"));
+        assertThat(list, CoreMatchers.not(CoreMatchers.anyOf(CoreMatchers.hasItem("one"), CoreMatchers.hasItem("null"), CoreMatchers.hasItem("three"))));
     }
 
     @Test
@@ -321,14 +366,14 @@ public class JavaInteropTest {
         assertEquals(10, value);
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void noNonStaticPropertiesForAClass() {
         TruffleObject pojo = JavaInterop.asTruffleObject(PublicPOJO.class);
         TruffleObject result = sendKeys(pojo);
-        List<?> propertyNames = JavaInterop.asJavaObject(List.class, result);
-        assertEquals("One static field and one method", 2, propertyNames.size());
-        assertEquals("One field y", "y", propertyNames.get(0));
-        assertEquals("One method to read y", "readY", propertyNames.get(1));
+        List<Object> propertyNames = JavaInterop.asJavaObject(List.class, result);
+        assertEquals("3 members: static field 'y', static method 'readY', plus 'class'", 3, propertyNames.size());
+        assertThat(propertyNames, CoreMatchers.hasItems("y", "readY", "class"));
     }
 
     @Test
@@ -558,6 +603,39 @@ public class JavaInteropTest {
     }
 
     @Test
+    public void executableAsFunctionalInterface1() throws Exception {
+        TruffleObject executable = new FunctionObject();
+        FunctionalWithDefaults f = JavaInterop.asJavaFunction(FunctionalWithDefaults.class, executable);
+        assertEquals(50, f.call((Object) 13, (Object) 37));
+        f.hashCode();
+        f.equals(null);
+        f.toString();
+    }
+
+    @Test
+    public void executableAsFunctionalInterface2() throws Exception {
+        TruffleObject executable = new FunctionObject();
+        FunctionalWithObjectMethodOverrides f = JavaInterop.asJavaFunction(FunctionalWithObjectMethodOverrides.class, executable);
+        assertEquals(50, f.call(13, 37));
+        f.hashCode();
+        f.equals(null);
+        f.toString();
+    }
+
+    @Ignore("Interface not accessible")
+    @Test
+    public void executableAsFunctionalInterface3() throws Exception {
+        assumeTrue("JDK 9 or later", System.getProperty("java.specification.version").compareTo("1.9") >= 0);
+        TruffleObject executable = new FunctionObject();
+        FunctionalWithDefaults f = JavaInterop.asJavaFunction(FunctionalWithDefaults.class, executable);
+        assertEquals(42, f.call((Object) 13, (Object) 29));
+        assertEquals(50, f.call(13, 37));
+        f.hashCode();
+        f.equals(null);
+        f.toString();
+    }
+
+    @Test
     public void listUnwrapsTruffleObject() {
         data.data = new Data[]{new Data()};
         Data value = xyp.data().get(0);
@@ -702,6 +780,22 @@ public class JavaInteropTest {
         testArrayObject(aobj, 4);
     }
 
+    @Test
+    public void testHasKeysDefaults() {
+        TruffleObject noKeys = new NoKeysObject();
+        assertFalse(hasKeys(noKeys));
+        TruffleObject keysObj = new DefaultHasKeysObject();
+        assertTrue(hasKeys(keysObj));
+    }
+
+    @Test
+    public void testHasKeys() {
+        TruffleObject hasKeysObj = new HasKeysObject(true);
+        assertTrue(hasKeys(hasKeysObj));
+        hasKeysObj = new HasKeysObject(false);
+        assertFalse(hasKeys(hasKeysObj));
+    }
+
     private static void testArrayObject(TruffleObject array, int length) {
         int keyInfo;
         for (int i = 0; i < length; i++) {
@@ -778,11 +872,13 @@ public class JavaInteropTest {
         assertTrue(KeyInfo.isReadable(keyInfo));
         assertTrue(KeyInfo.isWritable(keyInfo));
         assertFalse(KeyInfo.isInvocable(keyInfo));
+        assertFalse(KeyInfo.isRemovable(keyInfo));
         keyInfo = getKeyInfo(d, "toString");
         assertTrue(KeyInfo.isExisting(keyInfo));
         assertTrue(KeyInfo.isReadable(keyInfo));
-        assertTrue(KeyInfo.isWritable(keyInfo));
+        assertFalse(KeyInfo.isWritable(keyInfo));
         assertTrue(KeyInfo.isInvocable(keyInfo));
+        assertFalse(KeyInfo.isRemovable(keyInfo));
     }
 
     @Test
@@ -816,12 +912,244 @@ public class JavaInteropTest {
     }
 
     @Test
+    public void testNewObject() throws InteropException {
+        TruffleObject objectClass = JavaInterop.asTruffleObject(Object.class);
+        Object object = ForeignAccess.sendNew(Message.createNew(0).createNode(), objectClass);
+        assertThat(object, CoreMatchers.instanceOf(TruffleObject.class));
+        assertTrue(JavaInterop.isJavaObject(Object.class, (TruffleObject) object));
+    }
+
+    @Test
     public void testNewArray() throws InteropException {
         TruffleObject longArrayClass = JavaInterop.asTruffleObject(long[].class);
         Object longArray = ForeignAccess.sendNew(Message.createNew(1).createNode(), longArrayClass, 4);
         assertThat(longArray, CoreMatchers.instanceOf(TruffleObject.class));
         assertTrue(JavaInterop.isJavaObject(long[].class, (TruffleObject) longArray));
         assertEquals(4, message(Message.GET_SIZE, (TruffleObject) longArray));
+    }
+
+    @Test
+    public void testException() throws InteropException {
+        TruffleObject iterator = JavaInterop.asTruffleObject(Collections.emptyList().iterator());
+        try {
+            ForeignAccess.sendInvoke(Message.createInvoke(0).createNode(), iterator, "next");
+            fail("expected an exception but none was thrown");
+        } catch (InteropException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            assertTrue("expected HostException but was: " + ex.getClass(), JavaInterop.isHostException(ex));
+            assertThat(JavaInterop.asHostException(ex), CoreMatchers.instanceOf(NoSuchElementException.class));
+        }
+    }
+
+    @Test
+    public void testException2() throws InteropException {
+        TruffleObject hashMapClass = JavaInterop.asTruffleObject(HashMap.class);
+        try {
+            ForeignAccess.sendNew(Message.createNew(0).createNode(), hashMapClass, -1);
+            fail("expected an exception but none was thrown");
+        } catch (InteropException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            assertTrue("expected HostException but was: " + ex.getClass(), JavaInterop.isHostException(ex));
+            assertThat(JavaInterop.asHostException(ex), CoreMatchers.instanceOf(IllegalArgumentException.class));
+        }
+
+        try {
+            ForeignAccess.sendNew(Message.createNew(0).createNode(), hashMapClass, "");
+            fail("expected an exception but none was thrown");
+        } catch (UnsupportedTypeException ex) {
+        }
+    }
+
+    @Test
+    public void testRemoveMessage() {
+        data.arr = new String[]{"Hello", "World", "!"};
+        TruffleObject truffleList = JavaInterop.asTruffleObject(new ArrayList<>(Arrays.asList(data.arr)));
+        assertEquals(3, message(Message.GET_SIZE, truffleList));
+        assertEquals(true, message(Message.REMOVE, truffleList, 1));
+        assertEquals(2, message(Message.GET_SIZE, truffleList));
+        try {
+            message(Message.REMOVE, truffleList, 10);
+            fail("Out of bounds.");
+        } catch (Exception e) {
+            assertTrue(e.toString(), e instanceof UnknownIdentifierException);
+            assertEquals("10", ((UnknownIdentifierException) e).getUnknownIdentifier());
+        }
+
+        Object arrObj = message(Message.READ, obj, "arr");
+        TruffleObject truffleArr = (TruffleObject) arrObj;
+        try {
+            message(Message.REMOVE, truffleArr, 0);
+            fail("Remove of elements of an array is not supported.");
+        } catch (Exception e) {
+            assertTrue(e.toString(), e instanceof UnsupportedMessageException);
+            assertEquals(Message.REMOVE, ((UnsupportedMessageException) e).getUnsupportedMessage());
+        }
+
+        Map<String, String> map = new HashMap<>();
+        map.put("a", "aa");
+        map.put("b", "bb");
+        TruffleObject truffleMap = JavaInterop.asTruffleObject(map);
+        assertEquals(true, message(Message.REMOVE, truffleMap, "a"));
+        assertEquals(1, map.size());
+        try {
+            message(Message.REMOVE, truffleMap, "a");
+            fail("UnknownIdentifierException");
+        } catch (Exception e) {
+            assertTrue(e.toString(), e instanceof UnknownIdentifierException);
+            assertEquals("a", ((UnknownIdentifierException) e).getUnknownIdentifier());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void testRemoveList() {
+        List<Integer> list = JavaInterop.asJavaObject(List.class, new ArrayTruffleObject(100));
+        assertEquals(100, list.size());
+        Integer value = list.remove(10);
+        assertEquals(Integer.valueOf(90), value);
+        assertEquals(99, list.size());
+        boolean success = list.remove((Object) 20);
+        assertTrue(success);
+        assertEquals(98, list.size());
+        // Iterator
+        Iterator<Integer> liter = list.iterator();
+        try {
+            liter.remove();
+            fail("IllegalStateException");
+        } catch (IllegalStateException e) {
+            // O.K.
+        }
+        assertEquals(Integer.valueOf(98), liter.next());
+        assertEquals(Integer.valueOf(97), liter.next());
+        liter.remove();
+        assertEquals(97, list.size());
+        try {
+            liter.remove();
+            fail("IllegalStateException");
+        } catch (IllegalStateException e) {
+            // O.K.
+        }
+        assertEquals(Integer.valueOf(96), liter.next());
+        liter.remove();
+        assertEquals(96, list.size());
+
+        data.arr = new String[]{"Hello", "World", "!"};
+        List<String> arr = xyp.arr();
+        try {
+            assertEquals("World", arr.remove(1));
+            fail("Remove of elements of an array is not supported.");
+        } catch (UnsupportedOperationException e) {
+            // O.K.
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void testRemoveMap() {
+        int size = 15;
+        Map<String, String> map = new LinkedHashMap<>();
+        for (int i = 0; i < size; i++) {
+            char c = (char) ('a' + i);
+            map.put(new String(new char[]{c}), new String(new char[]{c, c}));
+        }
+        Map<String, String> jmap = JavaInterop.asJavaObject(Map.class, new RemoveKeysObject(map));
+        assertEquals(size, jmap.size());
+        String value = jmap.remove("a");
+        assertEquals("aa", value);
+        assertEquals(size - 1, jmap.size());
+        boolean success = jmap.remove("b", "c");
+        assertFalse(success);
+        assertEquals(size - 1, jmap.size());
+        success = jmap.remove("b", "bb");
+        assertTrue(success);
+        assertEquals(size - 2, jmap.size());
+        // Set
+        Set<String> keySet = jmap.keySet();
+        success = keySet.remove("c");
+        assertTrue(success);
+        assertEquals(size - 3, jmap.size());
+        success = keySet.remove("xx");
+        assertFalse(success);
+        assertEquals(size - 3, jmap.size());
+        assertEquals(size - 3, keySet.size());
+        // Set Iterator
+        Iterator<String> siter = keySet.iterator();
+        try {
+            siter.remove();
+            fail("IllegalStateException");
+        } catch (IllegalStateException e) {
+            // O.K.
+        }
+        assertEquals("d", siter.next());
+        siter.remove();
+        assertEquals(size - 4, jmap.size());
+        try {
+            siter.remove();
+            fail("IllegalStateException");
+        } catch (IllegalStateException e) {
+            // O.K.
+        }
+        assertEquals("e", siter.next());
+        siter.remove();
+        assertEquals(size - 5, jmap.size());
+        // Entry Set
+        Set<Map.Entry<String, String>> entrySet = jmap.entrySet();
+        success = entrySet.remove(new AbstractMap.SimpleEntry<>("f", "ff"));
+        assertTrue(success);
+        assertEquals(size - 6, jmap.size());
+        success = entrySet.remove(new AbstractMap.SimpleEntry<>("g", "xx"));
+        assertFalse(success);
+        success = entrySet.remove(new AbstractMap.SimpleEntry<>("xx", "gg"));
+        assertFalse(success);
+        assertEquals(size - 6, jmap.size());
+        success = entrySet.remove(new AbstractMap.SimpleEntry<>("g", "gg"));
+        assertTrue(success);
+        assertEquals(size - 7, jmap.size());
+        assertEquals(size - 7, entrySet.size());
+        // Entry Set Iterator
+        Iterator<Map.Entry<String, String>> esiter = entrySet.iterator();
+        try {
+            esiter.remove();
+            fail("IllegalStateException");
+        } catch (IllegalStateException e) {
+            // O.K.
+        }
+        Map.Entry<String, String> nextEntry = esiter.next();
+        assertEquals("h", nextEntry.getKey());
+        assertEquals("hh", nextEntry.getValue());
+        esiter.remove();
+        assertEquals(size - 8, jmap.size());
+        // Values
+        Collection<String> values = jmap.values();
+        success = values.remove("ii");
+        assertTrue(success);
+        assertEquals(size - 9, jmap.size());
+        success = values.remove("xxx");
+        assertFalse(success);
+        assertEquals(size - 9, jmap.size());
+        // Values Iterator
+        Iterator<String> viter = values.iterator();
+        try {
+            viter.remove();
+            fail("IllegalStateException");
+        } catch (IllegalStateException e) {
+            // O.K.
+        }
+        assertEquals("jj", viter.next());
+        viter.remove();
+        assertEquals(size - 10, jmap.size());
+        assertEquals(size - 10, values.size());
+
+        data.map = data;
+        Map<String, Object> dmap = xyp.map();
+        try {
+            dmap.remove("x");
+            fail("Remove of object fields is not supported.");
+        } catch (UnsupportedOperationException e) {
+            // O.K.
+        }
     }
 
     public static final class TestJavaObject {
@@ -864,6 +1192,10 @@ public class JavaInteropTest {
         Node n = m.createNode();
         CallTarget callTarget = Truffle.getRuntime().createCallTarget(new TemporaryRoot(n, receiver));
         return callTarget.call(arr);
+    }
+
+    static boolean hasKeys(TruffleObject foreignObject) {
+        return ForeignAccess.sendHasKeys(Message.HAS_KEYS.createNode(), foreignObject);
     }
 
     static int getKeyInfo(TruffleObject foreignObject, Object propertyName) {
@@ -964,9 +1296,146 @@ public class JavaInteropTest {
         }
     }
 
+    static final class DefaultHasKeysObject implements TruffleObject {
+
+        @Override
+        public ForeignAccess getForeignAccess() {
+            return ForeignAccess.create(new ForeignAccess.Factory() {
+                @Override
+                public boolean canHandle(TruffleObject obj) {
+                    return obj instanceof DefaultHasKeysObject;
+                }
+
+                @Override
+                public CallTarget accessMessage(Message message) {
+                    if (Message.HAS_KEYS.equals(message)) {
+                        return null;
+                    }
+                    if (Message.KEYS.equals(message)) {
+                        return Truffle.getRuntime().createCallTarget(RootNode.createConstantNode(new ArrayTruffleObject(1)));
+                    }
+                    return null;
+                }
+            });
+        }
+
+    }
+
+    static final class HasKeysObject implements TruffleObject {
+
+        private final boolean hasKeys;
+
+        HasKeysObject(boolean hasKeys) {
+            this.hasKeys = hasKeys;
+        }
+
+        @Override
+        public ForeignAccess getForeignAccess() {
+            return HasKeysObjectMessageResolutionForeign.ACCESS;
+        }
+
+        public static boolean isInstance(TruffleObject obj) {
+            return obj instanceof HasKeysObject;
+        }
+
+        @MessageResolution(receiverType = HasKeysObject.class)
+        static final class HasKeysObjectMessageResolution {
+
+            @Resolve(message = "HAS_KEYS")
+            public abstract static class HasKeysNode extends Node {
+
+                public Object access(HasKeysObject receiver) {
+                    return receiver.hasKeys;
+                }
+            }
+        }
+    }
+
+    static final class RemoveKeysObject implements TruffleObject {
+
+        private final Map<String, ?> keys;
+
+        RemoveKeysObject(Map<String, ?> keys) {
+            this.keys = keys;
+        }
+
+        @Override
+        public ForeignAccess getForeignAccess() {
+            return RemoveKeysObjectMessageResolutionForeign.ACCESS;
+        }
+
+        public static boolean isInstance(TruffleObject obj) {
+            return obj instanceof RemoveKeysObject;
+        }
+
+        @MessageResolution(receiverType = RemoveKeysObject.class)
+        static final class RemoveKeysObjectMessageResolution {
+
+            @Resolve(message = "KEYS")
+            public abstract static class PropertiesKeysOnlyNode extends Node {
+
+                public Object access(RemoveKeysObject receiver) {
+                    List<String> list = new AbstractList<String>() {
+                        final Set<String> keys = receiver.keys.keySet();
+
+                        @Override
+                        public String get(int index) {
+                            Iterator<String> iterator = keys.iterator();
+                            for (int i = 0; i < index; i++) {
+                                iterator.next();
+                            }
+                            return iterator.next();
+                        }
+
+                        @Override
+                        public int size() {
+                            return keys.size();
+                        }
+
+                        @Override
+                        public String remove(int index) {
+                            Iterator<String> iterator = keys.iterator();
+                            for (int i = 0; i < index; i++) {
+                                iterator.next();
+                            }
+                            String removed = iterator.next();
+                            iterator.remove();
+                            return removed;
+                        }
+                    };
+                    return JavaInterop.asTruffleObject(list);
+                }
+            }
+
+            @Resolve(message = "READ")
+            public abstract static class ReadKeyNode extends Node {
+
+                public Object access(RemoveKeysObject receiver, String name) {
+                    if (!receiver.keys.containsKey(name)) {
+                        CompilerDirectives.transferToInterpreter();
+                        throw UnknownIdentifierException.raise(name);
+                    }
+                    return receiver.keys.get(name);
+                }
+            }
+
+            @Resolve(message = "REMOVE")
+            public abstract static class RemoveKeyNode extends Node {
+
+                public Object access(RemoveKeysObject receiver, String name) {
+                    if (!receiver.keys.containsKey(name)) {
+                        return false;
+                    }
+                    receiver.keys.remove(name);
+                    return true;
+                }
+            }
+        }
+    }
+
     static final class ArrayTruffleObject implements TruffleObject {
 
-        private final int size;
+        private int size;
 
         ArrayTruffleObject(int size) {
             this.size = size;
@@ -1011,6 +1480,18 @@ public class JavaInteropTest {
                     return receiver.size - index;
                 }
             }
+
+            @Resolve(message = "REMOVE")
+            public abstract static class ArrayRemoveNode extends Node {
+
+                public Object access(ArrayTruffleObject receiver, int index) {
+                    if (index < 0 || index >= receiver.size) {
+                        throw new ArrayIndexOutOfBoundsException(index);
+                    }
+                    receiver.size--;
+                    return true;
+                }
+            }
         }
     }
 
@@ -1047,6 +1528,16 @@ public class JavaInteropTest {
 
         @MessageResolution(receiverType = InternalPropertiesObject.class)
         static final class PropertiesVisibilityObjectMessageResolution {
+
+            @Resolve(message = "HAS_KEYS")
+            public abstract static class HasKeysNode extends Node {
+
+                public Object access(InternalPropertiesObject receiver) {
+                    assert receiver != null;
+                    return true;
+                }
+            }
+
             @Resolve(message = "KEYS")
             public abstract static class KeysNode extends Node {
 
@@ -1081,9 +1572,50 @@ public class JavaInteropTest {
                     boolean writable = (receiver.wBits & (1 << d)) > 0;
                     boolean invocable = (receiver.iBits & (1 << d)) > 0;
                     boolean internal = (receiver.nBits & (1 << d)) > 0;
-                    return KeyInfo.newBuilder().setReadable(readable).setWritable(writable).setInvocable(invocable).setInternal(internal).build();
+                    int info = KeyInfo.NONE;
+                    if (readable) {
+                        info |= KeyInfo.READABLE;
+                    }
+                    if (writable) {
+                        info |= KeyInfo.MODIFIABLE;
+                    }
+                    if (invocable) {
+                        info |= KeyInfo.INVOCABLE;
+                    }
+                    if (internal) {
+                        info |= KeyInfo.INTERNAL;
+                    }
+                    return info;
                 }
             }
+        }
+    }
+
+    @MessageResolution(receiverType = FunctionObject.class)
+    static final class FunctionObject implements TruffleObject {
+        @Resolve(message = "IS_EXECUTABLE")
+        abstract static class IsExecutable extends Node {
+            @SuppressWarnings("unused")
+            protected Object access(FunctionObject obj) {
+                return true;
+            }
+        }
+
+        @Resolve(message = "EXECUTE")
+        @SuppressWarnings("unused")
+        abstract static class Execute extends Node {
+            protected Object access(FunctionObject obj, Object[] args) {
+                return Arrays.stream(args).mapToInt(o -> (int) o).sum();
+            }
+        }
+
+        static boolean isInstance(TruffleObject obj) {
+            return obj instanceof FunctionObject;
+        }
+
+        @Override
+        public ForeignAccess getForeignAccess() {
+            return FunctionObjectForeign.ACCESS;
         }
     }
 }

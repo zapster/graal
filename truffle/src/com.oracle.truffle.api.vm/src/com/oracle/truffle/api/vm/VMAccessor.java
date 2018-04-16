@@ -29,17 +29,19 @@ import java.util.Collections;
 
 import org.graalvm.options.OptionDescriptors;
 
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
+import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleOptions;
 import com.oracle.truffle.api.impl.Accessor;
 
 class VMAccessor extends Accessor {
 
-    static VMAccessor SPI;
+    @CompilationFinal static VMAccessor SPI;
 
-    static Nodes NODES;
-    static InstrumentSupport INSTRUMENT;
-    static JavaInteropSupport JAVAINTEROP;
-    static LanguageSupport LANGUAGE;
+    @CompilationFinal static Nodes NODES;
+    @CompilationFinal static InstrumentSupport INSTRUMENT;
+    @CompilationFinal static JavaInteropSupport JAVAINTEROP;
+    @CompilationFinal static LanguageSupport LANGUAGE;
 
     private static volatile EngineSupport engineSupport;
 
@@ -72,6 +74,16 @@ class VMAccessor extends Accessor {
         INSTRUMENT = SPI.instrumentSupport();
         JAVAINTEROP = SPI.javaInteropSupport();
         LANGUAGE = SPI.languageSupport();
+    }
+
+    @Override
+    protected void initializeProfile(CallTarget target, Class<?>[] argmentTypes) {
+        super.initializeProfile(target, argmentTypes);
+    }
+
+    @Override
+    protected Object callProfiled(CallTarget target, Object... args) {
+        return super.callProfiled(target, args);
     }
 
     @Override

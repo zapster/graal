@@ -105,8 +105,12 @@ public class CompilationWrapperTest extends GraalCompilerTest {
     public void testVMCompilation3() throws IOException, InterruptedException {
         final int maxProblems = 4;
         Probe[] probes = {
-                        new Probe("To capture more information for diagnosing or reporting a compilation", maxProblems),
-                        new Probe("Retrying compilation of", maxProblems),
+                        new Probe("Retrying compilation of", maxProblems) {
+                            @Override
+                            String test() {
+                                return actualOccurrences > 0 && actualOccurrences <= maxProblems ? null : String.format("expected occurrences to be in [1 .. %d]", maxProblems);
+                            }
+                        },
                         new Probe("adjusting CompilationFailureAction from Diagnose to Print", 1),
                         new Probe("adjusting CompilationFailureAction from Print to Silent", 1),
         };
@@ -126,6 +130,7 @@ public class CompilationWrapperTest extends GraalCompilerTest {
         testHelper(Collections.emptyList(),
                         Arrays.asList(
                                         "-Dgraal.CompilationFailureAction=ExitVM",
+                                        "-Dgraal.TrufflePerformanceWarningsAreFatal=true",
                                         "-Dgraal.CrashAt=root test1"),
                         "org.graalvm.compiler.truffle.test.SLTruffleGraalTestSuite", "test");
     }
@@ -143,6 +148,22 @@ public class CompilationWrapperTest extends GraalCompilerTest {
                                         "-Dgraal.CompilationFailureAction=Silent",
                                         "-Dgraal.TruffleCompilationExceptionsAreFatal=true",
                                         "-Dgraal.CrashAt=root test1"),
+                        "org.graalvm.compiler.truffle.test.SLTruffleGraalTestSuite", "test");
+    }
+
+    /**
+     * Tests that TrufflePerformanceWarningsAreFatal generates diagnostic output.
+     */
+    @Test
+    public void testTruffleCompilation3() throws IOException, InterruptedException {
+        Probe[] probes = {
+                        new Probe("Exiting VM due to TrufflePerformanceWarningsAreFatal=true", 1),
+        };
+        testHelper(Arrays.asList(probes),
+                        Arrays.asList(
+                                        "-Dgraal.CompilationFailureAction=Silent",
+                                        "-Dgraal.TrufflePerformanceWarningsAreFatal=true",
+                                        "-Dgraal.CrashAt=root test1:PermanentBailout"),
                         "org.graalvm.compiler.truffle.test.SLTruffleGraalTestSuite", "test");
     }
 
@@ -191,7 +212,10 @@ public class CompilationWrapperTest extends GraalCompilerTest {
             }
         }
         if (diagnosticProbe != null) {
-            String diagnosticOutputZip = diagnosticProbe.lastMatchingLine.substring(diagnosticProbe.substring.length()).trim();
+            String line = diagnosticProbe.lastMatchingLine;
+            int substringStart = line.indexOf(diagnosticProbe.substring);
+            int substringLength = diagnosticProbe.substring.length();
+            String diagnosticOutputZip = line.substring(substringStart + substringLength).trim();
 
             List<String> dumpPathEntries = Arrays.asList(dumpPath.list());
 

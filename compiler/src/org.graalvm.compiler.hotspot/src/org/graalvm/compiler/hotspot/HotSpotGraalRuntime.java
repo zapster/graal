@@ -34,6 +34,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.Equivalence;
 import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
 import org.graalvm.compiler.api.runtime.GraalRuntime;
 import org.graalvm.compiler.core.CompilationWrapper.ExceptionAction;
@@ -57,8 +59,6 @@ import org.graalvm.compiler.phases.tiers.CompilerConfiguration;
 import org.graalvm.compiler.replacements.SnippetCounter;
 import org.graalvm.compiler.replacements.SnippetCounter.Group;
 import org.graalvm.compiler.runtime.RuntimeProvider;
-import org.graalvm.util.EconomicMap;
-import org.graalvm.util.Equivalence;
 
 import jdk.vm.ci.code.Architecture;
 import jdk.vm.ci.code.stack.StackIntrospection;
@@ -115,6 +115,12 @@ public final class HotSpotGraalRuntime implements HotSpotGraalRuntimeProvider {
             options = new OptionValues(initialOptions, HotSpotPrintInlining, true);
         } else {
             options = initialOptions;
+        }
+
+        if (config.useCMSGC) {
+            // Graal doesn't work with the CMS collector (e.g. GR-6777)
+            // and is deprecated (http://openjdk.java.net/jeps/291).
+            throw new GraalError("Graal does not support the CMS collector");
         }
 
         outputDirectory = new DiagnosticsOutputDirectory(options);

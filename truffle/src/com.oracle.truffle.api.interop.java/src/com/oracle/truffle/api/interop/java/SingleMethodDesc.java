@@ -24,6 +24,9 @@
  */
 package com.oracle.truffle.api.interop.java;
 
+import java.lang.annotation.Annotation;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
@@ -32,16 +35,21 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 
 import com.oracle.truffle.api.CompilerAsserts;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.TruffleOptions;
+import com.oracle.truffle.api.interop.UnsupportedTypeException;
 
 abstract class SingleMethodDesc implements JavaMethodDesc {
     private final boolean varArgs;
     @CompilationFinal(dimensions = 1) private final Class<?>[] parameterTypes;
+    @CompilationFinal(dimensions = 1) private final Type[] genericParameterTypes;
 
     protected SingleMethodDesc(Executable executable) {
         this.varArgs = executable.isVarArgs();
         this.parameterTypes = executable.getParameterTypes();
+        this.genericParameterTypes = executable.getGenericParameterTypes();
     }
 
     public abstract Executable getReflectionMethod();
@@ -61,7 +69,7 @@ abstract class SingleMethodDesc implements JavaMethodDesc {
     }
 
     public Type[] getGenericParameterTypes() {
-        return getReflectionMethod().getGenericParameterTypes();
+        return genericParameterTypes;
     }
 
     @Override
@@ -75,18 +83,46 @@ abstract class SingleMethodDesc implements JavaMethodDesc {
 
     public abstract Object invoke(Object receiver, Object[] arguments) throws Throwable;
 
+    public boolean isMethod() {
+        return getReflectionMethod() instanceof Method;
+    }
+
+    public boolean isConstructor() {
+        return getReflectionMethod() instanceof Constructor<?>;
+    }
+
     static SingleMethodDesc unreflect(Method reflectionMethod) {
         assert isAccessible(reflectionMethod);
-        return new SingleMethodDesc.ConcreteMethod(reflectionMethod);
+        if (TruffleOptions.AOT || isCallerSensitive(reflectionMethod)) {
+            return new MethodReflectImpl(reflectionMethod);
+        } else {
+            return new MethodMHImpl(reflectionMethod);
+        }
     }
 
     static SingleMethodDesc unreflect(Constructor<?> reflectionConstructor) {
         assert isAccessible(reflectionConstructor);
-        return new SingleMethodDesc.ConcreteConstructor(reflectionConstructor);
+        if (TruffleOptions.AOT || isCallerSensitive(reflectionConstructor)) {
+            return new ConstructorReflectImpl(reflectionConstructor);
+        } else {
+            return new ConstructorMHImpl(reflectionConstructor);
+        }
     }
 
     static boolean isAccessible(Executable method) {
         return Modifier.isPublic(method.getModifiers()) && Modifier.isPublic(method.getDeclaringClass().getModifiers());
+    }
+
+    static boolean isCallerSensitive(Executable method) {
+        Annotation[] annotations = method.getAnnotations();
+        for (Annotation annotation : annotations) {
+            switch (annotation.annotationType().getName()) {
+                case "sun.reflect.CallerSensitive":
+                case "jdk.internal.reflect.CallerSensitive":
+                    return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -94,10 +130,10 @@ abstract class SingleMethodDesc implements JavaMethodDesc {
         return "Method[" + getReflectionMethod().toString() + "]";
     }
 
-    static class ConcreteMethod extends SingleMethodDesc {
+    private static final class MethodReflectImpl extends SingleMethodDesc {
         private final Method reflectionMethod;
 
-        ConcreteMethod(Method reflectionMethod) {
+        MethodReflectImpl(Method reflectionMethod) {
             super(reflectionMethod);
             this.reflectionMethod = reflectionMethod;
         }
@@ -108,14 +144,21 @@ abstract class SingleMethodDesc implements JavaMethodDesc {
             return reflectionMethod;
         }
 
-        @TruffleBoundary
         @Override
         public Object invoke(Object receiver, Object[] arguments) throws Throwable {
             try {
-                return getReflectionMethod().invoke(receiver, arguments);
+                return reflectInvoke(reflectionMethod, receiver, arguments);
+            } catch (IllegalArgumentException | IllegalAccessException ex) {
+                throw UnsupportedTypeException.raise(ex, arguments);
             } catch (InvocationTargetException e) {
                 throw e.getCause();
             }
+        }
+
+        @TruffleBoundary
+        private static Object reflectInvoke(Method reflectionMethod, Object receiver, Object[] arguments)
+                        throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+            return reflectionMethod.invoke(receiver, arguments);
         }
 
         @Override
@@ -129,10 +172,10 @@ abstract class SingleMethodDesc implements JavaMethodDesc {
         }
     }
 
-    static class ConcreteConstructor extends SingleMethodDesc {
+    private static final class ConstructorReflectImpl extends SingleMethodDesc {
         private final Constructor<?> reflectionConstructor;
 
-        ConcreteConstructor(Constructor<?> reflectionConstructor) {
+        ConstructorReflectImpl(Constructor<?> reflectionConstructor) {
             super(reflectionConstructor);
             this.reflectionConstructor = reflectionConstructor;
         }
@@ -143,19 +186,133 @@ abstract class SingleMethodDesc implements JavaMethodDesc {
             return reflectionConstructor;
         }
 
-        @TruffleBoundary
         @Override
         public Object invoke(Object receiver, Object[] arguments) throws Throwable {
             try {
-                return getReflectionMethod().newInstance(arguments);
+                return reflectNewInstance(reflectionConstructor, arguments);
+            } catch (IllegalArgumentException | IllegalAccessException | InstantiationException ex) {
+                throw UnsupportedTypeException.raise(ex, arguments);
             } catch (InvocationTargetException e) {
                 throw e.getCause();
             }
         }
 
+        @TruffleBoundary
+        private static Object reflectNewInstance(Constructor<?> reflectionConstructor, Object[] arguments)
+                        throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+            return reflectionConstructor.newInstance(arguments);
+        }
+
         @Override
         public Class<?> getReturnType() {
             return getReflectionMethod().getDeclaringClass();
+        }
+    }
+
+    private abstract static class MHBase extends SingleMethodDesc {
+        @CompilationFinal private MethodHandle methodHandle;
+
+        MHBase(Executable executable) {
+            super(executable);
+        }
+
+        @Override
+        public final Object invoke(Object receiver, Object[] arguments) throws Throwable {
+            if (methodHandle == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                methodHandle = makeMethodHandle();
+            }
+            try {
+                return invokeHandle(methodHandle, receiver, arguments);
+            } catch (ClassCastException ex) {
+                throw UnsupportedTypeException.raise(ex, arguments);
+            }
+        }
+
+        @TruffleBoundary(allowInlining = true)
+        private static Object invokeHandle(MethodHandle invokeHandle, Object receiver, Object[] arguments) throws Throwable {
+            return invokeHandle.invokeExact(receiver, arguments);
+        }
+
+        protected abstract MethodHandle makeMethodHandle();
+
+        protected static MethodHandle adaptSignature(MethodHandle originalHandle, boolean isStatic, int parameterCount) {
+            MethodHandle adaptedHandle = originalHandle;
+            adaptedHandle = adaptedHandle.asType(adaptedHandle.type().changeReturnType(Object.class));
+            if (isStatic) {
+                adaptedHandle = MethodHandles.dropArguments(adaptedHandle, 0, Object.class);
+            } else {
+                adaptedHandle = adaptedHandle.asType(adaptedHandle.type().changeParameterType(0, Object.class));
+            }
+            adaptedHandle = adaptedHandle.asSpreader(Object[].class, parameterCount);
+            return adaptedHandle;
+        }
+    }
+
+    private static final class MethodMHImpl extends MHBase {
+        private final Method reflectionMethod;
+
+        MethodMHImpl(Method reflectionMethod) {
+            super(reflectionMethod);
+            this.reflectionMethod = reflectionMethod;
+        }
+
+        @Override
+        public Method getReflectionMethod() {
+            CompilerAsserts.neverPartOfCompilation();
+            return reflectionMethod;
+        }
+
+        @Override
+        public Class<?> getReturnType() {
+            return getReflectionMethod().getReturnType();
+        }
+
+        @Override
+        public boolean isInternal() {
+            return getReflectionMethod().getDeclaringClass() == Object.class;
+        }
+
+        @Override
+        protected MethodHandle makeMethodHandle() {
+            CompilerAsserts.neverPartOfCompilation();
+            try {
+                final MethodHandle methodHandle = MethodHandles.publicLookup().unreflect(reflectionMethod);
+                return adaptSignature(methodHandle, Modifier.isStatic(reflectionMethod.getModifiers()), reflectionMethod.getParameterCount());
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    private static final class ConstructorMHImpl extends MHBase {
+        private final Constructor<?> reflectionConstructor;
+
+        ConstructorMHImpl(Constructor<?> reflectionConstructor) {
+            super(reflectionConstructor);
+            this.reflectionConstructor = reflectionConstructor;
+        }
+
+        @Override
+        public Constructor<?> getReflectionMethod() {
+            CompilerAsserts.neverPartOfCompilation();
+            return reflectionConstructor;
+        }
+
+        @Override
+        public Class<?> getReturnType() {
+            return getReflectionMethod().getDeclaringClass();
+        }
+
+        @Override
+        protected MethodHandle makeMethodHandle() {
+            CompilerAsserts.neverPartOfCompilation();
+            try {
+                final MethodHandle methodHandle = MethodHandles.publicLookup().unreflectConstructor(reflectionConstructor);
+                return adaptSignature(methodHandle, true, getParameterCount());
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
         }
     }
 }

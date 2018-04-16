@@ -24,6 +24,7 @@
  */
 package com.oracle.truffle.api.instrumentation;
 
+import java.util.HashSet;
 import java.util.Set;
 
 import com.oracle.truffle.api.CompilerAsserts;
@@ -31,7 +32,6 @@ import com.oracle.truffle.api.instrumentation.InstrumentationHandler.AbstractIns
 import com.oracle.truffle.api.instrumentation.InstrumentationHandler.LanguageClientInstrumenter;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
-import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
 
 /**
@@ -42,37 +42,27 @@ import com.oracle.truffle.api.source.SourceSection;
  * <ul>
  * <li>explicit {@linkplain #dispose() disposal} of the subscription; or</li>
  *
- * <li>the instrument that created the subscription is
- * {@linkplain com.oracle.truffle.api.vm.PolyglotEngine.Instrument#setEnabled(boolean) disabled}; or
- *
- * <li>the instrumented engine is {@linkplain com.oracle.truffle.api.vm.PolyglotEngine#dispose()
- * disposed}.</li>
+ * <li>the instrumented engine is {@linkplain org.graalvm.polyglot.Engine#close() closed}.</li>
  * </ul>
  * </p>
  *
  * @param <T> subscriber type: {@link ExecutionEventListener} or {@link ExecutionEventNodeFactory}.
- * @see Instrumenter#attachListener(SourceSectionFilter, ExecutionEventListener)
- * @see Instrumenter#attachFactory(SourceSectionFilter, ExecutionEventNodeFactory)
+ * @see Instrumenter#attachExecutionEventListener(SourceSectionFilter, ExecutionEventListener)
+ * @see Instrumenter#attachExecutionEventFactory(SourceSectionFilter, ExecutionEventNodeFactory)
  *
  * @since 0.12
  */
-public final class EventBinding<T> {
+public class EventBinding<T> {
 
     private final AbstractInstrumenter instrumenter;
-    private final AllocationEventFilter filterAllocation;
-    private final SourceSectionFilter filterSourceSection;
     private final T element;
-    private final boolean isExecutionEvent;
 
     /* language bindings needs special treatment. */
     private volatile boolean disposed;
 
-    <F> EventBinding(AbstractInstrumenter instrumenter, F query, T element, boolean isExecutionEvent) {
+    EventBinding(AbstractInstrumenter instrumenter, T element) {
         this.instrumenter = instrumenter;
-        this.filterAllocation = (query instanceof AllocationEventFilter) ? (AllocationEventFilter) query : null;
-        this.filterSourceSection = (query instanceof SourceSectionFilter) ? (SourceSectionFilter) query : null;
         this.element = element;
-        this.isExecutionEvent = isExecutionEvent;
     }
 
     /**
@@ -89,13 +79,11 @@ public final class EventBinding<T> {
      * @return the filter being applied to the subscription's stream of notifications
      *
      * @since 0.12
+     * @deprecated
      */
+    @Deprecated
     public SourceSectionFilter getFilter() {
-        return filterSourceSection;
-    }
-
-    AllocationEventFilter getAllocationFilter() {
-        return filterAllocation;
+        return null;
     }
 
     /**
@@ -112,7 +100,7 @@ public final class EventBinding<T> {
      *
      * @since 0.12
      */
-    public synchronized void dispose() throws IllegalStateException {
+    public synchronized void dispose() {
         CompilerAsserts.neverPartOfCompilation();
         if (!disposed) {
             instrumenter.disposeBinding(this);
@@ -120,42 +108,147 @@ public final class EventBinding<T> {
         }
     }
 
-    boolean isInstrumentedFull(Set<Class<?>> providedTags, RootNode rootNode, Node node, SourceSection nodeSourceSection) {
-        if (isInstrumentedLeaf(providedTags, node, nodeSourceSection)) {
-            if (rootNode == null) {
-                return false;
-            }
-            return isInstrumentedRoot(providedTags, rootNode, rootNode.getSourceSection(), 0);
-        }
-        return false;
-    }
-
-    boolean isInstrumentedRoot(Set<Class<?>> providedTags, RootNode rootNode, SourceSection rootSourceSection, int rootNodeBits) {
-        return getInstrumenter().isInstrumentableRoot(rootNode) && getFilter().isInstrumentedRoot(providedTags, rootSourceSection, rootNode, rootNodeBits);
-    }
-
-    boolean isInstrumentedLeaf(Set<Class<?>> providedTags, Node instrumentedNode, SourceSection section) {
-        return getFilter().isInstrumentedNode(providedTags, instrumentedNode, section);
-    }
-
-    boolean isInstrumentedSource(Source source) {
-        return getInstrumenter().isInstrumentableSource(source) && getFilter().isInstrumentedSource(source);
-    }
-
-    boolean isExecutionEvent() {
-        return isExecutionEvent;
-    }
-
-    boolean isLanguageBinding() {
-        return instrumenter instanceof LanguageClientInstrumenter;
-    }
-
-    AbstractInstrumenter getInstrumenter() {
-        return instrumenter;
-    }
-
     synchronized void disposeBulk() {
         disposed = true;
+    }
+
+    static final class Source<T> extends EventBinding<T> {
+
+        private final AbstractInstrumenter instrumenter;
+        private final SourceSectionFilter filterSourceSection;
+        private final SourceSectionFilter inputFilter;
+        private final boolean isExecutionEvent;
+
+        Source(AbstractInstrumenter instrumenter, SourceSectionFilter filterSourceSection, SourceSectionFilter inputFilter, T element, boolean isExecutionEvent) {
+            super(instrumenter, element);
+            this.instrumenter = instrumenter;
+            this.inputFilter = inputFilter;
+            this.filterSourceSection = filterSourceSection;
+            this.isExecutionEvent = isExecutionEvent;
+        }
+
+        SourceSectionFilter getInputFilter() {
+            return inputFilter;
+        }
+
+        Set<Class<?>> getLimitedTags() {
+            Set<Class<?>> tags = filterSourceSection.getLimitedTags();
+            if (inputFilter != null) {
+                Set<Class<?>> inputTags = inputFilter.getLimitedTags();
+                if (tags == null) {
+                    return inputTags;
+                }
+                if (inputTags == null) {
+                    return tags;
+                }
+                if (inputTags.equals(tags)) {
+                    return tags;
+                } else {
+                    Set<Class<?>> compoundTags = new HashSet<>();
+                    compoundTags.addAll(tags);
+                    compoundTags.addAll(inputTags);
+                    return compoundTags;
+                }
+            } else {
+                return tags;
+            }
+
+        }
+
+        @Override
+        @SuppressWarnings("deprecation")
+        public SourceSectionFilter getFilter() {
+            return filterSourceSection;
+        }
+
+        boolean isInstrumentedFull(Set<Class<?>> providedTags, RootNode rootNode, Node node, SourceSection nodeSourceSection) {
+            if (isInstrumentedLeaf(providedTags, node, nodeSourceSection)) {
+                if (rootNode == null) {
+                    return false;
+                }
+                return isInstrumentedRoot(providedTags, rootNode, rootNode.getSourceSection(), 0);
+            }
+            return false;
+        }
+
+        /**
+         * Parent must match {@link #filterSourceSection} and child must match {@link #inputFilter}.
+         */
+        boolean isChildInstrumentedFull(Set<Class<?>> providedTags, RootNode rootNode,
+                        Node parent, SourceSection parentSourceSection,
+                        Node current, SourceSection currentSourceSection) {
+            if (inputFilter == null) {
+                return false;
+            } else if (rootNode == null) {
+                return false;
+            } else if (!InstrumentationHandler.isInstrumentableNode(parent, parentSourceSection)) {
+                return false;
+            }
+
+            if (isInstrumentedLeaf(providedTags, parent, parentSourceSection) && inputFilter.isInstrumentedNode(providedTags, current, currentSourceSection)) {
+                return isInstrumentedRoot(providedTags, rootNode, rootNode.getSourceSection(), 0);
+            }
+            return false;
+        }
+
+        /**
+         * Parent must match {@link #filterSourceSection} and child must match {@link #inputFilter}.
+         */
+        boolean isChildInstrumentedLeaf(Set<Class<?>> providedTags, RootNode rootNode,
+                        Node parent, SourceSection parentSourceSection,
+                        Node current, SourceSection currentSourceSection) {
+            if (inputFilter == null) {
+                return false;
+            } else if (rootNode == null) {
+                return false;
+            } else if (!InstrumentationHandler.isInstrumentableNode(parent, parentSourceSection)) {
+                return false;
+            }
+            if (isInstrumentedLeaf(providedTags, parent, parentSourceSection) && inputFilter.isInstrumentedNode(providedTags, current, currentSourceSection)) {
+                return true;
+            }
+            return false;
+        }
+
+        boolean isInstrumentedRoot(Set<Class<?>> providedTags, RootNode rootNode, SourceSection rootSourceSection, int rootNodeBits) {
+            return getInstrumenter().isInstrumentableRoot(rootNode) && getFilter().isInstrumentedRoot(providedTags, rootSourceSection, rootNode, rootNodeBits);
+        }
+
+        boolean isInstrumentedLeaf(Set<Class<?>> providedTags, Node instrumentedNode, SourceSection section) {
+            return getFilter().isInstrumentedNode(providedTags, instrumentedNode, section);
+        }
+
+        boolean isInstrumentedSource(com.oracle.truffle.api.source.Source source) {
+            return getInstrumenter().isInstrumentableSource(source) && getFilter().isInstrumentedSource(source);
+        }
+
+        boolean isExecutionEvent() {
+            return isExecutionEvent;
+        }
+
+        boolean isLanguageBinding() {
+            return instrumenter instanceof LanguageClientInstrumenter;
+        }
+
+        AbstractInstrumenter getInstrumenter() {
+            return instrumenter;
+        }
+
+    }
+
+    static final class Allocation<T> extends EventBinding<T> {
+
+        private final AllocationEventFilter filterAllocation;
+
+        Allocation(AbstractInstrumenter instrumenter, AllocationEventFilter filter, T listener) {
+            super(instrumenter, listener);
+            this.filterAllocation = filter;
+        }
+
+        AllocationEventFilter getAllocationFilter() {
+            return filterAllocation;
+        }
+
     }
 
 }

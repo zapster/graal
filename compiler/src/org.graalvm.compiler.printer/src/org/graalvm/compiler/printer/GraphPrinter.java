@@ -35,18 +35,17 @@ import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.graph.Graph;
 import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.StructuredGraph;
+import org.graalvm.compiler.nodes.util.JavaConstantFormatter;
 import org.graalvm.compiler.phases.schedule.SchedulePhase;
-import org.graalvm.compiler.serviceprovider.JDK9Method;
+import org.graalvm.compiler.serviceprovider.GraalServices;
 
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.MetaUtil;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
-import jdk.vm.ci.runtime.JVMCI;
-import jdk.vm.ci.services.Services;
 
-interface GraphPrinter extends Closeable {
+interface GraphPrinter extends Closeable, JavaConstantFormatter {
 
     /**
      * Starts a new group of graphs with the given name, short name and method byte code index (BCI)
@@ -69,16 +68,6 @@ interface GraphPrinter extends Closeable {
 
     @Override
     void close();
-
-    /**
-     * A JVMCI package dynamically exported to trusted modules.
-     */
-    String JVMCI_RUNTIME_PACKAGE = JVMCI.class.getPackage().getName();
-
-    /**
-     * {@code jdk.vm.ci} module.
-     */
-    Object JVMCI_MODULE = JDK9Method.JAVA_SPECIFICATION_VERSION < 9 ? null : JDK9Method.getModule.invoke(Services.class);
 
     /**
      * Classes whose {@link #toString()} method does not run any untrusted code.
@@ -104,19 +93,31 @@ interface GraphPrinter extends Closeable {
         if (TRUSTED_CLASSES.contains(c)) {
             return true;
         }
-        if (JDK9Method.JAVA_SPECIFICATION_VERSION < 9) {
-            if (c.getClassLoader() == Services.class.getClassLoader()) {
-                // Loaded by the JVMCI class loader
-                return true;
-            }
-        } else {
-            Object module = JDK9Method.getModule.invoke(c);
-            if (JVMCI_MODULE == module || (Boolean) JDK9Method.isOpenTo.invoke(JVMCI_MODULE, JVMCI_RUNTIME_PACKAGE, module)) {
-                // Can access non-statically-exported package in JVMCI
-                return true;
-            }
+        if (GraalServices.isToStringTrusted(c)) {
+            return true;
+        }
+        if (c.getClassLoader() == GraphPrinter.class.getClassLoader()) {
+            return true;
         }
         return false;
+    }
+
+    /**
+     * Use the real {@link Object#toString()} method for {@link JavaConstant JavaConstants} that are
+     * wrapping trusted types, other just return the results of {@link JavaConstant#toString()}.
+     */
+    @Override
+    default String format(JavaConstant constant) {
+        SnippetReflectionProvider snippetReflection = getSnippetReflectionProvider();
+        if (snippetReflection != null) {
+            if (constant.getJavaKind() == JavaKind.Object) {
+                Object obj = snippetReflection.asObject(Object.class, constant);
+                if (obj != null) {
+                    return GraphPrinter.constantToString(obj);
+                }
+            }
+        }
+        return constant.toString();
     }
 
     /**
@@ -125,21 +126,14 @@ interface GraphPrinter extends Closeable {
      * value.
      */
     default void updateStringPropertiesForConstant(Map<Object, Object> props, ConstantNode cn) {
-        SnippetReflectionProvider snippetReflection = getSnippetReflectionProvider();
-        if (snippetReflection != null && cn.getValue() instanceof JavaConstant) {
-            JavaConstant constant = (JavaConstant) cn.getValue();
-            if (constant.getJavaKind() == JavaKind.Object) {
-                Object obj = snippetReflection.asObject(Object.class, constant);
-                if (obj != null) {
-                    String toString = GraphPrinter.constantToString(obj);
-                    String rawvalue = GraphPrinter.truncate(toString);
-                    // Overwrite the value inserted by
-                    // ConstantNode.getDebugProperties()
-                    props.put("rawvalue", rawvalue);
-                    if (!rawvalue.equals(toString)) {
-                        props.put("toString", toString);
-                    }
-                }
+        if (cn.isJavaConstant() && cn.getStackKind().isObject()) {
+            String toString = format(cn.asJavaConstant());
+            String rawvalue = GraphPrinter.truncate(toString);
+            // Overwrite the value inserted by
+            // ConstantNode.getDebugProperties()
+            props.put("rawvalue", rawvalue);
+            if (!rawvalue.equals(toString)) {
+                props.put("toString", toString);
             }
         }
     }
@@ -179,15 +173,26 @@ interface GraphPrinter extends Closeable {
 
     static String constantToString(Object value) {
         Class<?> c = value.getClass();
+        String suffix = "";
         if (c.isArray()) {
             return constantArrayToString(value);
         } else if (value instanceof Enum) {
             return ((Enum<?>) value).name();
         } else if (isToStringTrusted(c)) {
-            return value.toString();
+            try {
+                return value.toString();
+            } catch (Throwable t) {
+                suffix = "[toString error: " + t.getClass().getName() + "]";
+                if (isToStringTrusted(t.getClass())) {
+                    try {
+                        suffix = "[toString error: " + t + "]";
+                    } catch (Throwable t2) {
+                        // No point in going further
+                    }
+                }
+            }
         }
-        return MetaUtil.getSimpleName(c, true) + "@" + Integer.toHexString(System.identityHashCode(value));
-
+        return MetaUtil.getSimpleName(c, true) + "@" + Integer.toHexString(System.identityHashCode(value)) + suffix;
     }
 
     static String constantArrayToString(Object array) {

@@ -40,7 +40,6 @@ import com.oracle.truffle.dsl.processor.model.NodeChildData.Cardinality;
 public class NodeData extends Template implements Comparable<NodeData> {
 
     private final String nodeId;
-    private final String shortName;
     private final List<NodeData> enclosingNodes = new ArrayList<>();
     private NodeData declaringNode;
 
@@ -52,7 +51,6 @@ public class NodeData extends Template implements Comparable<NodeData> {
     private ParameterSpec instanceParameterSpec;
 
     private final List<SpecializationData> specializations = new ArrayList<>();
-    private final List<ShortCircuitData> shortCircuits = new ArrayList<>();
     private final List<CreateCastData> casts = new ArrayList<>();
     private final List<ExecutableTypeData> executableTypes = new ArrayList<>();
 
@@ -62,21 +60,22 @@ public class NodeData extends Template implements Comparable<NodeData> {
     private TypeMirror frameType;
     private boolean reflectable;
 
-    public NodeData(ProcessorContext context, TypeElement type, String shortName, TypeSystemData typeSystem, boolean generateFactory) {
+    private boolean reportPolymorphism;
+
+    public NodeData(ProcessorContext context, TypeElement type, TypeSystemData typeSystem, boolean generateFactory) {
         super(context, type, null);
         this.nodeId = ElementUtils.getSimpleName(type);
-        this.shortName = shortName;
         this.typeSystem = typeSystem;
         this.fields = new ArrayList<>();
         this.children = new ArrayList<>();
         this.childExecutions = new ArrayList<>();
-        this.thisExecution = new NodeExecutionData(new NodeChildData(null, null, "this", getNodeType(), getNodeType(), null, Cardinality.ONE), -1, -1, false);
+        this.thisExecution = new NodeExecutionData(new NodeChildData(null, null, "this", getNodeType(), getNodeType(), null, Cardinality.ONE, null), -1, -1);
         this.thisExecution.getChild().setNode(this);
         this.generateFactory = generateFactory;
     }
 
     public NodeData(ProcessorContext context, TypeElement type) {
-        this(context, type, null, null, false);
+        this(context, type, null, false);
     }
 
     public boolean isGenerateFactory() {
@@ -154,14 +153,7 @@ public class NodeData extends Template implements Comparable<NodeData> {
     }
 
     public int getSignatureSize() {
-        int count = 0;
-        for (NodeExecutionData execution : getChildExecutions()) {
-            if (execution.isShortCircuit()) {
-                count++;
-            }
-            count++;
-        }
-        return count;
+        return getChildExecutions().size();
     }
 
     public boolean isFrameUsedByAnyGuard() {
@@ -169,18 +161,9 @@ public class NodeData extends Template implements Comparable<NodeData> {
             if (!specialization.isReachable()) {
                 continue;
             }
-            Parameter frame = specialization.getFrame();
-            if (frame != null) {
-                for (GuardExpression guard : specialization.getGuards()) {
-                    if (guard.getExpression().findBoundVariableElements().contains(frame.getVariableElement())) {
-                        return true;
-                    }
-                }
-                for (CacheExpression cache : specialization.getCaches()) {
-                    if (cache.getExpression().findBoundVariableElements().contains(frame.getVariableElement())) {
-                        return true;
-                    }
-                }
+
+            if (specialization.isFrameUsedByGuard()) {
+                return true;
             }
         }
         return false;
@@ -188,10 +171,6 @@ public class NodeData extends Template implements Comparable<NodeData> {
 
     public List<CreateCastData> getCasts() {
         return casts;
-    }
-
-    public String getShortName() {
-        return shortName;
     }
 
     public List<NodeFieldData> getFields() {
@@ -216,9 +195,6 @@ public class NodeData extends Template implements Comparable<NodeData> {
         }
         if (executableTypes != null) {
             containerChildren.addAll(getExecutableTypes());
-        }
-        if (shortCircuits != null) {
-            containerChildren.addAll(shortCircuits);
         }
         if (children != null) {
             containerChildren.addAll(children);
@@ -291,7 +267,7 @@ public class NodeData extends Template implements Comparable<NodeData> {
         }
 
         for (NodeExecutionData execution : childExecutions) {
-            if (execution.getName().equals(childName) && (execution.getChildIndex() == -1 || execution.getChildIndex() == index)) {
+            if (execution.getName().equals(childName) && (execution.getChildArrayIndex() == -1 || execution.getChildArrayIndex() == index)) {
                 return execution;
             }
         }
@@ -328,9 +304,6 @@ public class NodeData extends Template implements Comparable<NodeData> {
             if (execType.getMethod() != null) {
                 methods.add(execType.getMethod());
             }
-        }
-        for (ShortCircuitData shortcircuit : getShortCircuits()) {
-            methods.add(shortcircuit.getMethod());
         }
 
         if (getCasts() != null) {
@@ -548,10 +521,6 @@ public class NodeData extends Template implements Comparable<NodeData> {
         return getExecutableTypes(-1);
     }
 
-    public List<ShortCircuitData> getShortCircuits() {
-        return shortCircuits;
-    }
-
     public int getMinimalEvaluatedParameters() {
         int minimalEvaluatedParameters = Integer.MAX_VALUE;
         for (ExecutableTypeData type : getExecutableTypes()) {
@@ -611,4 +580,11 @@ public class NodeData extends Template implements Comparable<NodeData> {
         return ElementUtils.uniqueSortedTypes(types, false);
     }
 
+    public void setReportPolymorphism(boolean report) {
+        this.reportPolymorphism = report;
+    }
+
+    public boolean isReportPolymorphism() {
+        return reportPolymorphism;
+    }
 }

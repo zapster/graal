@@ -26,8 +26,8 @@ import static jdk.vm.ci.common.InitTimer.timer;
 import static org.graalvm.compiler.hotspot.HotSpotGraalOptionValues.GRAAL_OPTION_PROPERTY_PREFIX;
 
 import java.io.PrintStream;
-import java.util.Map;
 import java.util.Collections;
+import java.util.Map;
 
 import org.graalvm.compiler.debug.MethodFilter;
 import org.graalvm.compiler.options.Option;
@@ -47,6 +47,8 @@ public final class HotSpotGraalCompilerFactory extends HotSpotJVMCICompilerFacto
 
     private static MethodFilter[] graalCompileOnlyFilter;
     private static boolean compileGraalWithC1Only;
+
+    private IsGraalPredicate isGraalPredicate;
 
     private final HotSpotGraalJVMCIServiceLocator locator;
 
@@ -70,6 +72,7 @@ public final class HotSpotGraalCompilerFactory extends HotSpotJVMCICompilerFacto
         assert options == null : "cannot select " + getClass() + " service more than once";
         options = HotSpotGraalOptionValues.HOTSPOT_OPTIONS;
         initializeGraalCompilePolicyFields(options);
+        isGraalPredicate = compileGraalWithC1Only ? new IsGraalPredicate() : null;
         /*
          * Exercise this code path early to encourage loading now. This doesn't solve problem of
          * deadlock during class loading but seems to eliminate it in practice.
@@ -102,7 +105,9 @@ public final class HotSpotGraalCompilerFactory extends HotSpotJVMCICompilerFacto
         @Option(help = "In tiered mode compile Graal and JVMCI using optimized first tier code.", type = OptionType.Expert)
         public static final OptionKey<Boolean> CompileGraalWithC1Only = new OptionKey<>(true);
 
-        @Option(help = "A method filter selecting what should be compiled by Graal.  All other requests will be reduced to CompilationLevel.Simple.", type = OptionType.Expert)
+        @Option(help = "A filter applied to a method the VM has selected for compilation by Graal. " +
+                       "A method not matching the filter is redirected to a lower tier compiler. " +
+                       "The filter format is the same as for the MethodFilter option.", type = OptionType.Expert)
         public static final OptionKey<String> GraalCompileOnly = new OptionKey<>(null);
         // @formatter:on
 
@@ -110,7 +115,11 @@ public final class HotSpotGraalCompilerFactory extends HotSpotJVMCICompilerFacto
 
     @Override
     public HotSpotGraalCompiler createCompiler(JVMCIRuntime runtime) {
-        HotSpotGraalCompiler compiler = createCompiler(runtime, options, CompilerConfigurationFactory.selectFactory(null, options));
+        CompilerConfigurationFactory factory = CompilerConfigurationFactory.selectFactory(null, options);
+        if (isGraalPredicate != null) {
+            isGraalPredicate.onCompilerConfigurationFactorySelection(factory);
+        }
+        HotSpotGraalCompiler compiler = createCompiler(runtime, options, factory);
         // Only the HotSpotGraalRuntime associated with the compiler created via
         // jdk.vm.ci.runtime.JVMCIRuntime.getCompiler() is registered for receiving
         // VM events.
@@ -160,14 +169,10 @@ public final class HotSpotGraalCompilerFactory extends HotSpotJVMCICompilerFacto
         assert HotSpotGraalCompilerFactory.class.getName().equals("org.graalvm.compiler.hotspot.HotSpotGraalCompilerFactory");
     }
 
-    /*
-     * This method is static so it can be exercised during initialization.
-     */
-    private static CompilationLevel adjustCompilationLevelInternal(Class<?> declaringClass, String name, String signature, CompilationLevel level) {
+    private CompilationLevel adjustCompilationLevelInternal(Class<?> declaringClass, String name, String signature, CompilationLevel level) {
         if (compileGraalWithC1Only) {
             if (level.ordinal() > CompilationLevel.Simple.ordinal()) {
-                String declaringClassName = declaringClass.getName();
-                if (declaringClassName.startsWith("jdk.vm.ci") || declaringClassName.startsWith("org.graalvm") || declaringClassName.startsWith("com.oracle.graal")) {
+                if (isGraalPredicate.apply(declaringClass)) {
                     return CompilationLevel.Simple;
                 }
             }

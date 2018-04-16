@@ -1,5 +1,6 @@
 gateCmdSuffix : ["-v", "--kill-with-sigquit", "gate", "--strict-mode", "--extra-vm-argument=-Dgraal.DumpOnError=true -Dgraal.PrintGraphFile=true", "--extra-vm-argument=${EXTRA_VM_ARGS}", "--tags"]
 gateCmd : ["mx", "--strict-compliance"] ${gateCmdSuffix}
+gateCmdLenient : ["mx"] ${gateCmdSuffix}
 
 gateTest : {
   environment : {
@@ -8,6 +9,21 @@ gateTest : {
   run : [
     ${gateCmd} ["build,test"]
   ]
+}
+
+gateTestLenient : {
+  environment : {
+    EXTRA_VM_ARGS : ""
+  }
+  run : [
+    ${gateCmdLenient} ["build,test"]
+  ]
+}
+
+gateTestMaxVS : ${gateTest} {
+  environment : {
+    EXTRA_VM_ARGS : "-Dgraal.DetailedAsserts=true -XX:MaxVectorSize=16"
+  }
 }
 
 gateTestCTW : {
@@ -30,9 +46,9 @@ gateTestBenchmark : {
   run : [
     ${gateCmd} ["build,benchmarktest"]
     # blackbox jmh test
-    ["mx", "benchmark", "jmh-dist:*", "--", "--jvm-config=${JVM_CONFIG}", "--jvm=${JVM}", "--", ".*TestJMH.*" ]
+    ["mx", "benchmark", "jmh-dist:*", "--", "-Djmh.ignoreLock=true", "--jvm-config=${JVM_CONFIG}", "--jvm=${JVM}", "--", ".*TestJMH.*" ]
     # whitebox jmh test
-    ["mx", "benchmark", "jmh-whitebox:*", "--", "--jvm-config=${JVM_CONFIG}", "--jvm=${JVM}", "--", ".*TestJMH.*" ]
+    ["mx", "benchmark", "jmh-whitebox:*", "--", "-Djmh.ignoreLock=true", "--jvm-config=${JVM_CONFIG}", "--jvm=${JVM}", "--", ".*TestJMH.*" ]
   ]
 }
 
@@ -89,6 +105,13 @@ gateDarwinAMD64 : ${darwin-amd64} ${gateCommon}
 gateSolarisSPARC : ${solaris-sparcv9} ${gateCommon}
 
 gateLinuxSPARC : ${linux-sparcv9} ${gateCommon}
+
+gateLinuxAArch64 : ${linux-aarch64} ${gateCommon} {
+  downloads : {
+    JAVA_HOME : ${jdks.oraclejdkSNAPSHOT}
+    EXTRA_JAVA_HOMES : {pathlist: []}
+  }
+}
 
 gateLinuxAMD64TraceRA : ${gateLinuxAMD64} {
   environment : {

@@ -255,7 +255,7 @@ def ctw(args, extraVMarguments=None):
     elif not configArgs:
         vmargs.append('-DCompileTheWorld.Config=Inline=false')
 
-    # suppress menubar and dock when running on Mac; exclude x11 classes as they may cause VM crashes (on Solaris)
+    # suppress menubar and dock when running on Mac
     vmargs = ['-Djava.awt.headless=true'] + vmargs
 
     if args.cp:
@@ -266,7 +266,10 @@ def ctw(args, extraVMarguments=None):
         # Default to the CompileTheWorld.SUN_BOOT_CLASS_PATH token
         cp = None
 
-    vmargs.append('-DCompileTheWorld.ExcludeMethodFilter=sun.awt.X11.*.*')
+    # Exclude X11 classes as they may cause VM crashes (on Solaris)
+    exclusionPrefix = '-DCompileTheWorld.ExcludeMethodFilter='
+    exclusions = ','.join([a[len(exclusionPrefix):] for a in vmargs if a.startswith(exclusionPrefix)] + ['sun.awt.X11.*.*'])
+    vmargs.append(exclusionPrefix + exclusions)
 
     if _get_XX_option_value(vmargs + _remove_empty_entries(extraVMarguments), 'UseJVMCICompiler', False):
         vmargs.append('-XX:+BootstrapJVMCI')
@@ -440,15 +443,27 @@ def _is_batik_supported(jdk):
         mx.warn('Batik uses Sun internal class com.sun.image.codec.jpeg.TruncatedFileException which is not present in ' + jdk.home)
         return False
 
-def _gate_dacapo(name, iterations, extraVMarguments=None):
-    vmargs = ['-Xms2g', '-XX:+UseSerialGC', '-XX:-UseCompressedOops', '-Djava.net.preferIPv4Stack=true', '-Dgraal.CompilationFailureAction=ExitVM'] + _remove_empty_entries(extraVMarguments)
+def _gate_dacapo(name, iterations, extraVMarguments=None, force_serial_gc=True, set_start_heap_size=True, threads=None):
+    vmargs = ['-XX:+UseSerialGC'] if force_serial_gc else []
+    if set_start_heap_size:
+        vmargs += ['-Xms2g']
+    vmargs += ['-XX:-UseCompressedOops', '-Djava.net.preferIPv4Stack=true', '-Dgraal.CompilationFailureAction=ExitVM'] + _remove_empty_entries(extraVMarguments)
     dacapoJar = mx.library('DACAPO').get_path(True)
     if name == 'batik' and not _is_batik_supported(jdk):
         return
-    _gate_java_benchmark(vmargs + ['-jar', dacapoJar, name, '-n', str(iterations)], r'^===== DaCapo 9\.12 ([a-zA-Z0-9_]+) PASSED in ([0-9]+) msec =====')
+    args = ['-n', str(iterations)]
+    if threads is not None:
+        args += ['-t', str(threads)]
+    _gate_java_benchmark(vmargs + ['-jar', dacapoJar, name] + args, r'^===== DaCapo 9\.12 ([a-zA-Z0-9_]+) PASSED in ([0-9]+) msec =====')
+
+def _jdk_includes_corba(jdk):
+    # corba has been removed since JDK11 (http://openjdk.java.net/jeps/320)
+    return jdk.javaCompliance < '11'
 
 def _gate_scala_dacapo(name, iterations, extraVMarguments=None):
     vmargs = ['-Xms2g', '-XX:+UseSerialGC', '-XX:-UseCompressedOops', '-Dgraal.CompilationFailureAction=ExitVM'] + _remove_empty_entries(extraVMarguments)
+    if name == 'actors' and jdk.javaCompliance >= '9' and _jdk_includes_corba(jdk):
+        vmargs += ['--add-modules', 'java.corba']
     scalaDacapoJar = mx.library('DACAPO_SCALA').get_path(True)
     _gate_java_benchmark(vmargs + ['-jar', scalaDacapoJar, name, '-n', str(iterations)], r'^===== DaCapo 0\.1\.0(-SNAPSHOT)? ([a-zA-Z0-9_]+) PASSED in ([0-9]+) msec =====')
 
@@ -466,6 +481,24 @@ def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVM
     # Run unit tests in hosted mode
     for r in unit_test_runs:
         r.run(suites, tasks, ['-XX:-UseJVMCICompiler'] + _remove_empty_entries(extraVMarguments))
+
+    # Run selected tests (initially those from GR-6581) under -Xcomp
+    xcompTests = [
+        'BlackholeDirectiveTest',
+        'OpaqueDirectiveTest',
+        'CompiledMethodTest',
+        'ControlFlowAnchorDirectiveTest',
+        'ConditionalElimination',
+        'MarkUnsafeAccessTest',
+        'PEAAssertionsTest',
+        'MergeCanonicalizerTest',
+        'ExplicitExceptionTest',
+        'GuardedIntrinsicTest',
+        'HashCodeTest',
+        'ProfilingInfoTest',
+        'GraalOSRLockTest'
+    ]
+    UnitTestRun('XcompUnitTests', [], tags=GraalTags.test).run(['compiler'], tasks, ['-Xcomp', '-XX:-UseJVMCICompiler'] + _remove_empty_entries(extraVMarguments) + xcompTests)
 
     # Ensure makegraaljdk works
     with Task('MakeGraalJDK', tasks, tags=GraalTags.test) as t:
@@ -522,6 +555,9 @@ def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVM
         'scalaxb':    1,
         'tmt':        1
     }
+    if not _jdk_includes_corba(jdk):
+        mx.warn('Removing scaladacapo:actors from benchmarks because corba has been removed since JDK11 (http://openjdk.java.net/jeps/320)')
+        del scala_dacapos['actors']
     for name, iterations in sorted(scala_dacapos.iteritems()):
         with Task('ScalaDaCapo:' + name, tasks, tags=GraalTags.benchmarktest) as t:
             if t: _gate_scala_dacapo(name, iterations, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler'])
@@ -531,24 +567,41 @@ def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVM
         if t: _gate_dacapo('pmd', 1, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler', '-Xbatch'])
 
     # ensure benchmark counters still work
-    with Task('DaCapo_pmd:BenchmarkCounters', tasks, tags=GraalTags.test) as t:
-        if t: _gate_dacapo('pmd', 1, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler', '-Dgraal.LIRProfileMoves=true', '-Dgraal.GenericDynamicCounters=true', '-XX:JVMCICounterSize=10'])
+    if mx.get_arch() != 'aarch64': # GR-8364 Exclude benchmark counters on AArch64
+        with Task('DaCapo_pmd:BenchmarkCounters', tasks, tags=GraalTags.test) as t:
+            if t: _gate_dacapo('pmd', 1, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler', '-Dgraal.LIRProfileMoves=true', '-Dgraal.GenericDynamicCounters=true', '-XX:JVMCICounterSize=10'])
 
     # ensure -Xcomp still works
     with Task('XCompMode:product', tasks, tags=GraalTags.test) as t:
         if t: run_vm(_remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler', '-Xcomp', '-version'])
 
+    # ensure CMS still works
+    with Task('DaCapo_pmd:CMS', tasks, tags=["disabled", "GR-6777"]) as t:
+        if t: _gate_dacapo('pmd', 4, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler', '-Xmx256M', '-XX:+UseConcMarkSweepGC'], threads=4, force_serial_gc=False, set_start_heap_size=False)
+
+    if isJDK8:
+        # ensure CMSIncrementalMode still works
+        with Task('DaCapo_pmd:CMSIncrementalMode', tasks, tags=["disabled", "GR-6777"]) as t:
+            if t: _gate_dacapo('pmd', 4, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler', '-Xmx256M', '-XX:+UseConcMarkSweepGC', '-XX:+CMSIncrementalMode'], threads=4, force_serial_gc=False, set_start_heap_size=False)
+
     with Task('Javadoc', tasks, tags=GraalTags.doc) as t:
-        if t: mx.javadoc([])
+        # metadata package was deprecated, exclude it
+        if t: mx.javadoc(['--exclude-packages', 'com.oracle.truffle.api.metadata,com.oracle.truffle.api.interop.java,com.oracle.truffle.api.vm'], quietForNoPackages=True)
 
 graal_unit_test_runs = [
     UnitTestRun('UnitTests', [], tags=GraalTags.test),
 ]
 
-_registers = 'o0,o1,o2,o3,f8,f9,d32,d34' if mx.get_arch() == 'sparcv9' else 'rbx,r11,r10,r14,xmm3,xmm11,xmm14'
+_registers = {
+    'sparcv9': 'o0,o1,o2,o3,f8,f9,d32,d34',
+    'amd64': 'rbx,r11,r10,r14,xmm3,xmm11,xmm14',
+    'aarch64': 'r0,r1,r2,r3,r4,v0,v1,v2,v3'
+}
+if mx.get_arch() not in _registers:
+    mx.warn('No registers for register pressure tests are defined for architecture ' + mx.get_arch())
 
 _defaultFlags = ['-Dgraal.CompilationWatchDogStartDelay=60.0D']
-_assertionFlags = ['-esa']
+_assertionFlags = ['-esa', '-Dgraal.DetailedAsserts=true']
 _graalErrorFlags = ['-Dgraal.CompilationFailureAction=ExitVM']
 _graalEconomyFlags = ['-Dgraal.CompilerConfiguration=economy']
 _verificationFlags = ['-Dgraal.VerifyGraalGraphs=true', '-Dgraal.VerifyGraalGraphEdges=true', '-Dgraal.VerifyGraalPhasesSize=true', '-Dgraal.VerifyPhases=true']
@@ -556,7 +609,7 @@ _coopFlags = ['-XX:-UseCompressedOops']
 _gcVerificationFlags = ['-XX:+UnlockDiagnosticVMOptions', '-XX:+VerifyBeforeGC', '-XX:+VerifyAfterGC']
 _g1VerificationFlags = ['-XX:-UseSerialGC', '-XX:+UseG1GC']
 _exceptionFlags = ['-Dgraal.StressInvokeWithExceptionNode=true']
-_registerPressureFlags = ['-Dgraal.RegisterPressure=' + _registers]
+_registerPressureFlags = ['-Dgraal.RegisterPressure=' + _registers[mx.get_arch()]]
 _immutableCodeFlags = ['-Dgraal.ImmutableCode=true']
 
 graal_bootstrap_tests = [
@@ -898,7 +951,11 @@ def microbench(*args):
              "Use `mx benchmark jmh-whitebox:*` and `mx benchmark jmh-dist:*` instead!")
 
 def javadoc(args):
-    mx.javadoc(args)
+    # metadata package was deprecated, exclude it
+    if not '--exclude-packages' in args:
+        args.append('--exclude-packages')
+        args.append('com.oracle.truffle.api.metadata')
+    mx.javadoc(args, quietForNoPackages=True)
 
 def create_archive(srcdir, arcpath, prefix):
     """

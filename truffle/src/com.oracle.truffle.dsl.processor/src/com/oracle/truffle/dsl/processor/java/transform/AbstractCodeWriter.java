@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.annotation.processing.FilerException;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
@@ -42,6 +43,7 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.Name;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
@@ -86,6 +88,12 @@ public abstract class AbstractCodeWriter extends CodeElementScanner<Void, Void> 
                 writer = w;
                 writeRootClass(e);
             } catch (IOException ex) {
+                if (ex instanceof FilerException) {
+                    if (ex.getMessage().startsWith("Source file already created")) {
+                        // ignore source file already created errors
+                        return null;
+                    }
+                }
                 throw new RuntimeException(ex);
             } finally {
                 if (w != null) {
@@ -503,6 +511,33 @@ public abstract class AbstractCodeWriter extends CodeElementScanner<Void, Void> 
         }
 
         writeModifiers(e.getModifiers(), !e.getEnclosingClass().getModifiers().contains(Modifier.FINAL));
+
+        List<TypeParameterElement> typeParameters = e.getTypeParameters();
+        if (!typeParameters.isEmpty()) {
+            write("<");
+            for (int i = 0; i < typeParameters.size(); i++) {
+                TypeParameterElement param = typeParameters.get(i);
+                write(param.getSimpleName().toString());
+                List<? extends TypeMirror> bounds = param.getBounds();
+                if (!bounds.isEmpty()) {
+                    write(" extends ");
+                    for (int j = 0; j < bounds.size(); j++) {
+                        TypeMirror bound = bounds.get(i);
+                        write(useImport(e, bound));
+                        if (j < bounds.size() - 1) {
+                            write(" ");
+                            write(", ");
+                        }
+                    }
+                }
+
+                if (i < typeParameters.size() - 1) {
+                    write(" ");
+                    write(", ");
+                }
+            }
+            write("> ");
+        }
 
         if (e.getReturnType() != null) {
             write(useImport(e, e.getReturnType()));

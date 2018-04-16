@@ -40,8 +40,8 @@
  */
 package com.oracle.truffle.sl.nodes.local;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,25 +52,26 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.FrameSlot;
 import com.oracle.truffle.api.interop.ForeignAccess;
+import com.oracle.truffle.api.interop.KeyInfo;
 import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.MessageResolution;
 import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
-import com.oracle.truffle.api.metadata.ScopeProvider.AbstractScope;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.NodeUtil;
 import com.oracle.truffle.api.nodes.NodeVisitor;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.sl.nodes.SLEvalRootNode;
 import com.oracle.truffle.sl.nodes.SLStatementNode;
 import com.oracle.truffle.sl.nodes.controlflow.SLBlockNode;
-import com.oracle.truffle.sl.runtime.SLBigNumber;
+import com.oracle.truffle.sl.runtime.SLNull;
 
 /**
  * Simple language lexical scope. There can be a block scope, or function scope.
  */
-public final class SLLexicalScope extends AbstractScope {
+public final class SLLexicalScope {
 
     private final Node current;
     private final SLBlockNode block;
@@ -81,7 +82,7 @@ public final class SLLexicalScope extends AbstractScope {
 
     /**
      * Create a new block SL lexical scope.
-     * 
+     *
      * @param current the current node
      * @param block a nearest block enclosing the current node
      * @param parentBlock a next parent block
@@ -95,7 +96,7 @@ public final class SLLexicalScope extends AbstractScope {
 
     /**
      * Create a new functional SL lexical scope.
-     * 
+     *
      * @param current the current node, or <code>null</code> when it would be above the block
      * @param block a nearest block enclosing the current node
      * @param root a functional root node for top-most block
@@ -115,7 +116,8 @@ public final class SLLexicalScope extends AbstractScope {
             block = findChildrenBlock(node);
             if (block == null) {
                 // Corrupted SL AST, no block was found
-                return null;
+                assert node.getRootNode() instanceof SLEvalRootNode : "Corrupted SL AST under " + node;
+                return new SLLexicalScope(null, null, (SLBlockNode) null);
             }
             node = null; // node is above the block
         }
@@ -159,8 +161,7 @@ public final class SLLexicalScope extends AbstractScope {
         return blockPtr[0];
     }
 
-    @Override
-    protected SLLexicalScope findParent() {
+    public SLLexicalScope findParent() {
         if (parentBlock == null) {
             // This was a root scope.
             return null;
@@ -179,27 +180,9 @@ public final class SLLexicalScope extends AbstractScope {
         return parent;
     }
 
-    private static Object getInteropValue(Object value) {
-        if (value instanceof BigInteger) {
-            return new SLBigNumber((BigInteger) value);
-        } else {
-            return value;
-        }
-    }
-
-    private static Object getRawValue(Object interopValue, Object oldValue) {
-        if (interopValue instanceof SLBigNumber) {
-            if (oldValue instanceof BigInteger) {
-                return ((SLBigNumber) interopValue).getValue();
-            }
-        }
-        return interopValue;
-    }
-
     /**
      * @return the function name for function scope, "block" otherwise.
      */
-    @Override
     public String getName() {
         if (root != null) {
             return root.getName();
@@ -212,8 +195,7 @@ public final class SLLexicalScope extends AbstractScope {
      * @return the node representing the scope, the block node for block scopes and the
      *         {@link RootNode} for functional scope.
      */
-    @Override
-    protected Node getNode() {
+    public Node getNode() {
         if (root != null) {
             return root;
         } else {
@@ -221,7 +203,6 @@ public final class SLLexicalScope extends AbstractScope {
         }
     }
 
-    @Override
     public Object getVariables(Frame frame) {
         Map<String, FrameSlot> vars = getVars();
         Object[] args = null;
@@ -232,7 +213,6 @@ public final class SLLexicalScope extends AbstractScope {
         return new VariablesMapObject(vars, args, frame);
     }
 
-    @Override
     public Object getArguments(Frame frame) {
         if (root == null) {
             // No arguments for block scope
@@ -250,9 +230,11 @@ public final class SLLexicalScope extends AbstractScope {
         if (varSlots == null) {
             if (current != null) {
                 varSlots = collectVars(block, current);
-            } else {
+            } else if (block != null) {
                 // Provide the arguments only when the current node is above the block
                 varSlots = collectArgs(block);
+            } else {
+                varSlots = Collections.emptyMap();
             }
         }
         return varSlots;
@@ -272,7 +254,7 @@ public final class SLLexicalScope extends AbstractScope {
         // Variables are slot-based.
         // To collect declared variables, traverse the block's AST and find slots associated
         // with SLWriteLocalVariableNode. The traversal stops when we hit the current node.
-        Map<String, FrameSlot> slots = new LinkedHashMap<>(1 << 2);
+        Map<String, FrameSlot> slots = new LinkedHashMap<>(4);
         NodeUtil.forEachChild(varsBlock, new NodeVisitor() {
             @Override
             public boolean visit(Node node) {
@@ -304,7 +286,7 @@ public final class SLLexicalScope extends AbstractScope {
         // Arguments are pushed to frame slots at the beginning of the function block.
         // To collect argument slots, search for SLReadArgumentNode inside of
         // SLWriteLocalVariableNode.
-        Map<String, FrameSlot> args = new LinkedHashMap<>(1 << 2);
+        Map<String, FrameSlot> args = new LinkedHashMap<>(4);
         NodeUtil.forEachChild(block, new NodeVisitor() {
 
             private SLWriteLocalVariableNode wn; // The current write node containing a slot
@@ -358,6 +340,15 @@ public final class SLLexicalScope extends AbstractScope {
         @MessageResolution(receiverType = VariablesMapObject.class)
         static final class VariablesMapMessageResolution {
 
+            @Resolve(message = "HAS_KEYS")
+            abstract static class VarsMapHasKeysNode extends Node {
+
+                public Object access(VariablesMapObject varMap) {
+                    assert varMap != null;
+                    return true;
+                }
+            }
+
             @Resolve(message = "KEYS")
             abstract static class VarsMapKeysNode extends Node {
 
@@ -367,13 +358,29 @@ public final class SLLexicalScope extends AbstractScope {
                 }
             }
 
+            @Resolve(message = "KEY_INFO")
+            abstract static class KeyInfoNode extends Node {
+
+                @TruffleBoundary
+                public int access(VariablesMapObject varMap, String name) {
+                    if (varMap.frame == null) {
+                        return KeyInfo.READABLE;
+                    }
+                    FrameSlot slot = varMap.slots.get(name);
+                    if (slot != null) {
+                        return KeyInfo.READABLE | KeyInfo.MODIFIABLE;
+                    }
+                    return KeyInfo.NONE;
+                }
+            }
+
             @Resolve(message = "READ")
             abstract static class VarsMapReadNode extends Node {
 
                 @TruffleBoundary
                 public Object access(VariablesMapObject varMap, String name) {
                     if (varMap.frame == null) {
-                        throw UnsupportedMessageException.raise(Message.READ);
+                        return SLNull.SINGLETON;
                     }
                     FrameSlot slot = varMap.slots.get(name);
                     if (slot == null) {
@@ -385,7 +392,7 @@ public final class SLLexicalScope extends AbstractScope {
                         } else {
                             value = varMap.frame.getValue(slot);
                         }
-                        return getInteropValue(value);
+                        return value;
                     }
                 }
             }
@@ -403,17 +410,14 @@ public final class SLLexicalScope extends AbstractScope {
                         throw UnknownIdentifierException.raise(name);
                     } else {
                         if (varMap.args != null && varMap.args.length > slot.getIndex()) {
-                            Object valueOld = varMap.args[slot.getIndex()];
-                            varMap.args[slot.getIndex()] = getRawValue(value, valueOld);
+                            varMap.args[slot.getIndex()] = value;
                         } else {
-                            Object valueOld = varMap.frame.getValue(slot);
-                            varMap.frame.setObject(slot, getRawValue(value, valueOld));
+                            varMap.frame.setObject(slot, value);
                         }
                         return value;
                     }
                 }
             }
-
         }
     }
 

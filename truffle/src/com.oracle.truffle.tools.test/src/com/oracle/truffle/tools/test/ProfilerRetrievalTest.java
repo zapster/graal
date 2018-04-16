@@ -32,23 +32,32 @@ import org.graalvm.options.OptionKey;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.Value;
-
 import org.junit.Assert;
 import org.junit.Test;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.InstrumentInfo;
+import com.oracle.truffle.api.Scope;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
-import com.oracle.truffle.tools.Profiler;
+import com.oracle.truffle.api.interop.ForeignAccess;
+import com.oracle.truffle.api.interop.KeyInfo;
+import com.oracle.truffle.api.interop.MessageResolution;
+import com.oracle.truffle.api.interop.Resolve;
+import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.tools.*;
 
 /**
  * Test that languages and other instruments are able to retrieve the Profiler instance.
  */
+@SuppressWarnings({"deprecation"})
 public class ProfilerRetrievalTest {
 
     @Test
     public void testFromLanguage() {
-        Value profilerValue = Context.create(LanguageThatNeedsProfiler.ID).lookup(LanguageThatNeedsProfiler.ID, "profiler");
+        Value profilerValue = Context.create(LanguageThatNeedsProfiler.ID).getBindings(LanguageThatNeedsProfiler.ID).getMember("profiler");
         Assert.assertTrue(profilerValue.asBoolean());
     }
 
@@ -74,13 +83,70 @@ public class ProfilerRetrievalTest {
         }
 
         @Override
-        protected Object getLanguageGlobal(Profiler context) {
-            return null;
+        protected Iterable<Scope> findTopScopes(Profiler context) {
+            return Collections.singleton(Scope.newBuilder("Profiler top scope", new TopScopeObject(context)).build());
         }
 
-        @Override
-        protected Object lookupSymbol(Profiler context, String symbolName) {
-            return "profiler".equals(symbolName) && context != null;
+        static final class TopScopeObject implements TruffleObject {
+
+            private final Profiler context;
+
+            private TopScopeObject(Profiler context) {
+                this.context = context;
+            }
+
+            @Override
+            public ForeignAccess getForeignAccess() {
+                return TopScopeObjectMessageResolutionForeign.ACCESS;
+            }
+
+            public static boolean isInstance(TruffleObject obj) {
+                return obj instanceof TopScopeObject;
+            }
+
+            @MessageResolution(receiverType = TopScopeObject.class)
+            static class TopScopeObjectMessageResolution {
+
+                @Resolve(message = "KEY_INFO")
+                abstract static class VarsMapInfoNode extends Node {
+
+                    /**
+                     * @param ts
+                     * @param name
+                     */
+                    public Object access(TopScopeObject ts, String name) {
+                        if ("profiler".equals(name)) {
+                            return KeyInfo.READABLE;
+                        } else {
+                            return 0;
+                        }
+                    }
+                }
+
+                @Resolve(message = "HAS_KEYS")
+                abstract static class HasKeysNode extends Node {
+
+                    /**
+                     * @param ts
+                     */
+                    public Object access(TopScopeObject ts) {
+                        return true;
+                    }
+                }
+
+                @Resolve(message = "READ")
+                abstract static class VarsMapReadNode extends Node {
+
+                    @CompilerDirectives.TruffleBoundary
+                    public Object access(TopScopeObject ts, String name) {
+                        if ("profiler".equals(name)) {
+                            return ts.context != null;
+                        } else {
+                            throw UnknownIdentifierException.raise(name);
+                        }
+                    }
+                }
+            }
         }
 
         @Override

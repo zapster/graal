@@ -37,6 +37,7 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic.Kind;
 
+import com.oracle.truffle.api.dsl.Executed;
 import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.NodeChildren;
@@ -128,12 +129,12 @@ public class TruffleProcessor extends AbstractProcessor implements ProcessCallba
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public Set<String> getSupportedAnnotationTypes() {
         Set<String> annotations = new HashSet<>();
         addAnnotations(annotations, Arrays.asList(Fallback.class, TypeSystemReference.class,
-                        com.oracle.truffle.api.dsl.ShortCircuit.class, Specialization.class,
+                        Specialization.class,
+                        Executed.class,
                         NodeChild.class,
                         NodeChildren.class));
         addAnnotations(annotations, Arrays.asList(TypeSystem.class));

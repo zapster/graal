@@ -58,9 +58,13 @@ class OptionValuesImpl implements OptionValues {
 
     public void putAll(Map<String, String> providedValues) {
         for (String key : providedValues.keySet()) {
-            OptionDescriptor descriptor = findDescriptor(key);
-            values.put(descriptor.getKey(), descriptor.getKey().getType().convert(providedValues.get(key)));
+            put(key, providedValues.get(key));
         }
+    }
+
+    public void put(String key, String value) {
+        OptionDescriptor descriptor = findDescriptor(key);
+        values.put(descriptor.getKey(), descriptor.getKey().getType().convert(value));
     }
 
     private OptionValuesImpl(OptionValuesImpl copy) {
@@ -95,6 +99,11 @@ class OptionValuesImpl implements OptionValues {
     public <T> void set(OptionKey<T> optionKey, T value) {
         optionKey.getType().validate(value);
         values.put(optionKey, value);
+    }
+
+    @Override
+    public boolean hasSetOptions() {
+        return !values.isEmpty();
     }
 
     private OptionDescriptor findDescriptor(String key) {

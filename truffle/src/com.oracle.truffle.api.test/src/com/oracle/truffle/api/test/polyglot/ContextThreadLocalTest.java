@@ -36,7 +36,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.oracle.truffle.api.CallTarget;
-import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
@@ -44,6 +43,7 @@ import com.oracle.truffle.api.nodes.RootNode;
 public class ContextThreadLocalTest {
 
     private static final String CLASS_NAME = "com.oracle.truffle.api.vm.ContextThreadLocal";
+    private static final String CONTEXT_CLASS = "com.oracle.truffle.api.vm.PolyglotContextImpl";
 
     @Before
     public void setup() {
@@ -53,8 +53,16 @@ public class ContextThreadLocalTest {
     @SuppressWarnings("unchecked")
     private static ThreadLocal<Object> createContextThreadLocal() {
         try {
-            Class<ThreadLocal<Object>> clazz = (Class<ThreadLocal<Object>>) Class.forName(CLASS_NAME);
-            Constructor<ThreadLocal<Object>> constructor = clazz.getDeclaredConstructor();
+            return (ThreadLocal<Object>) createDefaultInstance(CLASS_NAME);
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static Object createDefaultInstance(String className) {
+        try {
+            Class<?> clazz = Class.forName(className);
+            Constructor<?> constructor = clazz.getDeclaredConstructor();
             constructor.setAccessible(true);
             return constructor.newInstance();
         } catch (Exception e) {
@@ -63,7 +71,7 @@ public class ContextThreadLocalTest {
     }
 
     private static Object createContext() {
-        return new Object();
+        return createDefaultInstance(CONTEXT_CLASS);
     }
 
     Object setReturnParent(ThreadLocal<Object> tl, Object value) {
@@ -139,7 +147,7 @@ public class ContextThreadLocalTest {
     }
 
     @Test
-    public void testConstantContext() {
+    public void testCompilation() {
         ThreadLocal<Object> tl = createContextThreadLocal();
 
         Object context1 = createContext();
@@ -148,7 +156,6 @@ public class ContextThreadLocalTest {
             @Override
             public Object execute(VirtualFrame frame) {
                 Object result = tl.get();
-                CompilerAsserts.partialEvaluationConstant(result);
                 return result;
             }
         });

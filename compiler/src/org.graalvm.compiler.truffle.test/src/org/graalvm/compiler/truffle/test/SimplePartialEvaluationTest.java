@@ -23,9 +23,10 @@
 package org.graalvm.compiler.truffle.test;
 
 import org.graalvm.compiler.code.SourceStackTraceBailoutException;
+import org.graalvm.compiler.core.common.GraalOptions;
 import org.graalvm.compiler.replacements.PEGraphDecoder;
-import org.graalvm.compiler.truffle.OptimizedCallTarget;
-import org.graalvm.compiler.truffle.TruffleCompilerOptions;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions;
+import org.graalvm.compiler.truffle.runtime.OptimizedCallTarget;
 import org.graalvm.compiler.truffle.test.nodes.AbstractTestNode;
 import org.graalvm.compiler.truffle.test.nodes.AddTestNode;
 import org.graalvm.compiler.truffle.test.nodes.BlockTestNode;
@@ -92,7 +93,7 @@ public class SimplePartialEvaluationTest extends PartialEvaluationTest {
             // Expected verification error occurred.
             StackTraceElement[] trace = t.getStackTrace();
             assertStack(trace[0], "org.graalvm.compiler.truffle.test.nodes.NeverPartOfCompilationTestNode", "execute", "NeverPartOfCompilationTestNode.java");
-            if (!truffleCompiler.getPartialEvaluator().getConfigForParsing().trackNodeSourcePosition()) {
+            if (!truffleCompiler.getPartialEvaluator().getConfigForParsing().trackNodeSourcePosition() && !GraalOptions.TrackNodeSourcePosition.getValue(getInitialOptions())) {
                 assertStack(trace[1], "org.graalvm.compiler.truffle.test.nodes.RootTestNode", "execute", "RootTestNode.java");
             } else {
                 // When NodeSourcePosition tracking is enabled, a smaller stack trace is produced

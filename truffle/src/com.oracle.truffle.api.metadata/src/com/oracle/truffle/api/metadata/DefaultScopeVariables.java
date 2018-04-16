@@ -42,14 +42,14 @@ import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
-import com.oracle.truffle.api.metadata.ScopeProvider.AbstractScope;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 
 /**
  * A default frame slot based implementation of variables contained in the (default) frame scope.
  */
-final class DefaultScopeVariables extends AbstractScope {
+@SuppressWarnings({"deprecation", "all"})
+final class DefaultScopeVariables extends com.oracle.truffle.api.metadata.ScopeProvider.AbstractScope {
 
     private final RootNode root;
 
@@ -116,11 +116,11 @@ final class DefaultScopeVariables extends AbstractScope {
         } else {
             args = frame.getArguments();
         }
-        return new ArguentsArrayObject(args);
+        return new ArgumentsArrayObject(args);
     }
 
     @Override
-    protected AbstractScope findParent() {
+    protected com.oracle.truffle.api.metadata.ScopeProvider.AbstractScope findParent() {
         return null;
     }
 
@@ -145,6 +145,14 @@ final class DefaultScopeVariables extends AbstractScope {
 
         @MessageResolution(receiverType = VariablesMapObject.class)
         static class VariablesMapMessageResolution {
+
+            @Resolve(message = "HAS_KEYS")
+            abstract static class VarsMapHasKeysNode extends Node {
+
+                public Object access(VariablesMapObject varMap) {
+                    return true;
+                }
+            }
 
             @Resolve(message = "KEYS")
             abstract static class VarsMapKeysNode extends Node {
@@ -216,7 +224,6 @@ final class DefaultScopeVariables extends AbstractScope {
             @Resolve(message = "HAS_SIZE")
             abstract static class VarNamesHasSizeNode extends Node {
 
-                @SuppressWarnings("unused")
                 public Object access(VariableNamesObject varNames) {
                     return true;
                 }
@@ -246,31 +253,30 @@ final class DefaultScopeVariables extends AbstractScope {
         }
     }
 
-    static final class ArguentsArrayObject implements TruffleObject {
+    static final class ArgumentsArrayObject implements TruffleObject {
 
         final Object[] args;
 
-        ArguentsArrayObject(Object[] args) {
+        ArgumentsArrayObject(Object[] args) {
             this.args = args;
         }
 
         @Override
         public ForeignAccess getForeignAccess() {
-            return ArguentsArrayMessageResolutionForeign.ACCESS;
+            return ArgumentsArrayMessageResolutionForeign.ACCESS;
         }
 
         public static boolean isInstance(TruffleObject obj) {
-            return obj instanceof ArguentsArrayObject;
+            return obj instanceof ArgumentsArrayObject;
         }
 
-        @MessageResolution(receiverType = ArguentsArrayObject.class)
-        static final class ArguentsArrayMessageResolution {
+        @MessageResolution(receiverType = ArgumentsArrayObject.class)
+        static final class ArgumentsArrayMessageResolution {
 
             @Resolve(message = "HAS_SIZE")
             abstract static class ArgsArrHasSizeNode extends Node {
 
-                @SuppressWarnings("unused")
-                public Object access(ArguentsArrayObject argsArr) {
+                public Object access(ArgumentsArrayObject argsArr) {
                     return true;
                 }
             }
@@ -278,7 +284,7 @@ final class DefaultScopeVariables extends AbstractScope {
             @Resolve(message = "GET_SIZE")
             abstract static class ArgsArrGetSizeNode extends Node {
 
-                public Object access(ArguentsArrayObject argsArr) {
+                public Object access(ArgumentsArrayObject argsArr) {
                     return argsArr.args.length;
                 }
             }
@@ -287,7 +293,7 @@ final class DefaultScopeVariables extends AbstractScope {
             abstract static class ArgsArrReadNode extends Node {
 
                 @TruffleBoundary
-                public Object access(ArguentsArrayObject argsArr, int index) {
+                public Object access(ArgumentsArrayObject argsArr, int index) {
                     try {
                         return argsArr.args[index];
                     } catch (IndexOutOfBoundsException ioob) {
@@ -300,7 +306,7 @@ final class DefaultScopeVariables extends AbstractScope {
             abstract static class ArgsArrWriteNode extends Node {
 
                 @TruffleBoundary
-                public Object access(ArguentsArrayObject argsArr, int index, Object value) {
+                public Object access(ArgumentsArrayObject argsArr, int index, Object value) {
                     try {
                         argsArr.args[index] = value;
                         return value;

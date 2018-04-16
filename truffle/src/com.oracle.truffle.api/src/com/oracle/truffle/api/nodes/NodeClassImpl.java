@@ -75,7 +75,7 @@ final class NodeClassImpl extends NodeClass {
             }
 
             private int order(NodeFieldAccessor nodeField) {
-                return isChildField(nodeField) ? 0 : (isChildrenField(nodeField) ? 1 : (isCloneableField(nodeField) ? 2 : 3));
+                return isChildField(nodeField) ? 0 : (isChildrenField(nodeField) ? 0 : (isCloneableField(nodeField) ? 1 : 2));
             }
         });
 
@@ -126,9 +126,6 @@ final class NodeClassImpl extends NodeClass {
     private static void checkChildrenField(Field field) {
         if (!(field.getType().isArray() && isNodeType(field.getType().getComponentType()))) {
             throw new AssertionError("@Children field type must be an array of a subclass of Node or an interface extending NodeInterface (" + field + ")");
-        }
-        if (!Modifier.isFinal(field.getModifiers())) {
-            throw new AssertionError("@Children field must be final (" + field + ")");
         }
     }
 

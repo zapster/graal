@@ -23,22 +23,36 @@
 package com.oracle.truffle.api.test.polyglot;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.graalvm.options.OptionDescriptor;
+import org.graalvm.options.OptionDescriptors;
+import org.graalvm.options.OptionKey;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.PolyglotException;
@@ -48,12 +62,26 @@ import org.junit.Test;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.Scope;
+import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleContext;
 import com.oracle.truffle.api.TruffleException;
+import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleLanguage.Env;
+import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.interop.ForeignAccess;
+import com.oracle.truffle.api.interop.KeyInfo;
+import com.oracle.truffle.api.interop.Message;
+import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.interop.UnsupportedTypeException;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.source.SourceSection;
 import com.oracle.truffle.api.test.polyglot.LanguageSPITestLanguage.LanguageContext;
+import java.util.Objects;
 
 public class LanguageSPITest {
 
@@ -219,6 +247,35 @@ public class LanguageSPITest {
         }
     }
 
+    @SuppressWarnings("serial")
+    private static final class ParseException extends RuntimeException implements TruffleException {
+        private final Source source;
+        private final int start;
+        private final int length;
+
+        ParseException(final Source source, final int start, final int length) {
+            Objects.requireNonNull(source, "Source must be non null");
+            this.source = source;
+            this.start = start;
+            this.length = length;
+        }
+
+        @Override
+        public boolean isSyntaxError() {
+            return true;
+        }
+
+        @Override
+        public Node getLocation() {
+            return null;
+        }
+
+        @Override
+        public SourceSection getSourceLocation() {
+            return source.createSection(start, length);
+        }
+    }
+
     @Test
     public void testCancelExecutionWhileSleeping() throws InterruptedException {
         ExecutorService service = Executors.newFixedThreadPool(1);
@@ -307,6 +364,20 @@ public class LanguageSPITest {
     }
 
     @Test
+    public void testLookupHostArray() {
+        Context context = Context.newBuilder().allowHostAccess(true).build();
+        Value value = eval(context, new Function<Env, Object>() {
+            public Object apply(Env t) {
+                return t.lookupHostSymbol("java.lang.String[]");
+            }
+        });
+        assertTrue(value.isHostObject());
+        Object map = value.asHostObject();
+        assertSame(map, String[].class);
+        context.close();
+    }
+
+    @Test
     public void testLookupHostDisabled() {
         Context context = Context.newBuilder().allowHostAccess(false).build();
         try {
@@ -358,10 +429,14 @@ public class LanguageSPITest {
                     boolean assertions = false;
                     assert (assertions = true) == true;
                     if (assertions) {
+                        boolean leaveFailed = false;
                         try {
                             innerContext.leave("foo");
-                            fail("no assertion error for leaving with the wrong object");
                         } catch (AssertionError e) {
+                            leaveFailed = true;
+                        }
+                        if (!leaveFailed) {
+                            fail("no assertion error for leaving with the wrong object");
                         }
                     }
                 } finally {
@@ -385,6 +460,73 @@ public class LanguageSPITest {
         eval(context, f);
 
         // ensure we are not yet closed
+        eval(context, f);
+        context.close();
+    }
+
+    @Test
+    public void testTruffleContext() {
+        Context context = Context.create();
+        Function<Env, Object> f = new Function<Env, Object>() {
+            public Object apply(Env env) {
+                boolean assertions = false;
+                assert (assertions = true) == true;
+                if (!assertions) {
+                    fail("Tests must be run with assertions on");
+                }
+                LanguageSPITestLanguage.runinside = null; // No more recursive runs inside
+                Throwable[] error = new Throwable[1];
+                Thread thread = new Thread(() -> {
+                    try {
+                        Source source = Source.newBuilder("").language(LanguageSPITestLanguage.ID).name("s").build();
+                        boolean parsingFailed = false;
+                        try {
+                            // execute Truffle code in a fresh thread fails
+                            env.parse(source).call();
+                        } catch (AssertionError e) {
+                            // No current context available.
+                            parsingFailed = true;
+                        }
+                        if (!parsingFailed) {
+                            fail("no assertion error \"No current context available.\"");
+                        }
+
+                        TruffleContext truffleContext = env.getContext();
+                        // attach the Thread
+                        Object prev = truffleContext.enter();
+                        try {
+                            // execute Truffle code
+                            env.parse(source).call();
+                        } finally {
+                            // detach the Thread
+                            truffleContext.leave(prev);
+                        }
+                    } catch (Throwable t) {
+                        error[0] = t;
+                    }
+                });
+                thread.start();
+                try {
+                    thread.join();
+                } catch (InterruptedException ex) {
+                    throw new RuntimeException(ex);
+                }
+                if (error[0] != null) {
+                    throw new AssertionError(error[0]);
+                }
+                boolean leaveFailed = false;
+                try {
+                    TruffleContext truffleContext = env.getContext();
+                    truffleContext.leave(null);
+                } catch (AssertionError e) {
+                    leaveFailed = true;
+                }
+                if (!leaveFailed) {
+                    fail("no assertion error for leaving without enter");
+                }
+                return null;
+            }
+        };
         eval(context, f);
         context.close();
     }
@@ -427,4 +569,806 @@ public class LanguageSPITest {
         context.close();
     }
 
+    @Test
+    public void testLazyInit() {
+        LanguageSPITestLanguage.instanceCount.set(0);
+        Context context = Context.create();
+        assertEquals(0, LanguageSPITestLanguage.instanceCount.get());
+        context.initialize(LanguageSPITestLanguage.ID);
+        assertEquals(1, LanguageSPITestLanguage.instanceCount.get());
+        context.close();
+    }
+
+    @Test
+    public void testLazyInitSharedEngine() {
+        LanguageSPITestLanguage.instanceCount.set(0);
+        Engine engine = Engine.create();
+        Context context1 = Context.newBuilder().engine(engine).build();
+        Context context2 = Context.newBuilder().engine(engine).build();
+        assertEquals(0, LanguageSPITestLanguage.instanceCount.get());
+        context1.initialize(LanguageSPITestLanguage.ID);
+        context2.initialize(LanguageSPITestLanguage.ID);
+        assertEquals(1, LanguageSPITestLanguage.instanceCount.get());
+        context1.close();
+        context2.close();
+    }
+
+    @Test
+    public void testErrorInCreateContext() {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected LanguageContext createContext(com.oracle.truffle.api.TruffleLanguage.Env env) {
+                throw new RuntimeException();
+            }
+        });
+        testFails((c) -> c.initialize(ProxyLanguage.ID));
+    }
+
+    @Test
+    public void testErrorInInitializeContext() {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected void initializeContext(LanguageContext context) throws Exception {
+                throw new RuntimeException();
+            }
+        });
+        testFails((c) -> c.initialize(ProxyLanguage.ID));
+    }
+
+    @Test
+    public void testErrorInInitializeThread() {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected void initializeThread(LanguageContext context, Thread thread) {
+                throw new RuntimeException();
+            }
+        });
+        testFails((c) -> c.initialize(ProxyLanguage.ID));
+    }
+
+    @Test
+    public void testErrorInDisposeLanguage() {
+        AtomicBoolean fail = new AtomicBoolean(true);
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+
+            @Override
+            protected void disposeContext(LanguageContext context) {
+                if (fail.get()) {
+                    throw new RuntimeException();
+                }
+            }
+        });
+
+        Context c = Context.create();
+        c.initialize(ProxyLanguage.ID);
+        testFails(() -> {
+            c.close();
+        });
+        testFails(() -> {
+            c.close();
+        });
+
+        // clean up the context
+        fail.set(false);
+        c.close();
+    }
+
+    @Test
+    public void testErrorInParse() {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected CallTarget parse(com.oracle.truffle.api.TruffleLanguage.ParsingRequest request) throws Exception {
+                throw new RuntimeException();
+            }
+        });
+        Context c = Context.create();
+        c.initialize(ProxyLanguage.ID);
+        testFails(() -> c.eval(ProxyLanguage.ID, "t0"));
+        testFails(() -> c.eval(ProxyLanguage.ID, "t1"));
+        c.close();
+    }
+
+    @Test
+    public void testErrorInFindMetaObject() {
+        final TruffleObject testObject = new TruffleObject() {
+            @Override
+            public ForeignAccess getForeignAccess() {
+                return null;
+            }
+        };
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+
+            @Override
+            protected Object findMetaObject(LanguageContext context, Object value) {
+                throw new RuntimeException();
+            }
+
+            @Override
+            protected CallTarget parse(com.oracle.truffle.api.TruffleLanguage.ParsingRequest request) throws Exception {
+                return Truffle.getRuntime().createCallTarget(RootNode.createConstantNode(testObject));
+            }
+
+            @Override
+            protected boolean isObjectOfLanguage(Object object) {
+                return object == testObject;
+            }
+        });
+        Context c = Context.create();
+        Value v = c.eval(ProxyLanguage.ID, "");
+        testFails(() -> v.getMetaObject());
+        testFails(() -> v.getMetaObject());
+        c.close();
+    }
+
+    @Test
+    @SuppressWarnings("all")
+    public void testLazyOptionInit() {
+        AtomicInteger getOptionDescriptors = new AtomicInteger(0);
+        AtomicInteger iterator = new AtomicInteger(0);
+        AtomicInteger get = new AtomicInteger(0);
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+
+            final OptionKey<String> option = new OptionKey<>("");
+            final List<OptionDescriptor> descriptors;
+            {
+                descriptors = new ArrayList<>();
+                descriptors.add(OptionDescriptor.newBuilder(option, ProxyLanguage.ID + ".option").build());
+            }
+
+            @Override
+            protected OptionDescriptors getOptionDescriptors() {
+                getOptionDescriptors.incrementAndGet();
+                return new OptionDescriptors() {
+
+                    public Iterator<OptionDescriptor> iterator() {
+                        iterator.incrementAndGet();
+                        return descriptors.iterator();
+                    }
+
+                    public OptionDescriptor get(String optionName) {
+                        get.incrementAndGet();
+                        for (OptionDescriptor optionDescriptor : descriptors) {
+                            if (optionDescriptor.getName().equals(optionName)) {
+                                return optionDescriptor;
+                            }
+                        }
+                        return null;
+                    }
+                };
+            }
+        });
+        Context c = Context.create();
+        c.close();
+        assertEquals(0, getOptionDescriptors.get());
+        assertEquals(0, iterator.get());
+        assertEquals(0, get.get());
+
+        c = Context.newBuilder(ProxyLanguage.ID).option(ProxyLanguage.ID + ".option", "foobar").build();
+        assertEquals(1, getOptionDescriptors.get());
+        assertEquals(1, get.get());
+        boolean assertionsEnabled = false;
+        assert assertionsEnabled = true;
+        if (assertionsEnabled) {
+            // with assertions enabled we assert the options.
+            assertEquals(1, iterator.get());
+        } else {
+            // for valid options we should not need the iterator
+            assertEquals(0, iterator.get());
+        }
+        c.close();
+
+        // test lazyness when using meta-data
+        getOptionDescriptors.set(0);
+        iterator.set(0);
+        get.set(0);
+
+        c = Context.create();
+        OptionDescriptors descriptors = c.getEngine().getLanguages().get(ProxyLanguage.ID).getOptions();
+        assertEquals(1, getOptionDescriptors.get());
+        if (assertionsEnabled) {
+            // with assertions enabled we assert the options.
+            assertEquals(1, iterator.get());
+        } else {
+            // for valid options we should not need the iterator
+            assertEquals(0, iterator.get());
+        }
+        assertEquals(0, get.get());
+
+        for (OptionDescriptor descriptor : descriptors) {
+        }
+        assertEquals(1, getOptionDescriptors.get());
+        if (assertionsEnabled) {
+            // with assertions enabled we assert the options.
+            assertEquals(2, iterator.get());
+        } else {
+            // for valid options we should not need the iterator
+            assertEquals(1, iterator.get());
+        }
+        assertEquals(0, get.get());
+
+        assertNotNull(descriptors.get(ProxyLanguage.ID + ".option"));
+
+        assertEquals(1, getOptionDescriptors.get());
+        assertEquals(1, get.get());
+
+        c.close();
+    }
+
+    @SuppressWarnings("deprecation")
+    @Test
+    public void testExportSymbolInCreate() {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected LanguageContext createContext(com.oracle.truffle.api.TruffleLanguage.Env env) {
+                env.exportSymbol("symbol", env.asGuestValue(env));
+                return super.createContext(env);
+            }
+
+        });
+        Context c = Context.create();
+        c.initialize(ProxyLanguage.ID);
+        assertTrue(c.importSymbol("symbol").isHostObject());
+        c.close();
+    }
+
+    @Test
+    public void testCreateContextDuringDispose() {
+        AtomicBoolean contextOnFinalize = new AtomicBoolean(true);
+        AtomicBoolean contextOnDispose = new AtomicBoolean(false);
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+
+            @Override
+            protected LanguageContext createContext(Env env) {
+                return new LanguageContext(env);
+            }
+
+            @Override
+            protected void finalizeContext(LanguageContext context) {
+                if (contextOnFinalize.get()) {
+                    context.env.newContextBuilder().build();
+                }
+            }
+
+            @Override
+            protected void disposeContext(LanguageContext context) {
+                if (contextOnDispose.get()) {
+                    context.env.newContextBuilder().build();
+                }
+            }
+        });
+
+        Context c = Context.create();
+        c.initialize(ProxyLanguage.ID);
+        // Fails on finalize
+        testFails(() -> {
+            c.close();
+        });
+        contextOnFinalize.set(false);
+        contextOnDispose.set(true);
+        // Fails on dispose
+        testFails(() -> {
+            c.close();
+        });
+
+        // clean up the context
+        contextOnDispose.set(false);
+        c.close();
+    }
+
+    @Test
+    public void testCreateThreadDuringDispose() {
+        AtomicBoolean contextOnFinalize = new AtomicBoolean(true);
+        AtomicBoolean contextOnDispose = new AtomicBoolean(false);
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+
+            @Override
+            protected LanguageContext createContext(Env env) {
+                return new LanguageContext(env);
+            }
+
+            @Override
+            protected void finalizeContext(LanguageContext context) {
+                if (contextOnFinalize.get()) {
+                    context.env.createThread(() -> {
+                    }).start();
+                }
+            }
+
+            @Override
+            protected void disposeContext(LanguageContext context) {
+                if (contextOnDispose.get()) {
+                    context.env.createThread(() -> {
+                    }).start();
+                }
+            }
+        });
+
+        Context c = Context.create();
+        c.initialize(ProxyLanguage.ID);
+        // Fails on finalize
+        testFails(() -> {
+            c.close();
+        });
+        contextOnFinalize.set(false);
+        contextOnDispose.set(true);
+        // Fails on dispose
+        testFails(() -> {
+            c.close();
+        });
+
+        // clean up the context
+        contextOnDispose.set(false);
+        c.close();
+    }
+
+    @Test
+    public void testExceptionGetSourceLocation() {
+        try (Context context = Context.create(LanguageSPITestLanguage.ID)) {
+            final String text = "0123456789";
+            LanguageSPITestLanguage.runinside = (env) -> {
+                Source src = Source.newBuilder(text).mimeType(LanguageSPITestLanguage.ID).name("test.txt").build();
+                throw new ParseException(src, 1, 2);
+            };
+            try {
+                context.eval(LanguageSPITestLanguage.ID, text);
+                Assert.fail("PolyglotException expected.");
+            } catch (PolyglotException pe) {
+                Assert.assertTrue(pe.isSyntaxError());
+                Assert.assertEquals("12", pe.getSourceLocation().getCharacters().toString());
+            } finally {
+                LanguageSPITestLanguage.runinside = null;
+            }
+        }
+    }
+
+    private static void testFails(Runnable consumer) {
+        try {
+            consumer.run();
+            fail();
+        } catch (PolyglotException e) {
+            assertTrue(e.isInternalError());
+            assertFalse(e.isHostException()); // should not expose internal errors
+        }
+    }
+
+    private static void testFails(Consumer<Context> consumer) {
+        Context context = Context.create();
+        testFails(() -> consumer.accept(context));
+        context.close();
+    }
+
+    private int findScopeInvokes = 0;
+
+    private void setupTopScopes(Object... scopesArray) {
+        findScopeInvokes = 0;
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected Iterable<Scope> findTopScopes(LanguageContext context) {
+                findScopeInvokes++;
+                List<Scope> scopes = new ArrayList<>();
+                for (int i = 0; i < scopesArray.length; i++) {
+                    Object scope = scopesArray[i];
+                    scopes.add(Scope.newBuilder(String.valueOf(i), scope).build());
+                }
+                return scopes;
+            }
+        });
+    }
+
+    @Test
+    public void testBindingsWithInvalidScopes() {
+        setupTopScopes(new ProxyInteropObject() {
+        });
+        Context c = Context.create();
+        assertEquals(0, findScopeInvokes);
+        testFails(() -> c.getBindings(ProxyLanguage.ID));
+        assertEquals(1, findScopeInvokes);
+        c.close();
+    }
+
+    private static class TestScope extends ProxyInteropObject {
+
+        final Map<String, Object> values = new HashMap<>();
+        boolean modifiable;
+        boolean insertable;
+        boolean removable;
+
+        @Override
+        public boolean hasKeys() {
+            return true;
+        }
+
+        @Override
+        public Object keys() throws UnsupportedMessageException {
+            return new ProxyInteropObject() {
+
+                private final String[] keys = values.keySet().toArray(new String[0]);
+
+                @Override
+                public boolean hasSize() {
+                    return true;
+                }
+
+                @Override
+                public int getSize() {
+                    return keys.length;
+                }
+
+                @Override
+                public Object read(Number key) throws UnsupportedMessageException, UnknownIdentifierException {
+                    return keys[key.intValue()];
+                }
+
+                @Override
+                public int keyInfo(Number key) {
+                    return (key.intValue() < keys.length && key.intValue() >= 0) ? KeyInfo.READABLE : KeyInfo.NONE;
+                }
+
+            };
+        }
+
+        @Override
+        public Object read(String key) throws UnsupportedMessageException, UnknownIdentifierException {
+            if (values.containsKey(key)) {
+                return values.get(key);
+            } else {
+                throw UnknownIdentifierException.raise(key);
+            }
+        }
+
+        @Override
+        public Object write(String key, Object value) throws UnsupportedMessageException, UnknownIdentifierException, UnsupportedTypeException {
+            if (modifiable && values.containsKey(key)) {
+                values.put(key, value);
+                return value;
+            }
+            if (insertable && !values.containsKey(key)) {
+                values.put(key, value);
+                return value;
+            }
+            throw UnsupportedMessageException.raise(Message.WRITE);
+        }
+
+        @Override
+        public boolean remove(String key) throws UnsupportedMessageException, UnknownIdentifierException {
+            if (removable) {
+                if (values.containsKey(key)) {
+                    values.remove(key);
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            return super.remove(key);
+        }
+
+        @Override
+        public int keyInfo(String key) {
+            int keyInfo = KeyInfo.NONE;
+            if (values.containsKey(key)) {
+                keyInfo |= KeyInfo.READABLE;
+                if (modifiable) {
+                    keyInfo |= KeyInfo.MODIFIABLE;
+                }
+                if (removable) {
+                    keyInfo |= KeyInfo.REMOVABLE;
+                }
+            } else {
+                if (insertable) {
+                    keyInfo |= KeyInfo.INSERTABLE;
+                }
+            }
+            return keyInfo;
+        }
+    }
+
+    @Test
+    public void testBindingsWithDefaultScope() {
+        Context c = Context.create();
+        Value bindings = c.getBindings(ProxyLanguage.ID);
+        assertTrue(bindings.hasMembers());
+        assertFalse(bindings.hasMember(""));
+        assertTrue(bindings.getMemberKeys().isEmpty());
+        assertNull(bindings.getMember(""));
+        ValueAssert.assertFails(() -> bindings.putMember("", ""), UnsupportedOperationException.class);
+        assertFalse(bindings.removeMember(""));
+        ValueAssert.assertValue(c, bindings);
+
+        c.close();
+    }
+
+    @Test
+    public void testBindingsWithSimpleScope() {
+        TestScope scope = new TestScope();
+        setupTopScopes(scope);
+        Context c = Context.create();
+        assertEquals(0, findScopeInvokes);
+        Value bindings = c.getBindings(ProxyLanguage.ID);
+        c.getBindings(ProxyLanguage.ID);
+        assertEquals(1, findScopeInvokes);
+
+        scope.values.put("foobar", "baz");
+
+        assertTrue(bindings.hasMembers());
+        assertFalse(bindings.hasMember(""));
+        assertTrue(bindings.hasMember("foobar"));
+        assertEquals(new HashSet<>(Arrays.asList("foobar")), bindings.getMemberKeys());
+        assertNull(bindings.getMember(""));
+        assertEquals("baz", bindings.getMember("foobar").asString());
+        ValueAssert.assertFails(() -> bindings.putMember("", ""), UnsupportedOperationException.class);
+        assertFalse(bindings.removeMember(""));
+        ValueAssert.assertFails(() -> bindings.removeMember("foobar"), UnsupportedOperationException.class);
+        ValueAssert.assertValue(c, bindings, ValueAssert.Trait.MEMBERS);
+
+        scope.insertable = true;
+        bindings.putMember("baz", "42");
+        assertEquals("42", scope.values.get("baz"));
+        assertEquals("42", bindings.getMember("baz").asString());
+        ValueAssert.assertFails(() -> bindings.putMember("foobar", "42"), UnsupportedOperationException.class);
+        ValueAssert.assertValue(c, bindings, ValueAssert.Trait.MEMBERS);
+
+        scope.modifiable = true;
+        bindings.putMember("foobar", "42");
+        assertEquals("42", scope.values.get("foobar"));
+        assertEquals("42", bindings.getMember("foobar").asString());
+        ValueAssert.assertValue(c, bindings, ValueAssert.Trait.MEMBERS);
+
+        scope.removable = true;
+        assertFalse(bindings.removeMember(""));
+        assertTrue(bindings.removeMember("foobar"));
+        ValueAssert.assertValue(c, bindings, ValueAssert.Trait.MEMBERS);
+
+        assertEquals(1, findScopeInvokes);
+
+        c.close();
+    }
+
+    @Test
+    public void testBindingsWithMultipleScopes() {
+        // innermost to outermost
+        TestScope[] scopes = new TestScope[5];
+        for (int i = 0; i < 5; i++) {
+            scopes[i] = new TestScope();
+        }
+        setupTopScopes((Object[]) scopes);
+
+        Context c = Context.create();
+
+        assertEquals(0, findScopeInvokes);
+        Value bindings = c.getBindings(ProxyLanguage.ID);
+        assertEquals(1, findScopeInvokes);
+
+        assertTrue(bindings.hasMembers());
+        assertFalse(bindings.hasMember(""));
+        assertNull(bindings.getMember(""));
+
+        ValueAssert.assertFails(() -> bindings.putMember("foo", "bar"), UnsupportedOperationException.class);
+
+        // test insertion into first insertable scope
+        scopes[1].insertable = true;
+        scopes[2].insertable = true;
+        bindings.putMember("foo", "bar"); // should end up in scope 1
+        assertEquals("bar", bindings.getMember("foo").asString());
+        assertEquals("bar", scopes[1].values.get("foo"));
+        assertNull(scopes[0].values.get("foo"));
+        assertNull(scopes[2].values.get("foo"));
+        ValueAssert.assertValue(c, bindings, ValueAssert.Trait.MEMBERS);
+
+        // test check for existing keys for remove
+        scopes[2].removable = true;
+        scopes[2].values.put("foo", "baz");
+        scopes[2].values.put("bar", "baz");
+        scopes[3].values.put("bar", "42");
+        assertEquals("bar", bindings.getMember("foo").asString());
+        assertEquals("baz", bindings.getMember("bar").asString());
+        ValueAssert.assertFails(() -> bindings.removeMember("foo"), UnsupportedOperationException.class);
+        assertTrue(bindings.removeMember("bar"));
+        assertNotNull(scopes[2].values.get("foo"));
+        assertNull(scopes[2].values.get("bar"));
+        assertEquals("42", bindings.getMember("bar").asString());
+        ValueAssert.assertValue(c, bindings, ValueAssert.Trait.MEMBERS);
+
+        c.close();
+    }
+
+    @Test
+    public void testPolyglotBindings() {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected CallTarget parse(ParsingRequest request) throws Exception {
+                return Truffle.getRuntime().createCallTarget(new RootNode(languageInstance) {
+                    @Override
+                    public Object execute(VirtualFrame frame) {
+                        return getCurrentContext(ProxyLanguage.class).env.getPolyglotBindings();
+                    }
+                });
+            }
+        });
+
+        Context c = Context.create();
+        Value languageBindings = c.eval(ProxyLanguage.ID, "");
+        Value polyglotBindings = c.getPolyglotBindings();
+
+        polyglotBindings.putMember("foo", "bar");
+        assertEquals("bar", polyglotBindings.getMember("foo").asString());
+        assertEquals("bar", languageBindings.getMember("foo").asString());
+
+        languageBindings.putMember("baz", "42");
+        assertEquals("42", polyglotBindings.getMember("baz").asString());
+        assertEquals("42", languageBindings.getMember("baz").asString());
+
+        ValueAssert.assertValue(c, polyglotBindings);
+        ValueAssert.assertValue(c, languageBindings);
+
+        c.close();
+    }
+
+    @Test
+    public void testPolyglotBindingsMultiThreaded() throws InterruptedException, ExecutionException, TimeoutException {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+
+            @Override
+            protected boolean isThreadAccessAllowed(Thread thread, boolean singleThreaded) {
+                return true;
+            }
+
+            @Override
+            protected CallTarget parse(ParsingRequest request) throws Exception {
+                return Truffle.getRuntime().createCallTarget(new RootNode(languageInstance) {
+                    @Override
+                    public Object execute(VirtualFrame frame) {
+                        return getCurrentContext(ProxyLanguage.class).env.getPolyglotBindings();
+                    }
+                });
+            }
+        });
+
+        Context c = Context.create();
+        ExecutorService service = Executors.newFixedThreadPool(20);
+
+        Value languageBindings = c.eval(ProxyLanguage.ID, "");
+        Value polyglotBindings = c.getPolyglotBindings();
+
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (int i = 0; i < 2000; i++) {
+            futures.add(service.submit(() -> {
+                polyglotBindings.putMember("foo", "bar");
+                assertEquals("bar", polyglotBindings.getMember("foo").asString());
+                assertEquals("bar", languageBindings.getMember("foo").asString());
+
+                languageBindings.putMember("baz", "42");
+                assertEquals("42", polyglotBindings.getMember("baz").asString());
+                assertEquals("42", languageBindings.getMember("baz").asString());
+            }));
+        }
+
+        for (Future<?> future : futures) {
+            future.get(100000, TimeUnit.MILLISECONDS);
+        }
+
+        service.shutdown();
+        service.awaitTermination(100000, TimeUnit.MILLISECONDS);
+
+        c.close();
+    }
+
+    @Test
+    public void testPolyglotBindingsPreserveLanguage() {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected CallTarget parse(ParsingRequest request) throws Exception {
+                return Truffle.getRuntime().createCallTarget(new RootNode(languageInstance) {
+                    @Override
+                    public Object execute(VirtualFrame frame) {
+                        Object bindings = getCurrentContext(ProxyLanguage.class).env.getPolyglotBindings();
+                        try {
+                            ForeignAccess.sendWrite(Message.WRITE.createNode(), (TruffleObject) bindings, "exportedValue", "convertOnToString");
+                        } catch (UnknownIdentifierException | UnsupportedTypeException | UnsupportedMessageException e) {
+                            throw new AssertionError(e);
+                        }
+                        return bindings;
+                    }
+                });
+            }
+
+            @Override
+            protected String toString(LanguageContext context, Object value) {
+                if (value.equals("convertOnToString")) {
+                    return "myStringToString";
+                }
+                return super.toString(context, value);
+            }
+        });
+        Context c = Context.create();
+        c.eval(ProxyLanguage.ID, "");
+
+        assertEquals("Make sure language specific toString was invoked.", "myStringToString", c.getPolyglotBindings().getMember("exportedValue").toString());
+    }
+
+    @Test
+    public void testFindSourceLocation() {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected CallTarget parse(TruffleLanguage.ParsingRequest request) throws Exception {
+                return Truffle.getRuntime().createCallTarget(RootNode.createConstantNode(new SourceHolder(request.getSource())));
+            }
+
+            @Override
+            protected SourceSection findSourceLocation(ProxyLanguage.LanguageContext context, Object value) {
+                if (value instanceof SourceHolder) {
+                    final Source src = ((SourceHolder) value).source;
+                    return src.createSection(0, src.getLength());
+                }
+                return super.findSourceLocation(context, value);
+            }
+
+            @Override
+            protected boolean isObjectOfLanguage(Object object) {
+                return object instanceof SourceHolder;
+            }
+        });
+
+        try (Context context = Context.create(ProxyLanguage.ID)) {
+            String text = "01234567";
+            Value res = context.eval(ProxyLanguage.ID, text);
+            assertNotNull(res);
+            org.graalvm.polyglot.SourceSection sourceSection = res.getSourceLocation();
+            assertNotNull(sourceSection);
+            assertTrue(text.contentEquals(sourceSection.getCharacters()));
+            res = context.asValue(new SourceHolder(Source.newBuilder(text).name("test").mimeType(ProxyLanguage.ID).build()));
+            sourceSection = res.getSourceLocation();
+            assertNotNull(sourceSection);
+            assertTrue(text.contentEquals(sourceSection.getCharacters()));
+        }
+    }
+
+    @Test
+    public void testToString() {
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected CallTarget parse(TruffleLanguage.ParsingRequest request) throws Exception {
+                return Truffle.getRuntime().createCallTarget(RootNode.createConstantNode(new SourceHolder(request.getSource())));
+            }
+
+            @Override
+            protected String toString(ProxyLanguage.LanguageContext context, Object value) {
+                if (value instanceof SourceHolder) {
+                    final Source src = ((SourceHolder) value).source;
+                    return src.getCharacters().toString();
+                }
+                return super.toString(context, value);
+            }
+
+            @Override
+            protected boolean isObjectOfLanguage(Object object) {
+                return object instanceof SourceHolder;
+            }
+        });
+
+        try (Context context = Context.create(ProxyLanguage.ID)) {
+            String text = "01234567";
+            Value res = context.eval(ProxyLanguage.ID, text);
+            assertNotNull(res);
+            String toString = res.toString();
+            assertEquals(text, toString);
+            res = context.asValue(new SourceHolder(Source.newBuilder(text).name("test").mimeType(ProxyLanguage.ID).build()));
+            toString = res.toString();
+            assertEquals(text, toString);
+        }
+    }
+
+    private static class SourceHolder implements TruffleObject {
+        final Source source;
+
+        SourceHolder(final Source source) {
+            Objects.requireNonNull(source, "The source must be non null.");
+            this.source = source;
+        }
+
+        @Override
+        public ForeignAccess getForeignAccess() {
+            return null;
+        }
+    }
 }

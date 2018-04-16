@@ -50,7 +50,7 @@ public class DSLExpressionGenerator implements DSLExpressionVisitor {
     private final CodeTree root;
     private final Deque<CodeTree> stack = new ArrayDeque<>();
 
-    public DSLExpressionGenerator(CodeTree root, Map<Variable, CodeTree> bindings) {
+    DSLExpressionGenerator(CodeTree root, Map<Variable, CodeTree> bindings) {
         this.bindings = bindings;
         this.root = root;
     }

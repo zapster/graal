@@ -36,6 +36,7 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
@@ -55,6 +56,7 @@ import javax.tools.Diagnostic.Kind;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.CreateCast;
+import com.oracle.truffle.api.dsl.Executed;
 import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.GenerateNodeFactory;
 import com.oracle.truffle.api.dsl.GeneratedBy;
@@ -64,10 +66,12 @@ import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.NodeChildren;
 import com.oracle.truffle.api.dsl.NodeField;
 import com.oracle.truffle.api.dsl.NodeFields;
+import com.oracle.truffle.api.dsl.ReportPolymorphism;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.dsl.TypeSystemReference;
 import com.oracle.truffle.api.frame.Frame;
-import com.oracle.truffle.api.nodes.NodeInfo;
+import com.oracle.truffle.api.nodes.Node.Child;
+import com.oracle.truffle.api.nodes.Node.Children;
 import com.oracle.truffle.api.nodes.NodeInterface;
 import com.oracle.truffle.dsl.processor.CompileErrorException;
 import com.oracle.truffle.dsl.processor.Log;
@@ -92,21 +96,20 @@ import com.oracle.truffle.dsl.processor.model.NodeExecutionData;
 import com.oracle.truffle.dsl.processor.model.NodeFieldData;
 import com.oracle.truffle.dsl.processor.model.Parameter;
 import com.oracle.truffle.dsl.processor.model.ParameterSpec;
-import com.oracle.truffle.dsl.processor.model.ShortCircuitData;
 import com.oracle.truffle.dsl.processor.model.SpecializationData;
 import com.oracle.truffle.dsl.processor.model.SpecializationData.SpecializationKind;
 import com.oracle.truffle.dsl.processor.model.SpecializationThrowsData;
 import com.oracle.truffle.dsl.processor.model.TemplateMethod;
 import com.oracle.truffle.dsl.processor.model.TypeSystemData;
 
-@SuppressWarnings("deprecation")
-@com.oracle.truffle.api.dsl.internal.DSLOptions
 public class NodeParser extends AbstractParser<NodeData> {
 
     public static final List<Class<? extends Annotation>> ANNOTATIONS = Arrays.asList(Fallback.class, TypeSystemReference.class,
-                    com.oracle.truffle.api.dsl.ShortCircuit.class, Specialization.class,
+                    Specialization.class,
                     NodeChild.class,
-                    NodeChildren.class);
+                    Executed.class,
+                    NodeChildren.class,
+                    ReportPolymorphism.class);
 
     @Override
     protected NodeData parse(Element element, AnnotationMirror mirror) {
@@ -205,13 +208,15 @@ public class NodeParser extends AbstractParser<NodeData> {
         AnnotationMirror reflectable = findFirstAnnotation(lookupTypes, Introspectable.class);
         if (reflectable != null) {
             node.setReflectable(true);
-            if (node.getTypeSystem().getOptions().defaultGenerator() != com.oracle.truffle.api.dsl.internal.DSLOptions.DSLGenerator.FLAT) {
-                node.addError(reflectable, null, "Reflection is not supported by the used DSL layout. Only the flat DSL layout supports reflection.");
-            }
         }
 
+        AnnotationMirror reportPolymorphism = findFirstAnnotation(lookupTypes, ReportPolymorphism.class);
+        AnnotationMirror excludePolymorphism = findFirstAnnotation(lookupTypes, ReportPolymorphism.Exclude.class);
+        if (reportPolymorphism != null && excludePolymorphism == null) {
+            node.setReportPolymorphism(true);
+        }
         node.getFields().addAll(parseFields(lookupTypes, members));
-        node.getChildren().addAll(parseChildren(lookupTypes, members));
+        node.getChildren().addAll(parseChildren(node, lookupTypes, members));
         node.getChildExecutions().addAll(parseExecutions(node.getFields(), node.getChildren(), members));
         node.getExecutableTypes().addAll(parseExecutableTypeData(node, members, node.getSignatureSize(), context.getFrameTypes(), false));
 
@@ -226,7 +231,6 @@ public class NodeParser extends AbstractParser<NodeData> {
         node.getSpecializations().addAll(new SpecializationMethodParser(context, node).parse(members));
         node.getSpecializations().addAll(new FallbackParser(context, node).parse(members));
         node.getCasts().addAll(new CreateCastParser(context, node).parse(members));
-        node.getShortCircuits().addAll(new ShortCircuitParser(context, node).parse(members));
 
         if (node.hasErrors()) {
             return node;  // error sync point
@@ -235,14 +239,80 @@ public class NodeParser extends AbstractParser<NodeData> {
         initializeExecutableTypeHierarchy(node);
 
         verifySpecializationSameLength(node);
-        initializeShortCircuits(node); // requires specializations and polymorphic specializations
-
         verifyVisibilities(node);
         verifyMissingAbstractMethods(node, members);
         verifyConstructors(node);
-        verifyNamingConvention(node.getShortCircuits(), "needs");
         verifySpecializationThrows(node);
         return node;
+    }
+
+    private static void initializeFallbackReachability(NodeData node) {
+        List<SpecializationData> specializations = node.getSpecializations();
+        SpecializationData fallback = null;
+        for (int i = specializations.size() - 1; i >= 0; i--) {
+            SpecializationData specialization = specializations.get(i);
+            if (specialization.isFallback() && specialization.getMethod() != null) {
+                fallback = specialization;
+                break;
+            }
+        }
+
+        if (fallback == null) {
+            // no need to compute reachability
+            return;
+        }
+
+        for (int index = 0; index < specializations.size(); index++) {
+            SpecializationData specialization = specializations.get(index);
+            SpecializationData lastReachable = specialization;
+            for (int searchIndex = index + 1; searchIndex < specializations.size(); searchIndex++) {
+                SpecializationData search = specializations.get(searchIndex);
+                if (search == fallback) {
+                    // reached the end of the specialization
+                    break;
+                }
+                assert lastReachable != search;
+                if (!lastReachable.isReachableAfter(search)) {
+                    lastReachable = search;
+                } else if (search.getReplaces().contains(specialization)) {
+                    lastReachable = search;
+                }
+            }
+
+            specialization.setReachesFallback(lastReachable == specialization);
+
+            List<SpecializationData> failedSpecializations = null;
+            if (specialization.isReachesFallback() && !specialization.getCaches().isEmpty() && !specialization.getGuards().isEmpty()) {
+                boolean guardBoundByCache = false;
+                for (GuardExpression guard : specialization.getGuards()) {
+                    if (specialization.isGuardBoundWithCache(guard)) {
+                        guardBoundByCache = true;
+                        break;
+                    }
+                }
+
+                if (guardBoundByCache && specialization.getMaximumNumberOfInstances() > 1) {
+                    if (failedSpecializations == null) {
+                        failedSpecializations = new ArrayList<>();
+                    }
+                    failedSpecializations.add(specialization);
+                }
+            }
+
+            if (failedSpecializations != null) {
+                List<String> specializationIds = failedSpecializations.stream().map((e) -> e.getId()).collect(Collectors.toList());
+
+                fallback.addError(
+                                "Some guards for the following specializations could not be negated for the @%s specialization: %s. " +
+                                                "Guards cannot be negated for the @%s when they bind @%s parameters and the specialization may consist of multiple instances. " +
+                                                "To fix this limit the number of instances to '1' or " +
+                                                "introduce a more generic specialization declared between this specialization and the fallback. " +
+                                                "Alternatively the use of @%s can be avoided by declaring a @%s with manually specified negated guards.",
+                                Fallback.class.getSimpleName(), specializationIds, Fallback.class.getSimpleName(), Cached.class.getSimpleName(), Fallback.class.getSimpleName(),
+                                Specialization.class.getSimpleName());
+            }
+
+        }
     }
 
     private static void initializeExecutableTypeHierarchy(NodeData node) {
@@ -438,15 +508,10 @@ public class NodeParser extends AbstractParser<NodeData> {
             }
         } else {
             // default dummy type system
-            typeSystem = new TypeSystemData(context, templateType, null, NodeParser.class.getAnnotation(com.oracle.truffle.api.dsl.internal.DSLOptions.class), true);
-        }
-        AnnotationMirror nodeInfoMirror = findFirstAnnotation(typeHierarchy, NodeInfo.class);
-        String shortName = null;
-        if (nodeInfoMirror != null) {
-            shortName = ElementUtils.getAnnotationValue(String.class, nodeInfoMirror, "shortName");
+            typeSystem = new TypeSystemData(context, templateType, null, true);
         }
         boolean useNodeFactory = findFirstAnnotation(typeHierarchy, GenerateNodeFactory.class) != null;
-        return new NodeData(context, templateType, shortName, typeSystem, useNodeFactory);
+        return new NodeData(context, templateType, typeSystem, useNodeFactory);
 
     }
 
@@ -456,6 +521,8 @@ public class NodeParser extends AbstractParser<NodeData> {
         List<NodeFieldData> fields = new ArrayList<>();
         for (VariableElement field : ElementFilter.fieldsIn(elements)) {
             if (field.getModifiers().contains(Modifier.STATIC)) {
+                continue;
+            } else if (field.getAnnotation(Executed.class) != null) {
                 continue;
             }
             if (field.getModifiers().contains(Modifier.PUBLIC) || field.getModifiers().contains(Modifier.PROTECTED)) {
@@ -500,14 +567,7 @@ public class NodeParser extends AbstractParser<NodeData> {
         return fields;
     }
 
-    private List<NodeChildData> parseChildren(final List<TypeElement> typeHierarchy, List<? extends Element> elements) {
-        Set<String> shortCircuits = new HashSet<>();
-        for (ExecutableElement method : ElementFilter.methodsIn(elements)) {
-            AnnotationMirror mirror = ElementUtils.findAnnotationMirror(processingEnv, method, com.oracle.truffle.api.dsl.ShortCircuit.class);
-            if (mirror != null) {
-                shortCircuits.add(ElementUtils.getAnnotationValue(String.class, mirror, "value"));
-            }
-        }
+    private List<NodeChildData> parseChildren(NodeData node, final List<TypeElement> typeHierarchy, List<? extends Element> elements) {
         Map<String, TypeMirror> castNodeTypes = new HashMap<>();
         for (ExecutableElement method : ElementFilter.methodsIn(elements)) {
             AnnotationMirror mirror = ElementUtils.findAnnotationMirror(processingEnv, method, CreateCast.class);
@@ -521,7 +581,60 @@ public class NodeParser extends AbstractParser<NodeData> {
             }
         }
 
-        List<NodeChildData> parsedChildren = new ArrayList<>();
+        List<NodeChildData> executedFieldChildren = new ArrayList<>();
+        for (VariableElement field : ElementFilter.fieldsIn(elements)) {
+            if (field.getModifiers().contains(Modifier.STATIC)) {
+                continue;
+            }
+            AnnotationMirror executed = ElementUtils.findAnnotationMirror(field.getAnnotationMirrors(), context.getDeclaredType(Executed.class));
+            if (executed != null) {
+                TypeMirror type = field.asType();
+                String name = field.getSimpleName().toString();
+                Cardinality cardinality = Cardinality.ONE;
+                if (type.getKind() == TypeKind.ARRAY) {
+                    cardinality = Cardinality.MANY;
+                }
+                AnnotationValue executedWith = ElementUtils.getAnnotationValue(executed, "with");
+                NodeChildData child = new NodeChildData(field, executed, name, type, type, field, cardinality, executedWith);
+                executedFieldChildren.add(child);
+
+                if (field.getModifiers().contains(Modifier.PRIVATE)) {
+                    child.addError("Field annotated with @%s must be visible for the generated subclass to execute.", Executed.class.getSimpleName());
+                }
+
+                if (cardinality == Cardinality.ONE) {
+                    if (field.getAnnotation(Child.class) == null) {
+                        child.addError("Field annotated with @%s must also be annotated with @%s.", Executed.class.getSimpleName(), Child.class.getSimpleName());
+                    }
+                } else {
+                    assert cardinality == Cardinality.MANY;
+                    if (field.getAnnotation(Children.class) == null) {
+                        child.addError("Field annotated with @%s must also be annotated with @%s.", Executed.class.getSimpleName(), Children.class.getSimpleName());
+                    }
+                }
+            }
+        }
+
+        NodeChildData many = null;
+        Set<String> names = new HashSet<>();
+        for (NodeChildData child : executedFieldChildren) {
+            if (child.needsGeneratedField()) {
+                throw new AssertionError("Should not need generated field.");
+            }
+            if (names.contains(child.getName())) {
+                child.addError("Field annotated with @%s has duplicate name '%s'. " +
+                                "Executed children must have unique names.", Executed.class.getSimpleName(), child.getName());
+            } else if (many != null) {
+                child.addError("Field annotated with @%s is hidden by executed field '%s'. " +
+                                "Executed child fields with multiple children hide all following executed child declarations. " +
+                                "Reorder or remove this executed child declaration.", Executed.class.getSimpleName(), many.getName());
+            } else if (child.getCardinality().isMany()) {
+                many = child;
+            }
+            names.add(child.getName());
+        }
+
+        List<NodeChildData> nodeChildren = new ArrayList<>();
         List<TypeElement> typeHierarchyReversed = new ArrayList<>(typeHierarchy);
         Collections.reverse(typeHierarchyReversed);
         for (TypeElement type : typeHierarchyReversed) {
@@ -542,21 +655,22 @@ public class NodeParser extends AbstractParser<NodeData> {
 
                 Cardinality cardinality = Cardinality.ONE;
 
-                TypeMirror childType = inheritType(childMirror, "type", nodeClassType);
-                if (childType.getKind() == TypeKind.ARRAY) {
+                TypeMirror childNodeType = inheritType(childMirror, "type", nodeClassType);
+                if (childNodeType.getKind() == TypeKind.ARRAY) {
                     cardinality = Cardinality.MANY;
                 }
 
-                TypeMirror originalChildType = childType;
+                TypeMirror originalChildType = childNodeType;
                 TypeMirror castNodeType = castNodeTypes.get(name);
                 if (castNodeType != null) {
-                    childType = castNodeType;
+                    childNodeType = castNodeType;
                 }
 
-                Element getter = findGetter(elements, name, childType);
-                NodeChildData nodeChild = new NodeChildData(type, childMirror, name, childType, originalChildType, getter, cardinality);
+                Element getter = findGetter(elements, name, childNodeType);
+                AnnotationValue executeWith = ElementUtils.getAnnotationValue(childMirror, "executeWith");
+                NodeChildData nodeChild = new NodeChildData(type, childMirror, name, childNodeType, originalChildType, getter, cardinality, executeWith);
 
-                parsedChildren.add(nodeChild);
+                nodeChildren.add(nodeChild);
 
                 if (nodeChild.getNodeType() == null) {
                     nodeChild.addError("No valid node type could be resoleved.");
@@ -569,30 +683,29 @@ public class NodeParser extends AbstractParser<NodeData> {
             }
         }
 
-        List<NodeChildData> filteredChildren = new ArrayList<>();
-        Set<String> encounteredNames = new HashSet<>();
-        for (int i = parsedChildren.size() - 1; i >= 0; i--) {
-            NodeChildData child = parsedChildren.get(i);
-            if (!encounteredNames.contains(child.getName())) {
-                filteredChildren.add(0, child);
-                encounteredNames.add(child.getName());
+        if (!nodeChildren.isEmpty() && !executedFieldChildren.isEmpty()) {
+            node.addError("The use of @%s and @%s at the same time is not supported.", NodeChild.class.getSimpleName(), Executed.class.getSimpleName());
+            return executedFieldChildren;
+        } else if (!executedFieldChildren.isEmpty()) {
+            return executedFieldChildren;
+        } else {
+            List<NodeChildData> filteredChildren = new ArrayList<>();
+            Set<String> encounteredNames = new HashSet<>();
+            for (int i = nodeChildren.size() - 1; i >= 0; i--) {
+                NodeChildData child = nodeChildren.get(i);
+                if (!encounteredNames.contains(child.getName())) {
+                    filteredChildren.add(0, child);
+                    encounteredNames.add(child.getName());
+                }
             }
+
+            return filteredChildren;
         }
 
-        return filteredChildren;
     }
 
     private List<NodeExecutionData> parseExecutions(List<NodeFieldData> fields, List<NodeChildData> children, List<? extends Element> elements) {
-        // pre-parse short circuits
-        Set<String> shortCircuits = new HashSet<>();
         List<ExecutableElement> methods = ElementFilter.methodsIn(elements);
-        for (ExecutableElement method : methods) {
-            AnnotationMirror mirror = ElementUtils.findAnnotationMirror(processingEnv, method, com.oracle.truffle.api.dsl.ShortCircuit.class);
-            if (mirror != null) {
-                shortCircuits.add(ElementUtils.getAnnotationValue(String.class, mirror, "value"));
-            }
-        }
-
         boolean hasVarArgs = false;
         int maxSignatureSize = 0;
         if (!children.isEmpty()) {
@@ -621,13 +734,7 @@ public class NodeParser extends AbstractParser<NodeData> {
                 continue;
             }
             int currentArgumentIndex = 0;
-            boolean skipShortCircuit = false;
             parameter: for (VariableElement var : method.getParameters()) {
-                if (skipShortCircuit) {
-                    skipShortCircuit = false;
-                    continue parameter;
-                }
-
                 TypeMirror type = var.asType();
                 if (currentArgumentIndex == 0) {
                     // skip optionals
@@ -650,14 +757,6 @@ public class NodeParser extends AbstractParser<NodeData> {
                     continue parameter;
                 }
 
-                int childIndex = currentArgumentIndex < children.size() ? currentArgumentIndex : children.size() - 1;
-                if (childIndex != -1) {
-                    NodeChildData child = children.get(childIndex);
-                    if (shortCircuits.contains(NodeExecutionData.createIndexedName(child, currentArgumentIndex - childIndex))) {
-                        skipShortCircuit = true;
-                    }
-                }
-
                 currentArgumentIndex++;
             }
             maxSignatureSize = Math.max(maxSignatureSize, currentArgumentIndex);
@@ -676,14 +775,12 @@ public class NodeParser extends AbstractParser<NodeData> {
                 }
             }
             int varArgsIndex = -1;
-            boolean shortCircuit = false;
             NodeChildData child = null;
             if (childIndex != -1) {
                 varArgsIndex = varArgParameter ? Math.abs(childIndex - i) : -1;
                 child = children.get(childIndex);
-                shortCircuit = shortCircuits.contains(NodeExecutionData.createIndexedName(child, varArgsIndex));
             }
-            executions.add(new NodeExecutionData(child, i, varArgsIndex, shortCircuit));
+            executions.add(new NodeExecutionData(child, i, varArgsIndex));
         }
         return executions;
     }
@@ -820,35 +917,18 @@ public class NodeParser extends AbstractParser<NodeData> {
 
     }
 
+    @SuppressWarnings("unchecked")
     private void initializeChildren(NodeData node) {
-        initializeExecuteWith(node);
-
         for (NodeChildData child : node.getChildren()) {
-            TypeMirror nodeType = child.getNodeType();
-            NodeData fieldNodeData = parseChildNodeData(node, child, ElementUtils.fromTypeMirror(nodeType));
+            AnnotationValue executeWithValue1 = child.getExecuteWithValue();
 
-            child.setNode(fieldNodeData);
-            if (fieldNodeData == null || fieldNodeData.hasErrors()) {
-                child.addError("Node type '%s' is invalid or not a subclass of Node.", ElementUtils.getQualifiedName(nodeType));
-            } else {
-                List<ExecutableTypeData> types = child.findGenericExecutableTypes(context);
-                if (types.isEmpty()) {
-                    AnnotationValue executeWithValue = ElementUtils.getAnnotationValue(child.getMessageAnnotation(), "executeWith");
-                    child.addError(executeWithValue, "No generic execute method found with %s evaluated arguments for node type %s and frame types %s.", child.getExecuteWith().size(),
-                                    ElementUtils.getSimpleName(nodeType), ElementUtils.getUniqueIdentifiers(createAllowedChildFrameTypes(node)));
-                }
-            }
-        }
-    }
-
-    private static void initializeExecuteWith(NodeData node) {
-        for (NodeChildData child : node.getChildren()) {
-            List<String> executeWithStrings = ElementUtils.getAnnotationValueList(String.class, child.getMessageAnnotation(), "executeWith");
-            AnnotationValue executeWithValue = ElementUtils.getAnnotationValue(child.getMessageAnnotation(), "executeWith");
+            List<AnnotationValue> executeWithValues = ElementUtils.resolveAnnotationValue(List.class, executeWithValue1);
             List<NodeExecutionData> executeWith = new ArrayList<>();
-            for (String executeWithString : executeWithStrings) {
+            for (AnnotationValue executeWithValue : executeWithValues) {
+                String executeWithString = ElementUtils.resolveAnnotationValue(String.class, executeWithValue);
+
                 if (child.getName().equals(executeWithString)) {
-                    child.addError(executeWithValue, "The child node '%s' cannot be executed with itself.", executeWithString);
+                    child.addError(executeWithValue1, "The child node '%s' cannot be executed with itself.", executeWithString);
                     continue;
                 }
                 NodeExecutionData found = null;
@@ -865,16 +945,34 @@ public class NodeParser extends AbstractParser<NodeData> {
                 }
 
                 if (found == null) {
-                    child.addError(executeWithValue, "The child node '%s' cannot be executed with '%s'. The child node was not found.", child.getName(), executeWithString);
+                    child.addError(executeWithValue1, "The child node '%s' cannot be executed with '%s'. The child node was not found.", child.getName(), executeWithString);
                     continue;
                 } else if (!before) {
-                    child.addError(executeWithValue, "The child node '%s' cannot be executed with '%s'. The node %s is executed after the current node.", child.getName(), executeWithString,
+                    child.addError(executeWithValue1, "The child node '%s' cannot be executed with '%s'. The node %s is executed after the current node.", child.getName(), executeWithString,
                                     executeWithString);
                     continue;
                 }
                 executeWith.add(found);
             }
+
             child.setExecuteWith(executeWith);
+        }
+
+        for (NodeChildData child : node.getChildren()) {
+            TypeMirror nodeType = child.getNodeType();
+            NodeData fieldNodeData = parseChildNodeData(node, child, ElementUtils.fromTypeMirror(nodeType));
+
+            child.setNode(fieldNodeData);
+            if (fieldNodeData == null || fieldNodeData.hasErrors()) {
+                child.addError("Node type '%s' is invalid or not a subclass of Node.", ElementUtils.getQualifiedName(nodeType));
+            } else {
+                List<ExecutableTypeData> types = child.findGenericExecutableTypes(context);
+                if (types.isEmpty()) {
+                    AnnotationValue executeWithValue = child.getExecuteWithValue();
+                    child.addError(executeWithValue, "No generic execute method found with %s evaluated arguments for node type %s and frame types %s.", child.getExecuteWith().size(),
+                                    ElementUtils.getSimpleName(nodeType), ElementUtils.getUniqueIdentifiers(createAllowedChildFrameTypes(node)));
+                }
+            }
         }
     }
 
@@ -934,6 +1032,7 @@ public class NodeParser extends AbstractParser<NodeData> {
         initializePolymorphism(node); // requires specializations
         initializeReachability(node);
         initializeReplaces(node);
+        initializeFallbackReachability(node);
         resolveReplaces(node);
 
         List<SpecializationData> specializations = node.getSpecializations();
@@ -1481,6 +1580,7 @@ public class NodeParser extends AbstractParser<NodeData> {
             if (!genericParameter.getSpecification().isSignature()) {
                 polymorphicType = genericParameter.getType();
             } else {
+                NodeExecutionData execution = genericParameter.getSpecification().getExecution();
                 Collection<TypeMirror> usedTypes = new HashSet<>();
                 for (SpecializationData specialization : node.getSpecializations()) {
                     if (specialization.isUninitialized()) {
@@ -1493,6 +1593,15 @@ public class NodeParser extends AbstractParser<NodeData> {
                     if (parameter == null) {
                         throw new AssertionError("Parameter existed in generic specialization but not in specialized. param = " + genericParameter.getLocalName());
                     }
+                    if (isReturnParameter && specialization.hasUnexpectedResultRewrite()) {
+                        if (!ElementUtils.isSubtypeBoxed(context, context.getType(Object.class), node.getGenericType(execution))) {
+                            specialization.addError("Implicit 'Object' return type from UnexpectedResultException not compatible with generic type '%s'.", node.getGenericType(execution));
+                        } else {
+                            // if any specialization throws UnexpectedResultException, Object could
+                            // be returned
+                            usedTypes.add(context.getType(Object.class));
+                        }
+                    }
                     usedTypes.add(parameter.getType());
                 }
                 usedTypes = ElementUtils.uniqueSortedTypes(usedTypes, false);
@@ -1503,7 +1612,6 @@ public class NodeParser extends AbstractParser<NodeData> {
                     polymorphicType = ElementUtils.getCommonSuperType(context, usedTypes);
                 }
 
-                NodeExecutionData execution = genericParameter.getSpecification().getExecution();
                 if (execution != null && !ElementUtils.isSubtypeBoxed(context, polymorphicType, node.getGenericType(execution))) {
                     throw new AssertionError(String.format("Polymorphic types %s not compatible to generic type %s.", polymorphicType, node.getGenericType(execution)));
                 }
@@ -1525,127 +1633,6 @@ public class NodeParser extends AbstractParser<NodeData> {
 
         polymorphic.setKind(SpecializationKind.POLYMORPHIC);
         node.getSpecializations().add(polymorphic);
-    }
-
-    private void initializeShortCircuits(NodeData node) {
-        Map<String, List<ShortCircuitData>> groupedShortCircuits = groupShortCircuits(node.getShortCircuits());
-
-        boolean valid = true;
-        List<NodeExecutionData> shortCircuitExecutions = new ArrayList<>();
-        for (NodeExecutionData execution : node.getChildExecutions()) {
-            if (!execution.isShortCircuit()) {
-                continue;
-            }
-            shortCircuitExecutions.add(execution);
-            String valueName = execution.getIndexedName();
-            List<ShortCircuitData> availableCircuits = groupedShortCircuits.get(valueName);
-
-            if (availableCircuits == null || availableCircuits.isEmpty()) {
-                node.addError("@%s method for short cut value '%s' required.", com.oracle.truffle.api.dsl.ShortCircuit.class.getSimpleName(), valueName);
-                valid = false;
-                continue;
-            }
-
-            boolean sameMethodName = true;
-            String methodName = availableCircuits.get(0).getMethodName();
-            for (ShortCircuitData circuit : availableCircuits) {
-                if (!circuit.getMethodName().equals(methodName)) {
-                    sameMethodName = false;
-                }
-            }
-
-            if (!sameMethodName) {
-                for (ShortCircuitData circuit : availableCircuits) {
-                    circuit.addError("All short circuits for short cut value '%s' must have the same method name.", valueName);
-                }
-                valid = false;
-                continue;
-            }
-
-            ShortCircuitData genericCircuit = null;
-            for (ShortCircuitData circuit : availableCircuits) {
-                if (isGenericShortCutMethod(circuit)) {
-                    genericCircuit = circuit;
-                    break;
-                }
-            }
-
-            if (genericCircuit == null) {
-                node.addError("No generic @%s method available for short cut value '%s'.", com.oracle.truffle.api.dsl.ShortCircuit.class.getSimpleName(), valueName);
-                valid = false;
-                continue;
-            }
-
-            for (ShortCircuitData circuit : availableCircuits) {
-                if (circuit != genericCircuit) {
-                    circuit.setGenericShortCircuitMethod(genericCircuit);
-                }
-            }
-        }
-
-        if (!valid) {
-            return;
-        }
-
-        List<SpecializationData> specializations = new ArrayList<>();
-        specializations.addAll(node.getSpecializations());
-        for (SpecializationData specialization : specializations) {
-            List<ShortCircuitData> assignedShortCuts = new ArrayList<>(shortCircuitExecutions.size());
-
-            for (NodeExecutionData shortCircuit : shortCircuitExecutions) {
-                List<ShortCircuitData> availableShortCuts = groupedShortCircuits.get(shortCircuit.getIndexedName());
-
-                ShortCircuitData genericShortCircuit = null;
-                ShortCircuitData compatibleShortCircuit = null;
-                for (ShortCircuitData circuit : availableShortCuts) {
-                    if (circuit.isGeneric()) {
-                        genericShortCircuit = circuit;
-                    } else if (circuit.isCompatibleTo(specialization)) {
-                        compatibleShortCircuit = circuit;
-                    }
-                }
-
-                if (compatibleShortCircuit == null) {
-                    compatibleShortCircuit = genericShortCircuit;
-                }
-                assignedShortCuts.add(compatibleShortCircuit);
-            }
-            specialization.setShortCircuits(assignedShortCuts);
-        }
-    }
-
-    private boolean isGenericShortCutMethod(ShortCircuitData method) {
-        for (Parameter parameter : method.getParameters()) {
-            NodeExecutionData execution = parameter.getSpecification().getExecution();
-            if (execution == null) {
-                continue;
-            }
-            ExecutableTypeData found = null;
-            List<ExecutableTypeData> executableElements = execution.getChild().findGenericExecutableTypes(context);
-            for (ExecutableTypeData executable : executableElements) {
-                if (ElementUtils.typeEquals(executable.getReturnType(), parameter.getType())) {
-                    found = executable;
-                    break;
-                }
-            }
-            if (found == null) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static Map<String, List<ShortCircuitData>> groupShortCircuits(List<ShortCircuitData> shortCircuits) {
-        Map<String, List<ShortCircuitData>> group = new HashMap<>();
-        for (ShortCircuitData shortCircuit : shortCircuits) {
-            List<ShortCircuitData> circuits = group.get(shortCircuit.getValueName());
-            if (circuits == null) {
-                circuits = new ArrayList<>();
-                group.put(shortCircuit.getValueName(), circuits);
-            }
-            circuits.add(shortCircuit);
-        }
-        return group;
     }
 
     private static boolean verifySpecializationSameLength(NodeData nodeData) {
@@ -1739,15 +1726,6 @@ public class NodeParser extends AbstractParser<NodeData> {
 
                 nodeData.addError("The type %s must implement the inherited abstract method %s.", ElementUtils.getSimpleName(nodeData.getTemplateType()),
                                 ElementUtils.getReadableSignature(unusedMethod));
-            }
-        }
-    }
-
-    private static void verifyNamingConvention(List<? extends TemplateMethod> methods, String prefix) {
-        for (int i = 0; i < methods.size(); i++) {
-            TemplateMethod m1 = methods.get(i);
-            if (m1.getMethodName().length() < 3 || !m1.getMethodName().startsWith(prefix)) {
-                m1.addError("Naming convention: method name must start with '%s'.", prefix);
             }
         }
     }

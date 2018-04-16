@@ -86,16 +86,6 @@ public class ContextAPITestLanguage extends TruffleLanguage<LanguageContext> {
     }
 
     @Override
-    protected Object lookupSymbol(LanguageContext context, String symbolName) {
-        return super.lookupSymbol(context, symbolName);
-    }
-
-    @Override
-    protected Object getLanguageGlobal(LanguageContext context) {
-        return null;
-    }
-
-    @Override
     protected boolean isObjectOfLanguage(Object object) {
         return false;
     }

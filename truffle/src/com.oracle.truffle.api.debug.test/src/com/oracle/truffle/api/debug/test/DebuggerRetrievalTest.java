@@ -34,10 +34,19 @@ import org.graalvm.polyglot.Value;
 import org.junit.Assert;
 import org.junit.Test;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.InstrumentInfo;
+import com.oracle.truffle.api.Scope;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.debug.Debugger;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
+import com.oracle.truffle.api.interop.ForeignAccess;
+import com.oracle.truffle.api.interop.KeyInfo;
+import com.oracle.truffle.api.interop.MessageResolution;
+import com.oracle.truffle.api.interop.Resolve;
+import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import com.oracle.truffle.api.nodes.Node;
 
 /**
  * Test that languages and other instruments are able to retrieve the Debugger instance.
@@ -46,7 +55,7 @@ public class DebuggerRetrievalTest {
 
     @Test
     public void testFromLanguage() {
-        Value debuggerValue = Context.create(LanguageThatNeedsDebugger.ID).lookup(LanguageThatNeedsDebugger.ID, "debugger");
+        Value debuggerValue = Context.create(LanguageThatNeedsDebugger.ID).getBindings(LanguageThatNeedsDebugger.ID).getMember("debugger");
         Assert.assertTrue(debuggerValue.asBoolean());
     }
 
@@ -72,13 +81,65 @@ public class DebuggerRetrievalTest {
         }
 
         @Override
-        protected Object getLanguageGlobal(Debugger context) {
-            return null;
+        protected Iterable<Scope> findTopScopes(Debugger context) {
+            return Collections.singleton(Scope.newBuilder("Debugger top scope", new TopScopeObject(context)).build());
         }
 
-        @Override
-        protected Object lookupSymbol(Debugger context, String symbolName) {
-            return "debugger".equals(symbolName) && context != null;
+        static final class TopScopeObject implements TruffleObject {
+
+            private final Debugger context;
+
+            private TopScopeObject(Debugger context) {
+                this.context = context;
+            }
+
+            @Override
+            public ForeignAccess getForeignAccess() {
+                return TopScopeObjectMessageResolutionForeign.ACCESS;
+            }
+
+            public static boolean isInstance(TruffleObject obj) {
+                return obj instanceof TopScopeObject;
+            }
+
+            @MessageResolution(receiverType = TopScopeObject.class)
+            static class TopScopeObjectMessageResolution {
+
+                @Resolve(message = "KEY_INFO")
+                abstract static class VarsMapInfoNode extends Node {
+
+                    @SuppressWarnings("unused")
+                    public Object access(TopScopeObject ts, String name) {
+                        if ("debugger".equals(name)) {
+                            return KeyInfo.READABLE;
+                        } else {
+                            return 0;
+                        }
+                    }
+                }
+
+                @Resolve(message = "HAS_KEYS")
+                abstract static class HasKeysNode extends Node {
+
+                    @SuppressWarnings("unused")
+                    public Object access(TopScopeObject ts) {
+                        return true;
+                    }
+                }
+
+                @Resolve(message = "READ")
+                abstract static class VarsMapReadNode extends Node {
+
+                    @CompilerDirectives.TruffleBoundary
+                    public Object access(TopScopeObject ts, String name) {
+                        if ("debugger".equals(name)) {
+                            return ts.context != null;
+                        } else {
+                            throw UnknownIdentifierException.raise(name);
+                        }
+                    }
+                }
+            }
         }
 
         @Override

@@ -24,6 +24,7 @@
  */
 package com.oracle.truffle.api.debug;
 
+import com.oracle.truffle.api.TruffleException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -34,8 +35,8 @@ import com.oracle.truffle.api.interop.ForeignAccess;
 import com.oracle.truffle.api.interop.KeyInfo;
 import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.nodes.LanguageInfo;
-import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.SourceSection;
 
 /**
@@ -55,7 +56,7 @@ public abstract class DebugValue {
 
     final LanguageInfo preferredLanguage;
 
-    abstract Object get();
+    abstract Object get() throws DebugException;
 
     DebugValue(LanguageInfo preferredLanguage) {
         this.preferredLanguage = preferredLanguage;
@@ -68,25 +69,29 @@ public abstract class DebugValue {
      * {@link DebugStackFrame#eval(String)} to evaluate values to be set.
      *
      * @param value the value to set
+     * @throws DebugException when guest language code throws an exception
      * @since 0.17
      */
-    public abstract void set(DebugValue value);
+    public abstract void set(DebugValue value) throws DebugException;
 
     /**
      * Converts the debug value into a Java type. Class conversions which are always supported:
      * <ul>
      * <li>{@link String}.class converts the value to its language specific string representation.
      * </li>
+     * <li>{@link Number}.class converts the value to a Number representation, if any.</li>
+     * <li>{@link Boolean}.class converts the value to a Boolean representation, if any.</li>
      * </ul>
      * No optional conversions are currently available. If a conversion is not supported then an
      * {@link UnsupportedOperationException} is thrown. If the value is not {@link #isReadable()
      * readable} then an {@link IllegalStateException} is thrown.
      *
      * @param clazz the type to convert to
-     * @return the converted Java type
+     * @return the converted Java type, or <code>null</code> when the conversion was not possible.
+     * @throws DebugException when guest language code throws an exception
      * @since 0.17
      */
-    public abstract <T> T as(Class<T> clazz);
+    public abstract <T> T as(Class<T> clazz) throws DebugException;
 
     /**
      * Returns the name of this value as it is referred to from its origin. If this value is
@@ -161,23 +166,32 @@ public abstract class DebugValue {
      *
      * @return a collection of property values, or </code>null</code> when the value does not have
      *         any concept of properties.
+     * @throws DebugException when guest language code throws an exception
      * @since 0.19
      */
-    public final Collection<DebugValue> getProperties() {
+    public final Collection<DebugValue> getProperties() throws DebugException {
         if (!isReadable()) {
             throw new IllegalStateException("Value is not readable");
         }
         Object value = get();
-        return getProperties(value, getDebugger(), getSourceRoot(), null);
+        try {
+            return getProperties(value, getDebugger(), resolveLanguage(), null);
+        } catch (Throwable ex) {
+            if (ex instanceof TruffleException) {
+                throw new DebugException(getDebugger(), (TruffleException) ex, resolveLanguage(), null, true, null);
+            } else {
+                throw ex;
+            }
+        }
     }
 
-    static ValuePropertiesCollection getProperties(Object value, Debugger debugger, RootNode root, DebugScope scope) {
+    static ValuePropertiesCollection getProperties(Object value, Debugger debugger, LanguageInfo language, DebugScope scope) {
         ValuePropertiesCollection properties = null;
         if (value instanceof TruffleObject) {
             TruffleObject object = (TruffleObject) value;
             Map<Object, Object> map = ObjectStructures.asMap(debugger.getMessageNodes(), object);
             if (map != null) {
-                properties = new ValuePropertiesCollection(debugger, root, object, map, map.entrySet(), scope);
+                properties = new ValuePropertiesCollection(debugger, language, object, map, map.entrySet(), scope);
             }
         }
         return properties;
@@ -192,9 +206,13 @@ public abstract class DebugValue {
     /**
      * Returns <code>true</code> if this value represents an array, <code>false</code> otherwise.
      *
+     * @throws DebugException when guest language code throws an exception
      * @since 0.19
      */
-    public final boolean isArray() {
+    public final boolean isArray() throws DebugException {
+        if (!isReadable()) {
+            return false;
+        }
         Object value = get();
         if (value instanceof TruffleObject) {
             TruffleObject to = (TruffleObject) value;
@@ -210,19 +228,35 @@ public abstract class DebugValue {
      *
      * @return a list of array elements, or <code>null</code> when the value does not represent an
      *         array.
+     * @throws DebugException when guest language code throws an exception
      * @since 0.19
      */
-    public final List<DebugValue> getArray() {
+    public final List<DebugValue> getArray() throws DebugException {
+        if (!isReadable()) {
+            return null;
+        }
         List<DebugValue> arrayList = null;
         Object value = get();
         if (value instanceof TruffleObject) {
             TruffleObject to = (TruffleObject) value;
             List<Object> array = ObjectStructures.asList(getDebugger().getMessageNodes(), to);
             if (array != null) {
-                arrayList = new ValueInteropList(getDebugger(), getSourceRoot(), array);
+                arrayList = new ValueInteropList(getDebugger(), resolveLanguage(), array);
             }
         }
         return arrayList;
+    }
+
+    final LanguageInfo resolveLanguage() {
+        LanguageInfo languageInfo;
+        if (preferredLanguage != null) {
+            languageInfo = preferredLanguage;
+        } else if (getScope() != null && getScope().getLanguage() != null) {
+            languageInfo = getScope().getLanguage();
+        } else {
+            languageInfo = getOriginalLanguage();
+        }
+        return languageInfo;
     }
 
     /**
@@ -230,46 +264,45 @@ public abstract class DebugValue {
      * value, reveals it's kind and it's features.
      *
      * @return a value representing the meta-object, or <code>null</code>
+     * @throws DebugException when guest language code throws an exception
      * @since 0.22
      */
-    public final DebugValue getMetaObject() {
+    public final DebugValue getMetaObject() throws DebugException {
+        if (!isReadable()) {
+            return null;
+        }
         Object obj = get();
         if (obj == null) {
             return null;
         }
         TruffleInstrument.Env env = getDebugger().getEnv();
-        LanguageInfo languageInfo;
-        if (preferredLanguage != null) {
-            languageInfo = preferredLanguage;
-        } else {
-            languageInfo = getSourceRoot().getRootNode().getLanguageInfo();
-        }
+        LanguageInfo languageInfo = resolveLanguage();
         if (languageInfo != null) {
             obj = env.findMetaObject(languageInfo, obj);
-            return new HeapValue(getDebugger(), getSourceRoot(), obj);
-        } else {
-            return null;
+            if (obj != null) {
+                return new HeapValue(getDebugger(), languageInfo, null, obj);
+            }
         }
+        return null;
     }
 
     /**
      * Get a source location where this value is declared, if any.
      *
      * @return a source location of the object, or <code>null</code>
+     * @throws DebugException when guest language code throws an exception
      * @since 0.22
      */
-    public final SourceSection getSourceLocation() {
+    public final SourceSection getSourceLocation() throws DebugException {
+        if (!isReadable()) {
+            return null;
+        }
         Object obj = get();
         if (obj == null) {
             return null;
         }
         TruffleInstrument.Env env = getDebugger().getEnv();
-        LanguageInfo languageInfo;
-        if (preferredLanguage != null) {
-            languageInfo = preferredLanguage;
-        } else {
-            languageInfo = getSourceRoot().getRootNode().getLanguageInfo();
-        }
+        LanguageInfo languageInfo = resolveLanguage();
         if (languageInfo != null) {
             return env.findSourceLocation(languageInfo, obj);
         } else {
@@ -284,9 +317,13 @@ public abstract class DebugValue {
      *
      * @return the language, or <code>null</code> when no language can be identified as the creator
      *         of the value.
+     * @throws DebugException when guest language code throws an exception
      * @since 0.27
      */
-    public final LanguageInfo getOriginalLanguage() {
+    public final LanguageInfo getOriginalLanguage() throws DebugException {
+        if (!isReadable()) {
+            return null;
+        }
         Object obj = get();
         if (obj == null) {
             return null;
@@ -309,25 +346,12 @@ public abstract class DebugValue {
         if (preferredLanguage == language) {
             return this;
         }
-        if (preferredLanguage == null && getSourceRoot() != null && getSourceRoot().getRootNode().getLanguageInfo() == language) {
-            return this;
-        }
         return createAsInLanguage(language);
     }
 
     abstract DebugValue createAsInLanguage(LanguageInfo language);
 
     abstract Debugger getDebugger();
-
-    abstract RootNode getSourceRoot();
-
-    final LanguageInfo getLanguageInfo() {
-        RootNode root = getSourceRoot();
-        if (root != null) {
-            return root.getLanguageInfo();
-        }
-        return null;
-    }
 
     /**
      * Returns a string representation of the debug value.
@@ -343,43 +367,68 @@ public abstract class DebugValue {
 
         // identifies the debugger and engine
         private final Debugger debugger;
-        // identifiers the original root this value originates from
-        private final RootNode sourceRoot;
+        private final String name;
         private final Object value;
 
-        HeapValue(Debugger debugger, RootNode root, Object value) {
-            this(debugger, root, null, value);
+        HeapValue(Debugger debugger, String name, Object value) {
+            this(debugger, null, name, value);
         }
 
-        private HeapValue(Debugger debugger, RootNode root, LanguageInfo preferredLanguage, Object value) {
+        HeapValue(Debugger debugger, LanguageInfo preferredLanguage, String name, Object value) {
             super(preferredLanguage);
             this.debugger = debugger;
-            this.sourceRoot = root;
+            this.name = name;
             this.value = value;
         }
 
         @Override
-        public <T> T as(Class<T> clazz) {
+        public <T> T as(Class<T> clazz) throws DebugException {
             if (!isReadable()) {
                 throw new IllegalStateException("Value is not readable");
             }
-            if (clazz == String.class) {
-                Object val = get();
-                LanguageInfo languageInfo = null;
-                if (preferredLanguage != null) {
-                    languageInfo = preferredLanguage;
-                } else if (sourceRoot != null) {
-                    languageInfo = sourceRoot.getRootNode().getLanguageInfo();
+            try {
+                if (clazz == String.class) {
+                    Object val = get();
+                    LanguageInfo languageInfo = resolveLanguage();
+                    String stringValue;
+                    if (languageInfo == null) {
+                        stringValue = val.toString();
+                    } else {
+                        stringValue = debugger.getEnv().toString(languageInfo, val);
+                    }
+                    return clazz.cast(stringValue);
+                } else if (clazz == Number.class || clazz == Boolean.class) {
+                    return convertToPrimitive(clazz);
                 }
-                String stringValue;
-                if (languageInfo == null) {
-                    stringValue = val.toString();
+            } catch (Throwable ex) {
+                if (ex instanceof TruffleException) {
+                    throw new DebugException(getDebugger(), (TruffleException) ex, resolveLanguage(), null, true, null);
                 } else {
-                    stringValue = debugger.getEnv().toString(languageInfo, val);
+                    throw ex;
                 }
-                return clazz.cast(stringValue);
             }
             throw new UnsupportedOperationException();
+        }
+
+        private <T> T convertToPrimitive(Class<T> clazz) {
+            Object val = get();
+            if (clazz.isInstance(val)) {
+                return clazz.cast(val);
+            }
+            if (val instanceof TruffleObject) {
+                TruffleObject receiver = (TruffleObject) val;
+                if (ForeignAccess.sendIsBoxed(debugger.msgNodes.isBoxed, receiver)) {
+                    try {
+                        Object unboxed = ForeignAccess.sendUnbox(debugger.msgNodes.unbox, receiver);
+                        if (clazz.isInstance(unboxed)) {
+                            return clazz.cast(unboxed);
+                        }
+                    } catch (UnsupportedMessageException e) {
+                        throw new AssertionError("isBoxed returned true but unbox threw unsupported error.");
+                    }
+                }
+            }
+            return null;
         }
 
         @Override
@@ -394,7 +443,7 @@ public abstract class DebugValue {
 
         @Override
         public String getName() {
-            return null;
+            return name;
         }
 
         @Override
@@ -414,17 +463,12 @@ public abstract class DebugValue {
 
         @Override
         DebugValue createAsInLanguage(LanguageInfo language) {
-            return new HeapValue(debugger, sourceRoot, language, value);
+            return new HeapValue(debugger, language, name, value);
         }
 
         @Override
         Debugger getDebugger() {
             return debugger;
-        }
-
-        @Override
-        RootNode getSourceRoot() {
-            return sourceRoot;
         }
 
     }
@@ -435,12 +479,12 @@ public abstract class DebugValue {
         private final Map.Entry<Object, Object> property;
         private final DebugScope scope;
 
-        PropertyValue(Debugger debugger, RootNode root, TruffleObject object, Map.Entry<Object, Object> property, DebugScope scope) {
-            this(debugger, root, null, ForeignAccess.sendKeyInfo(Message.KEY_INFO.createNode(), object, property.getKey()), property, scope);
+        PropertyValue(Debugger debugger, LanguageInfo language, TruffleObject object, Map.Entry<Object, Object> property, DebugScope scope) {
+            this(debugger, language, ForeignAccess.sendKeyInfo(Message.KEY_INFO.createNode(), object, property.getKey()), property, scope);
         }
 
-        private PropertyValue(Debugger debugger, RootNode root, LanguageInfo preferredLanguage, int keyInfo, Map.Entry<Object, Object> property, DebugScope scope) {
-            super(debugger, root, preferredLanguage, null);
+        private PropertyValue(Debugger debugger, LanguageInfo preferredLanguage, int keyInfo, Map.Entry<Object, Object> property, DebugScope scope) {
+            super(debugger, preferredLanguage, (property.getKey() instanceof String) ? (String) property.getKey() : null, null);
             this.keyInfo = keyInfo;
             this.property = property;
             this.scope = scope;
@@ -449,28 +493,31 @@ public abstract class DebugValue {
         @Override
         Object get() {
             checkValid();
-            return property.getValue();
+            try {
+                return property.getValue();
+            } catch (Throwable ex) {
+                if (ex instanceof TruffleException) {
+                    throw new DebugException(getDebugger(), (TruffleException) ex, resolveLanguage(), null, true, null);
+                } else {
+                    throw ex;
+                }
+            }
         }
 
         @Override
         public String getName() {
+            String name = super.getName();
+            if (name != null) {
+                return name;
+            }
             checkValid();
-            String name;
             Object propertyKey = property.getKey();
-            if (propertyKey instanceof String) {
-                name = (String) propertyKey;
+            // non-String property key
+            LanguageInfo languageInfo = resolveLanguage();
+            if (languageInfo != null) {
+                name = getDebugger().getEnv().toString(languageInfo, propertyKey);
             } else {
-                LanguageInfo languageInfo;
-                if (preferredLanguage != null) {
-                    languageInfo = preferredLanguage;
-                } else {
-                    languageInfo = getSourceRoot().getRootNode().getLanguageInfo();
-                }
-                if (languageInfo != null) {
-                    name = getDebugger().getEnv().toString(languageInfo, propertyKey);
-                } else {
-                    name = Objects.toString(propertyKey);
-                }
+                name = Objects.toString(propertyKey);
             }
             return name;
         }
@@ -502,12 +549,20 @@ public abstract class DebugValue {
         @Override
         public void set(DebugValue value) {
             checkValid();
-            property.setValue(value.get());
+            try {
+                property.setValue(value.get());
+            } catch (Throwable ex) {
+                if (ex instanceof TruffleException) {
+                    throw new DebugException(getDebugger(), (TruffleException) ex, resolveLanguage(), null, true, null);
+                } else {
+                    throw ex;
+                }
+            }
         }
 
         @Override
         DebugValue createAsInLanguage(LanguageInfo language) {
-            return new PropertyValue(getDebugger(), getSourceRoot(), language, keyInfo, property, scope);
+            return new PropertyValue(getDebugger(), language, keyInfo, property, scope);
         }
 
         private void checkValid() {
@@ -521,33 +576,33 @@ public abstract class DebugValue {
 
         private final int keyInfo;
         private final Map<Object, Object> map;
-        private final String name;
         private final DebugScope scope;
 
-        PropertyNamedValue(Debugger debugger, RootNode root, TruffleObject object,
+        PropertyNamedValue(Debugger debugger, LanguageInfo language, TruffleObject object,
                         Map<Object, Object> map, String name, DebugScope scope) {
-            this(debugger, root, null, ForeignAccess.sendKeyInfo(Message.KEY_INFO.createNode(), object, name), map, name, scope);
+            this(debugger, language, ForeignAccess.sendKeyInfo(Message.KEY_INFO.createNode(), object, name), map, name, scope);
         }
 
-        private PropertyNamedValue(Debugger debugger, RootNode root, LanguageInfo preferredLanguage,
+        private PropertyNamedValue(Debugger debugger, LanguageInfo preferredLanguage,
                         int keyInfo, Map<Object, Object> map, String name, DebugScope scope) {
-            super(debugger, root, preferredLanguage, null);
+            super(debugger, preferredLanguage, name, null);
             this.keyInfo = keyInfo;
             this.map = map;
-            this.name = name;
             this.scope = scope;
-        }
-
-        @Override
-        public String getName() {
-            checkValid();
-            return name;
         }
 
         @Override
         Object get() {
             checkValid();
-            return map.get(name);
+            try {
+                return map.get(getName());
+            } catch (Throwable ex) {
+                if (ex instanceof TruffleException) {
+                    throw new DebugException(getDebugger(), (TruffleException) ex, resolveLanguage(), null, true, null);
+                } else {
+                    throw ex;
+                }
+            }
         }
 
         @Override
@@ -577,12 +632,20 @@ public abstract class DebugValue {
         @Override
         public void set(DebugValue value) {
             checkValid();
-            map.put(name, value.get());
+            try {
+                map.put(getName(), value.get());
+            } catch (Throwable ex) {
+                if (ex instanceof TruffleException) {
+                    throw new DebugException(getDebugger(), (TruffleException) ex, resolveLanguage(), null, true, null);
+                } else {
+                    throw ex;
+                }
+            }
         }
 
         @Override
         DebugValue createAsInLanguage(LanguageInfo language) {
-            return new PropertyNamedValue(getDebugger(), getSourceRoot(), language, keyInfo, map, name, scope);
+            return new PropertyNamedValue(getDebugger(), language, keyInfo, map, getName(), scope);
         }
 
         private void checkValid() {

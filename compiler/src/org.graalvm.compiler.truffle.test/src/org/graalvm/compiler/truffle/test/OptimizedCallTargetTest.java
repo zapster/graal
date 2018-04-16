@@ -22,11 +22,11 @@
  */
 package org.graalvm.compiler.truffle.test;
 
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleCompilationThreshold;
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleCompileOnly;
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleFunctionInlining;
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleOSRCompilationThreshold;
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleReplaceReprofileCount;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleCompilationThreshold;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleCompileOnly;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleFunctionInlining;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleOSRCompilationThreshold;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleReplaceReprofileCount;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -40,11 +40,11 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import org.graalvm.compiler.core.common.util.Util;
-import org.graalvm.compiler.truffle.GraalTruffleRuntime;
-import org.graalvm.compiler.truffle.OptimizedCallTarget;
-import org.graalvm.compiler.truffle.OptimizedOSRLoopNode;
-import org.graalvm.compiler.truffle.TruffleCompilerOptions;
-import org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleOptionsOverrideScope;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleOptionsOverrideScope;
+import org.graalvm.compiler.truffle.runtime.GraalTruffleRuntime;
+import org.graalvm.compiler.truffle.runtime.OptimizedCallTarget;
+import org.graalvm.compiler.truffle.runtime.OptimizedOSRLoopNode;
 import org.graalvm.compiler.truffle.test.nodes.AbstractTestNode;
 import org.graalvm.compiler.truffle.test.nodes.ConstantTestNode;
 import org.graalvm.compiler.truffle.test.nodes.RootTestNode;
@@ -143,7 +143,7 @@ public class OptimizedCallTargetTest extends TestWithSynchronousCompiling {
 
         for (int j = 1; j < 100; j++) {
 
-            target.invalidate();
+            target.invalidate(this, "test");
             for (int i = 0; i < reprofileCount; i++) {
                 assertNotCompiled(target);
                 target.call();
@@ -405,6 +405,7 @@ public class OptimizedCallTargetTest extends TestWithSynchronousCompiling {
         }
     }
 
+    @Ignore
     @Test
     public void testInCompilationRootDirective() {
         final int compilationThreshold = TruffleCompilerOptions.getValue(TruffleCompilationThreshold);
@@ -418,6 +419,11 @@ public class OptimizedCallTargetTest extends TestWithSynchronousCompiling {
         int[] innerBoundary = {0};
 
         final OptimizedCallTarget innerTarget = (OptimizedCallTarget) runtime.createCallTarget(new RootNode(null) {
+
+            @Override
+            public String toString() {
+                return "inner";
+            }
 
             @Override
             public Object execute(VirtualFrame frame) {
@@ -447,6 +453,11 @@ public class OptimizedCallTargetTest extends TestWithSynchronousCompiling {
         });
         final OptimizedCallTarget outerTarget = (OptimizedCallTarget) runtime.createCallTarget(new RootNode(null) {
 
+            @Override
+            public String toString() {
+                return "outer";
+            }
+
             @Child private DirectCallNode child = runtime.createDirectCallNode(innerTarget);
 
             @Override
@@ -469,7 +480,7 @@ public class OptimizedCallTargetTest extends TestWithSynchronousCompiling {
 
             @CompilerDirectives.TruffleBoundary
             void outerBoundary() {
-                // TRUE
+                // FALSE
                 if (CompilerDirectives.inCompilationRoot()) {
                     outerBoundary[0]++;
                 }

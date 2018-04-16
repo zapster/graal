@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,12 +24,15 @@
  */
 package com.oracle.truffle.tools.test;
 
+import static org.junit.Assume.assumeFalse;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 
+import org.graalvm.polyglot.Source;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -38,10 +41,9 @@ import org.junit.Test;
 import com.oracle.truffle.api.instrumentation.test.AbstractInstrumentationTest;
 import com.oracle.truffle.api.instrumentation.test.InstrumentationTestLanguage;
 import com.oracle.truffle.api.source.SourceSection;
-import com.oracle.truffle.tools.Profiler;
-import com.oracle.truffle.tools.Profiler.Counter;
-import org.graalvm.polyglot.Source;
+import com.oracle.truffle.tools.*;
 
+@SuppressWarnings("deprecation")
 public class ProfilerTest extends AbstractInstrumentationTest {
 
     private Profiler profiler;
@@ -63,10 +65,11 @@ public class ProfilerTest extends AbstractInstrumentationTest {
 
     @Test
     public void testInvocationCounts() throws IOException {
+        assumeFalse("Crashes on AArch64 in C2 (GR-8733)", System.getProperty("os.arch").equalsIgnoreCase("aarch64"));
 
         profiler.setCollecting(true);
         profiler.setTiming(false);
-        Map<SourceSection, Counter> counters = profiler.getCounters();
+        Map<SourceSection, Profiler.Counter> counters = profiler.getCounters();
         Assert.assertEquals(0, counters.size());
         Assert.assertTrue(profiler.isCollecting());
         Assert.assertFalse(profiler.isTiming());
@@ -76,27 +79,27 @@ public class ProfilerTest extends AbstractInstrumentationTest {
         assertEvalOut(source, "");
 
         counters = profiler.getCounters();
-        Assert.assertEquals(8, counters.size());
+        Assert.assertEquals(4, counters.size());
         Assert.assertTrue(profiler.isCollecting());
         Assert.assertFalse(profiler.isTiming());
         Assert.assertTrue(profiler.hasData());
 
         final com.oracle.truffle.api.source.Source sourceImpl = getSourceImpl(source);
-        final SourceSection rootSection = sourceImpl.createSection(0, 139);
+        final SourceSection rootSection = sourceImpl.createSection(0, 140);
         final SourceSection leafSection = sourceImpl.createSection(17, 16);
         final SourceSection callfooSection = sourceImpl.createSection(47, 27);
         final SourceSection callbarSection = sourceImpl.createSection(88, 27);
-        Counter root = counters.get(rootSection);
-        Counter leaf = counters.get(leafSection);
-        Counter callfoo = counters.get(callfooSection);
-        Counter callbar = counters.get(callbarSection);
+        Profiler.Counter root = counters.get(rootSection);
+        Profiler.Counter leaf = counters.get(leafSection);
+        Profiler.Counter callfoo = counters.get(callfooSection);
+        Profiler.Counter callbar = counters.get(callbarSection);
 
         Assert.assertNotNull(root);
         Assert.assertNotNull(leaf);
         Assert.assertNotNull(callfoo);
         Assert.assertNotNull(callbar);
 
-        final Counter.TimeKind testTimeKind = Counter.TimeKind.INTERPRETED_AND_COMPILED;
+        final Profiler.Counter.TimeKind testTimeKind = Profiler.Counter.TimeKind.INTERPRETED_AND_COMPILED;
         Assert.assertEquals(1L, root.getInvocations(testTimeKind));
         Assert.assertEquals(200L, leaf.getInvocations(testTimeKind));
         Assert.assertEquals(20L, callfoo.getInvocations(testTimeKind));
@@ -154,7 +157,7 @@ public class ProfilerTest extends AbstractInstrumentationTest {
         Assert.assertFalse(profiler.hasData());
 
         counters = profiler.getCounters();
-        Assert.assertEquals(8, counters.size());
+        Assert.assertEquals(4, counters.size());
 
         for (int i = 0; i < 10000; i++) {
             assertEvalOut(source, "");
@@ -187,7 +190,7 @@ public class ProfilerTest extends AbstractInstrumentationTest {
 
         profiler.setCollecting(true);
         profiler.setTiming(false);
-        Map<SourceSection, Counter> counters = profiler.getCounters();
+        Map<SourceSection, Profiler.Counter> counters = profiler.getCounters();
         Assert.assertEquals(0, counters.size());
         Assert.assertTrue(profiler.isCollecting());
         Assert.assertFalse(profiler.isTiming());
@@ -197,27 +200,27 @@ public class ProfilerTest extends AbstractInstrumentationTest {
         assertEvalOut(source, "");
 
         counters = profiler.getCounters();
-        Assert.assertEquals(8, counters.size());
+        Assert.assertEquals(4, counters.size());
         Assert.assertTrue(profiler.isCollecting());
         Assert.assertFalse(profiler.isTiming());
         Assert.assertTrue(profiler.hasData());
 
         final com.oracle.truffle.api.source.Source sourceImpl = getSourceImpl(source);
-        final SourceSection rootSection = sourceImpl.createSection(0, 139);
+        final SourceSection rootSection = sourceImpl.createSection(0, 140);
         final SourceSection leafSection = sourceImpl.createSection(17, 16);
         final SourceSection callfooSection = sourceImpl.createSection(47, 27);
         final SourceSection callbarSection = sourceImpl.createSection(88, 27);
-        Counter root = counters.get(rootSection);
-        Counter leaf = counters.get(leafSection);
-        Counter callfoo = counters.get(callfooSection);
-        Counter callbar = counters.get(callbarSection);
+        Profiler.Counter root = counters.get(rootSection);
+        Profiler.Counter leaf = counters.get(leafSection);
+        Profiler.Counter callfoo = counters.get(callfooSection);
+        Profiler.Counter callbar = counters.get(callbarSection);
 
         Assert.assertNotNull(root);
         Assert.assertNotNull(leaf);
         Assert.assertNotNull(callfoo);
         Assert.assertNotNull(callbar);
 
-        final Counter.TimeKind testTimeKind = Counter.TimeKind.INTERPRETED_AND_COMPILED;
+        final Profiler.Counter.TimeKind testTimeKind = Profiler.Counter.TimeKind.INTERPRETED_AND_COMPILED;
 
         Assert.assertEquals(0, root.getTotalTime(testTimeKind));
         Assert.assertEquals(0, leaf.getTotalTime(testTimeKind));
@@ -306,7 +309,7 @@ public class ProfilerTest extends AbstractInstrumentationTest {
 
         profiler.setCollecting(true);
         profiler.setTiming(false);
-        Map<SourceSection, Counter> counters = profiler.getCounters();
+        Map<SourceSection, Profiler.Counter> counters = profiler.getCounters();
         Assert.assertEquals(0, counters.size());
         Assert.assertTrue(profiler.isCollecting());
         Assert.assertFalse(profiler.isTiming());
@@ -317,14 +320,14 @@ public class ProfilerTest extends AbstractInstrumentationTest {
 
         counters = profiler.getCounters();
         final com.oracle.truffle.api.source.Source sourceImpl = getSourceImpl(source);
-        final SourceSection rootSection = sourceImpl.createSection(0, 139);
+        final SourceSection rootSection = sourceImpl.createSection(0, 140);
         final SourceSection leafSection = sourceImpl.createSection(17, 16);
         final SourceSection callfooSection = sourceImpl.createSection(47, 27);
         final SourceSection callbarSection = sourceImpl.createSection(88, 27);
-        Counter root = counters.get(rootSection);
-        Counter leaf = counters.get(leafSection);
-        Counter callfoo = counters.get(callfooSection);
-        Counter callbar = counters.get(callbarSection);
+        Profiler.Counter root = counters.get(rootSection);
+        Profiler.Counter leaf = counters.get(leafSection);
+        Profiler.Counter callfoo = counters.get(callfooSection);
+        Profiler.Counter callbar = counters.get(callbarSection);
 
         Assert.assertEquals("", root.getName());
         Assert.assertEquals("foo", leaf.getName());

@@ -23,16 +23,19 @@
 package com.oracle.truffle.dsl.processor.expression;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
+
+import com.oracle.truffle.dsl.processor.generator.DSLExpressionGenerator;
+import com.oracle.truffle.dsl.processor.java.model.CodeTree;
 
 public abstract class DSLExpression {
 
@@ -79,25 +82,17 @@ public abstract class DSLExpression {
         return null;
     }
 
-    public boolean containsComparisons() {
-        final AtomicBoolean found = new AtomicBoolean();
-        this.accept(new AbstractDSLExpressionVisitor() {
-            @Override
-            public void visitBinary(Binary binary) {
-                if (binary.isComparison()) {
-                    found.set(true);
-                }
-            }
-        });
-        return found.get();
-    }
-
     public void setResolvedTargetType(TypeMirror resolvedTargetType) {
         this.resolvedTargetType = resolvedTargetType;
     }
 
     public TypeMirror getResolvedTargetType() {
         return resolvedTargetType;
+    }
+
+    public String asString() {
+        CodeTree tree = DSLExpressionGenerator.write(this, null, new HashMap<>());
+        return tree.toString();
     }
 
     public abstract TypeMirror getResolvedType();

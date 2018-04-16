@@ -24,22 +24,27 @@
  */
 package com.oracle.truffle.api.interop.java.test;
 
-import com.oracle.truffle.api.interop.InteropException;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
+import java.util.Arrays;
+
+import org.graalvm.polyglot.Context;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.oracle.truffle.api.interop.KeyInfo;
 import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
-import com.oracle.truffle.api.interop.java.JavaInterop;
-import java.util.Arrays;
+import com.oracle.truffle.api.interop.java.*;
 
+@SuppressWarnings("deprecation")
 public class ClassInteropTest {
     private TruffleObject obj;
     private XYPlus xyp;
@@ -48,6 +53,20 @@ public class ClassInteropTest {
     public static double y;
     public static final int CONST = 42;
     public int value = CONST;
+
+    private Context context;
+
+    @Before
+    public void enterContext() {
+        context = Context.create();
+        context.enter();
+    }
+
+    @After
+    public void leaveContext() {
+        context.leave();
+        context.close();
+    }
 
     public static double plus(double a, double b) {
         return a + b;
@@ -71,7 +90,7 @@ public class ClassInteropTest {
         assertEquals("Field read", 42, xyp.CONST(), 0.01);
     }
 
-    @Test(expected = UnknownIdentifierException.class)
+    @Test(expected = UnsupportedOperationException.class)
     public void cannotReadValueAsItIsNotStatic() throws Exception {
         assertEquals("Field read", 42, xyp.value());
         fail("value isn't static field");
@@ -151,9 +170,10 @@ public class ClassInteropTest {
     @Test
     public void staticInnerTypeIsNotWritable() {
         Object type = JavaInteropTest.message(Message.KEY_INFO, obj, "Zed");
-        assertTrue("Key exists", ((Integer) type & 0b1) > 0);
-        assertTrue("Key readable", ((Integer) type & 0b10) > 0);
-        assertTrue("Key NOT writable", ((Integer) type & 0b100) == 0);
+        int keyInfo = (int) type;
+        assertTrue("Key exists", KeyInfo.isExisting(keyInfo));
+        assertTrue("Key readable", KeyInfo.isReadable(keyInfo));
+        assertFalse("Key NOT writable", KeyInfo.isModifiable(keyInfo));
     }
 
     @Test(expected = com.oracle.truffle.api.interop.UnknownIdentifierException.class)
@@ -204,6 +224,6 @@ public class ClassInteropTest {
 
         // Checkstyle: resume method name check
 
-        int value() throws InteropException;
+        int value();
     }
 }

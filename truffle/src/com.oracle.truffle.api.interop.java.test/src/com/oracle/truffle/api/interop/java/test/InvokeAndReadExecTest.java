@@ -26,15 +26,20 @@ package com.oracle.truffle.api.interop.java.test;
 
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.interop.ForeignAccess;
+import com.oracle.truffle.api.interop.KeyInfo;
 import com.oracle.truffle.api.interop.MessageResolution;
 import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.TruffleObject;
-import com.oracle.truffle.api.interop.java.JavaInterop;
+import com.oracle.truffle.api.interop.java.*;
 import com.oracle.truffle.api.nodes.Node;
-import com.oracle.truffle.api.vm.PolyglotEngine;
+import com.oracle.truffle.api.vm.*;
 import static org.junit.Assert.assertEquals;
+
+import java.util.Collections;
+
 import org.junit.Test;
 
+@SuppressWarnings("deprecation")
 public class InvokeAndReadExecTest {
     interface Tester {
         String test(String param);
@@ -62,11 +67,27 @@ public class InvokeAndReadExecTest {
         @Resolve(message = "INVOKE")
         abstract static class InvokeImpl extends Node {
             @SuppressWarnings("unused")
-            protected Object access(InvokeObject obj, String name, Object... args) {
+            protected Object access(TruffleObject obj, String name, Object... args) {
                 if (name.equals("test")) {
                     return "Invoked " + args[0];
                 }
                 return JavaInterop.asTruffleValue(null);
+            }
+        }
+
+        @Resolve(message = "KEYS")
+        abstract static class KeysImpl extends Node {
+            @SuppressWarnings("unused")
+            protected Object access(TruffleObject obj) {
+                return JavaInterop.asTruffleObject(Collections.singletonList("test"));
+            }
+        }
+
+        @Resolve(message = "KEY_INFO")
+        abstract static class KeyInfoImpl extends Node {
+            @SuppressWarnings("unused")
+            protected int access(TruffleObject obj, String name) {
+                return name.equals("test") ? KeyInfo.INVOCABLE : KeyInfo.NONE;
             }
         }
 
@@ -105,6 +126,22 @@ public class InvokeAndReadExecTest {
             @SuppressWarnings("unused")
             protected Object access(ReadExecObject obj) {
                 return true;
+            }
+        }
+
+        @Resolve(message = "KEYS")
+        abstract static class KeysImpl extends Node {
+            @SuppressWarnings("unused")
+            protected Object access(ReadExecObject obj) {
+                return JavaInterop.asTruffleObject(Collections.singletonList("test"));
+            }
+        }
+
+        @Resolve(message = "KEY_INFO")
+        abstract static class KeyInfoImpl extends Node {
+            @SuppressWarnings("unused")
+            protected int access(ReadExecObject obj, String name) {
+                return name.equals("test") ? KeyInfo.READABLE : 0;
             }
         }
 

@@ -1,5 +1,5 @@
 Graal is a dynamic compiler written in Java that integrates with the HotSpot JVM. It has a focus on high performance and extensibility.
-In addition, it provides optimized performance for [Truffle](https://github.com/graalvm/truffle)-based languages running on the JVM.
+In addition, it provides optimized performance for [Truffle](https://github.com/graalvm/graal/tree/master/truffle)-based languages running on the JVM.
 
 ## Setup
 
@@ -85,7 +85,7 @@ For video tutorials, presentations and publications on Graal visit the [Publicat
 To create a JVMCI enabled JDK8 on other platforms (e.g., Windows):
 
 ```
-hg clone http://hg.openjdk.java.net/graal/graal-jvmci-8
+git clone https://github.com/graalvm/graal-jvmci-8
 cd graal-jvmci-8
 mx --java-home /path/to/jdk8 build
 mx --java-home /path/to/jdk8 unittest
@@ -96,3 +96,7 @@ You need to use the same JDK the [OTN](http://www.oracle.com/technetwork/oracle-
 The build step above should work on all [supported JDK 8 build platforms](https://wiki.openjdk.java.net/display/Build/Supported+Build+Platforms).
 It should also work on other platforms (such as Oracle Linux, CentOS and Fedora as described [here](http://mail.openjdk.java.net/pipermail/graal-dev/2015-December/004050.html)).
 If you run into build problems, send a message to the [Graal mailing list](http://mail.openjdk.java.net/mailman/listinfo/graal-dev).
+
+## License
+
+The Graal compiler is licensed under the [GPL 2](LICENSE.md).

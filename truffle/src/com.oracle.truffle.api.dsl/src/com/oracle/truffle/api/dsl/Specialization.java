@@ -29,6 +29,8 @@ import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.UnexpectedResultException;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -108,7 +110,6 @@ import java.lang.annotation.Target;
  * </p>
  *
  * @see NodeChild
- * @see ShortCircuit
  * @see Fallback
  * @see Cached
  * @see TypeSystem
@@ -125,7 +126,7 @@ public @interface Specialization {
      * specializations are partly declared in the super class and partly declared in a derived
      * class. By default all specializations declared in the derived class are appended to those in
      * the super class. This attribute can be used to override the default behavior.
-     * 
+     *
      * @since 0.8 or earlier
      */
     String insertBefore() default "";
@@ -141,9 +142,12 @@ public @interface Specialization {
      * <p>
      * If an event guard exception is triggered then all instantiations of this specialization are
      * removed. If one of theses exceptions is thrown once then no further instantiations of this
-     * specialization are going to be created for this node. A specialization that rewrites on an
-     * exception must ensure that no non-repeatable side-effect is caused until the rewrite is
-     * triggered.
+     * specialization are going to be created for this node.
+     *
+     * In case of explicitly declared {@link UnexpectedResultException}s, the result from the
+     * exception will be used. For all other exception types, the next available specialization will
+     * be executed, so that the original specialization must ensure that no non-repeatable
+     * side-effect is caused until the rewrite is triggered.
      * </p>
      *
      * <b>Example usage:</b>
@@ -172,14 +176,6 @@ public @interface Specialization {
      * @since 0.8 or earlier
      */
     Class<? extends Throwable>[] rewriteOn() default {};
-
-    /**
-     * @see #replaces()
-     * @deprecated renamed to {@link #replaces()} since 0.22
-     * @since 0.8 or earlier
-     */
-    @Deprecated
-    String[] contains() default {};
 
     /**
      * <p>

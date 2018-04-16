@@ -25,12 +25,15 @@
 package com.oracle.truffle.api.interop.java;
 
 import java.lang.reflect.Array;
+import java.util.List;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.nodes.Node;
 
 abstract class ArrayWriteNode extends Node {
@@ -38,29 +41,58 @@ abstract class ArrayWriteNode extends Node {
 
     protected abstract Object executeWithTarget(JavaObject receiver, Object index, Object value);
 
+    @Specialization(guards = {"receiver.isArray()"})
+    protected final Object doArrayIntIndex(JavaObject receiver, int index, Object value) {
+        return doArrayAccess(receiver, index, value);
+    }
+
     @Specialization(guards = {"receiver.isArray()", "index.getClass() == clazz"})
-    protected final Object doNumber(JavaObject receiver, Number index, Object value,
+    protected final Object doArrayCached(JavaObject receiver, Number index, Object value,
                     @Cached("index.getClass()") Class<? extends Number> clazz) {
         return doArrayAccess(receiver, clazz.cast(index).intValue(), value);
     }
 
-    @Specialization(guards = {"receiver.isArray()"}, replaces = "doNumber")
-    protected final Object doNumberGeneric(JavaObject receiver, Number index, Object value) {
+    @Specialization(guards = {"receiver.isArray()"}, replaces = "doArrayCached")
+    protected final Object doArrayGeneric(JavaObject receiver, Number index, Object value) {
         return doArrayAccess(receiver, index.intValue(), value);
+    }
+
+    @SuppressWarnings("unchecked")
+    @TruffleBoundary
+    @Specialization(guards = {"isList(receiver)"})
+    protected Object doListIntIndex(JavaObject receiver, int index, Object value) {
+        final Object javaValue = toJavaNode.execute(value, Object.class, null, receiver.languageContext);
+        try {
+            List<Object> list = ((List<Object>) receiver.obj);
+            if (index == list.size()) {
+                list.add(javaValue);
+            } else {
+                list.set(index, javaValue);
+            }
+            return value;
+        } catch (IndexOutOfBoundsException e) {
+            CompilerDirectives.transferToInterpreter();
+            throw UnknownIdentifierException.raise(String.valueOf(index));
+        }
+    }
+
+    @TruffleBoundary
+    @Specialization(guards = {"isList(receiver)"}, replaces = "doListIntIndex")
+    protected Object doListGeneric(JavaObject receiver, Number index, Object value) {
+        return doListIntIndex(receiver, index.intValue(), value);
     }
 
     @SuppressWarnings("unused")
     @TruffleBoundary
-    @Specialization(guards = {"!receiver.isArray()"})
+    @Specialization(guards = {"!receiver.isArray()", "!isList(receiver)"})
     protected static Object notArray(JavaObject receiver, Number index, Object value) {
-        throw UnknownIdentifierException.raise(String.valueOf(index));
+        throw UnsupportedMessageException.raise(Message.WRITE);
     }
 
     private Object doArrayAccess(JavaObject receiver, int index, Object value) {
         Object obj = receiver.obj;
         assert receiver.isArray();
-        TypeAndClass<?> type = obj.getClass() == Object.class ? TypeAndClass.ANY : new TypeAndClass<>(null, obj.getClass().getComponentType());
-        final Object javaValue = toJavaNode.execute(value, type, receiver.languageContext);
+        final Object javaValue = toJavaNode.execute(value, obj.getClass().getComponentType(), null, receiver.languageContext);
         try {
             Array.set(obj, index, javaValue);
         } catch (ArrayIndexOutOfBoundsException outOfBounds) {
@@ -68,6 +100,10 @@ abstract class ArrayWriteNode extends Node {
             throw UnknownIdentifierException.raise(String.valueOf(index));
         }
         return JavaObject.NULL;
+    }
+
+    static boolean isList(JavaObject receiver) {
+        return receiver.obj instanceof List;
     }
 
     static ArrayWriteNode create() {

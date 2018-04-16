@@ -26,7 +26,11 @@ package com.oracle.truffle.api.vm;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.JarURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -40,18 +44,19 @@ import java.util.TreeSet;
 
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleOptions;
-import com.oracle.truffle.api.vm.PolyglotEngine.LegacyEngineImpl;
 import java.io.PrintStream;
 
 /**
  * Ahead-of-time initialization. If the JVM is started with {@link TruffleOptions#AOT}, it populates
  * runtimeCache with languages found in application classloader.
  */
+@SuppressWarnings("deprecation")
 final class LanguageCache implements Comparable<LanguageCache> {
     private static final Map<String, LanguageCache> nativeImageCache = TruffleOptions.AOT ? new HashMap<>() : null;
     private static volatile Map<String, LanguageCache> runtimeCache;
     private final String className;
     private final Set<String> mimeTypes;
+    private final Set<String> dependentLanguages;
     private final String id;
     private final String name;
     private final String implementationName;
@@ -59,36 +64,28 @@ final class LanguageCache implements Comparable<LanguageCache> {
     private final boolean interactive;
     private final boolean internal;
     private final ClassLoader loader;
+    private String languageHome;
     final TruffleLanguage<?> singletonLanguage;
     private volatile Class<? extends TruffleLanguage<?>> languageClass;
 
     static {
         if (VMAccessor.SPI == null) {
-            VMAccessor.initialize(new LegacyEngineImpl());
+            VMAccessor.initialize(new com.oracle.truffle.api.vm.PolyglotEngine.LegacyEngineImpl());
         }
     }
 
-    private LanguageCache(String prefix, Properties info, ClassLoader loader) {
+    private LanguageCache(String id, String prefix, Properties info, ClassLoader loader, String url) {
         this.loader = loader;
         this.className = info.getProperty(prefix + "className");
         this.name = info.getProperty(prefix + "name");
         this.implementationName = info.getProperty(prefix + "implementationName");
         this.version = info.getProperty(prefix + "version");
-        String resolvedId = info.getProperty(prefix + "id");
-
-        TreeSet<String> mimeTypesSet = new TreeSet<>();
-        for (int i = 0;; i++) {
-            String mt = info.getProperty(prefix + "mimeType." + i);
-            if (mt == null) {
-                break;
-            }
-            mimeTypesSet.add(mt);
-        }
-        this.mimeTypes = Collections.unmodifiableSet(mimeTypesSet);
-        this.id = resolvedId == null ? defaultId() : resolvedId;
+        this.mimeTypes = parseList(info, prefix + "mimeType");
+        this.dependentLanguages = parseList(info, prefix + "dependentLanguage");
+        this.id = id;
         this.interactive = Boolean.valueOf(info.getProperty(prefix + "interactive"));
         this.internal = Boolean.valueOf(info.getProperty(prefix + "internal"));
-
+        this.languageHome = url;
         if (TruffleOptions.AOT) {
             this.languageClass = loadLanguageClass();
             this.singletonLanguage = readSingleton(languageClass);
@@ -96,6 +93,18 @@ final class LanguageCache implements Comparable<LanguageCache> {
             this.languageClass = null;
             this.singletonLanguage = null;
         }
+    }
+
+    private static TreeSet<String> parseList(Properties info, String prefix) {
+        TreeSet<String> mimeTypesSet = new TreeSet<>();
+        for (int i = 0;; i++) {
+            String mt = info.getProperty(prefix + "." + i);
+            if (mt == null) {
+                break;
+            }
+            mimeTypesSet.add(mt);
+        }
+        return mimeTypesSet;
     }
 
     @SuppressWarnings("unchecked")
@@ -109,28 +118,11 @@ final class LanguageCache implements Comparable<LanguageCache> {
         this.version = version;
         this.interactive = interactive;
         this.internal = internal;
+        this.dependentLanguages = Collections.emptySet();
         this.loader = instance.getClass().getClassLoader();
         this.singletonLanguage = instance;
         this.languageClass = (Class<? extends TruffleLanguage<?>>) instance.getClass();
-    }
-
-    private String defaultId() {
-        String resolvedId;
-        if (name.isEmpty()) {
-            int lastIndex = className.lastIndexOf('$');
-            if (lastIndex == -1) {
-                lastIndex = className.lastIndexOf('.');
-            }
-            resolvedId = className.substring(lastIndex + 1, className.length());
-        } else {
-            // TODO remove this hack for single character languages
-            if (name.length() == 1) {
-                resolvedId = name;
-            } else {
-                resolvedId = name.toLowerCase();
-            }
-        }
-        return resolvedId;
+        this.languageHome = null;
     }
 
     static Map<String, LanguageCache> languages() {
@@ -177,9 +169,11 @@ final class LanguageCache implements Comparable<LanguageCache> {
         while (en.hasMoreElements()) {
             URL u = en.nextElement();
             Properties p;
+            URLConnection connection;
             try {
                 p = new Properties();
-                try (InputStream is = u.openStream()) {
+                connection = u.openConnection();
+                try (InputStream is = connection.getInputStream()) {
                     p.load(is);
                 }
             } catch (IOException ex) {
@@ -194,13 +188,43 @@ final class LanguageCache implements Comparable<LanguageCache> {
                 if (name == null) {
                     break;
                 }
-                list.add(new LanguageCache(prefix, p, loader));
+                String id = p.getProperty(prefix + "id");
+                if (id == null) {
+                    id = defaultId(name, p.getProperty(prefix + "className"));
+                }
+                String languageHome = System.getProperty(id + ".home");
+                if (languageHome == null && connection instanceof JarURLConnection) {
+                    // (tfel): This seems a bit brittle, but is actually the best API
+                    // for this I could find.
+                    Path path = Paths.get(((JarURLConnection) connection).getJarFileURL().getPath());
+                    languageHome = path.getParent().toString();
+                }
+                list.add(new LanguageCache(id, prefix, p, loader, languageHome));
             }
         }
     }
 
+    private static String defaultId(final String name, final String className) {
+        String resolvedId;
+        if (name.isEmpty()) {
+            int lastIndex = className.lastIndexOf('$');
+            if (lastIndex == -1) {
+                lastIndex = className.lastIndexOf('.');
+            }
+            resolvedId = className.substring(lastIndex + 1, className.length());
+        } else {
+            // TODO remove this hack for single character languages
+            if (name.length() == 1) {
+                resolvedId = name;
+            } else {
+                resolvedId = name.toLowerCase();
+            }
+        }
+        return resolvedId;
+    }
+
     public int compareTo(LanguageCache o) {
-        return className.compareTo(o.className);
+        return id.compareTo(o.id);
     }
 
     String getId() {
@@ -219,6 +243,10 @@ final class LanguageCache implements Comparable<LanguageCache> {
         return implementationName;
     }
 
+    Set<String> getDependentLanguages() {
+        return dependentLanguages;
+    }
+
     String getVersion() {
         return version;
     }
@@ -233,6 +261,20 @@ final class LanguageCache implements Comparable<LanguageCache> {
 
     boolean isInteractive() {
         return interactive;
+    }
+
+    String getLanguageHome() {
+        if (languageHome == null) {
+            String home = System.getProperty(id + ".home");
+            if (home == null) {
+                String graalVmHome = System.getProperty("graalvm.home");
+                if (graalVmHome != null) {
+                    home = Paths.get(graalVmHome).resolve("jre").resolve("languages").resolve(id).toString();
+                }
+            }
+            languageHome = home;
+        }
+        return languageHome;
     }
 
     LoadedLanguage loadLanguage() {
@@ -260,6 +302,20 @@ final class LanguageCache implements Comparable<LanguageCache> {
     }
 
     @SuppressWarnings("unchecked")
+    Class<? extends TruffleLanguage<?>> getLanguageClass() {
+        if (TruffleOptions.AOT) {
+            TruffleLanguage<?> instance = singletonLanguage;
+            if (instance != null) {
+                return (Class<? extends TruffleLanguage<?>>) instance.getClass();
+            } else {
+                return this.languageClass;
+            }
+        } else {
+            return loadLanguageClass();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
     private Class<? extends TruffleLanguage<?>> loadLanguageClass() {
         if (languageClass == null) {
             synchronized (this) {
@@ -275,11 +331,22 @@ final class LanguageCache implements Comparable<LanguageCache> {
         return languageClass;
     }
 
+    @Override
+    public String toString() {
+        return "LanguageCache [id=" + id + ", name=" + name + ", implementationName=" + implementationName + ", version=" + version + ", className=" + className + "]";
+    }
+
     private static TruffleLanguage<?> readSingleton(Class<?> languageClass) {
         try {
             return (TruffleLanguage<?>) languageClass.getField("INSTANCE").get(null);
         } catch (Exception ex) {
             return null;
+        }
+    }
+
+    static void resetNativeImageCacheLanguageHomes() {
+        for (LanguageCache languageCache : languages().values()) {
+            languageCache.languageHome = null;
         }
     }
 
@@ -349,6 +416,7 @@ final class LanguageCache implements Comparable<LanguageCache> {
         assert TruffleOptions.AOT : "Only supported during image generation";
         ArrayList<Class<?>> list = new ArrayList<>();
         for (LanguageCache cache : nativeImageCache.values()) {
+            assert cache.languageClass != null;
             list.add(cache.languageClass);
         }
         return list;

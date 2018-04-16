@@ -38,14 +38,22 @@ import java.util.Map;
 import org.graalvm.options.OptionDescriptor;
 import org.graalvm.options.OptionDescriptors;
 import org.graalvm.options.OptionValues;
+import org.graalvm.polyglot.Engine;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.InstrumentInfo;
 import com.oracle.truffle.api.Option;
+import com.oracle.truffle.api.Scope;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleRuntime;
+import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.MaterializedFrame;
+import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.instrumentation.InstrumentationHandler.AccessorInstrumentHandler;
 import com.oracle.truffle.api.instrumentation.InstrumentationHandler.InstrumentClientInstrumenter;
+import com.oracle.truffle.api.nodes.ExecutableNode;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
@@ -53,45 +61,25 @@ import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
 
 /**
- * <p>
- * The service provider interface (SPI) for Truffle
- * {@linkplain com.oracle.truffle.api.vm.PolyglotEngine.Instrument Instruments}: clients of Truffle
- * instrumentation that may observe and inject behavior into interpreters written using the Truffle
- * framework.
- * <p>
- * Each registered instrument can be
- * {@linkplain com.oracle.truffle.api.vm.PolyglotEngine.Instrument#setEnabled(boolean)
- * enabled/disabled} multiple times during the lifetime of a
- * {@link com.oracle.truffle.api.vm.PolyglotEngine PolyglotEngine}, but there is never more than one
- * instance per engine. A new {@link TruffleInstrument} instance is created each time the instrument
- * is enabled, and the currently enabled instance is disposed when the instrument is disabled.
- * </p>
- * <h4>Registration</h4>
+ * The service provider interface (SPI) for Truffle instruments: clients of Truffle instrumentation
+ * that may observe and inject behavior into interpreters written using the Truffle framework.
  * <p>
  * Instrument implementation classes must use the {@link Registration} annotation to provide
  * required metadata and to enable automatic discovery of the implementation.
- * </p>
- * <h4>Instrument Creation</h4>
- * <ul>
- * <li>When an instrument becomes
- * {@linkplain com.oracle.truffle.api.vm.PolyglotEngine.Instrument#setEnabled(boolean) enabled}, a
- * new instance is created and notified once via {@link #onCreate(Env)}.</li>
- * <li>The {@link Instrumenter} available in the provided {@linkplain Env environment} allows the
- * instrument instance to bind listeners for {@linkplain ExecutionEventListener execution} and
+ * <p>
+ * An instrument is {@link #onCreate(Env) created } if at least one instrument
+ * {@link TruffleInstrument.Env#getOptions() option} was specified or if a
+ * {@link TruffleInstrument.Env#registerService(Object) service} was looked up. The
+ * {@link Instrumenter} available in the provided {@linkplain Env environment} allows the instrument
+ * instance to bind listeners for {@linkplain ExecutionEventListener execution} and
  * {@linkplain LoadSourceListener source} events, as well as {@linkplain ExecutionEventNodeFactory
- * node factories} for code injection at guest language code locations.</li>
- * </ul>
- * <h4>Instrument Disposal</h4>
- * <ul>
- * <li>When an instrument becomes
- * {@linkplain com.oracle.truffle.api.vm.PolyglotEngine.Instrument#setEnabled(boolean) disabled},
- * the current instance is notified once via {@link #onDispose(Env)}.</li>
- * <li>All active bindings created by a disposed instrument become disposed automatically.</li>
- * <li>The {@link Instrumenter} instance available in the provided {@linkplain Env environment} may
- * not be used after disposal.</li>
- * <li>All enabled instruments in an engine become disabled automatically when the engine is
- * disposed.</li>
- * </ul>
+ * node factories} for code injection at guest language code locations.
+ * <p>
+ * An instrument is disposed when the associated polyglot {@linkplain Engine engine} is disposed.
+ * All active bindings created by a disposed instrument become disposed automatically. The
+ * {@link Instrumenter} instance available in the provided {@linkplain Env environment} may not be
+ * used after disposal.
+ * <p>
  * <h4>Example for a simple expression coverage instrument:</h4>
  * {@codesnippet com.oracle.truffle.api.instrumentation.test.examples.CoverageExample}
  *
@@ -111,8 +99,8 @@ public abstract class TruffleInstrument {
      * <p>
      * The method may {@link Env#registerService(java.lang.Object) register} additional
      * {@link Registration#services() services} - e.g. objects to be exposed via
-     * {@link com.oracle.truffle.api.vm.PolyglotRuntime.Instrument#lookup lookup query}. For example
-     * to expose a debugger one could define an abstract debugger controller:
+     * {@link org.graalvm.polyglot.Instrument#lookup lookup query}. For example to expose a debugger
+     * one could define an abstract debugger controller:
      * </p>
      *
      * {@codesnippet DebuggerController}
@@ -132,26 +120,16 @@ public abstract class TruffleInstrument {
     protected abstract void onCreate(Env env);
 
     /**
-     * Invoked once on an {@linkplain TruffleInstrument instance} when it becomes
-     * {@linkplain com.oracle.truffle.api.vm.PolyglotEngine.Instrument#setEnabled(boolean) disabled}
-     * , possibly because the underlying {@linkplain com.oracle.truffle.api.vm.PolyglotEngine
-     * engine} has been disposed. A disposed instance is no longer usable. If the instrument is
-     * re-enabled, the engine will create a new instance.
+     * Invoked once on an {@linkplain TruffleInstrument instance} when it becomes disabled ,
+     * possibly because the underlying {@linkplain org.graalvm.polyglot.Engine engine} has been
+     * disposed. A disposed instance is no longer usable. If the instrument is re-enabled, the
+     * engine will create a new instance.
      *
      * @param env environment information for the instrument
      * @since 0.12
      */
     protected void onDispose(Env env) {
         // default implementation does nothing
-    }
-
-    /**
-     * @since 0.27
-     * @deprecated in 0.27 use {@link #getOptionDescriptors()} instead.
-     */
-    @Deprecated
-    protected List<OptionDescriptor> describeOptions() {
-        return null;
     }
 
     /**
@@ -169,7 +147,7 @@ public abstract class TruffleInstrument {
      * @since 0.27
      */
     protected OptionDescriptors getOptionDescriptors() {
-        return OptionDescriptors.create(describeOptions());
+        return OptionDescriptors.EMPTY;
     }
 
     /**
@@ -180,7 +158,7 @@ public abstract class TruffleInstrument {
     @SuppressWarnings("static-method")
     public static final class Env {
 
-        private final Object vmObject; // PolyglotRuntime.Instrument
+        private final Object vmObject; // PolyglotInstrument
         private final InputStream in;
         private final OutputStream err;
         private final OutputStream out;
@@ -195,6 +173,10 @@ public abstract class TruffleInstrument {
             this.out = out;
         }
 
+        Object getVMObject() {
+            return vmObject;
+        }
+
         /**
          * Returns the instrumenter which lets you instrument guest language ASTs.
          *
@@ -206,8 +188,8 @@ public abstract class TruffleInstrument {
         }
 
         /**
-         * Input associated with {@link com.oracle.truffle.api.vm.PolyglotEngine} this
-         * {@link TruffleInstrument instrument} is being executed in.
+         * Input associated with {@link org.graalvm.polyglot.Engine} this {@link TruffleInstrument
+         * instrument} is being executed in.
          *
          * @return reader, never <code>null</code>
          * @since 0.12
@@ -217,7 +199,7 @@ public abstract class TruffleInstrument {
         }
 
         /**
-         * Standard output writer for {@link com.oracle.truffle.api.vm.PolyglotEngine} this
+         * Standard output writer for {@link org.graalvm.polyglot.Engine} this
          * {@link TruffleInstrument instrument} is being executed in.
          *
          * @return writer, never <code>null</code>
@@ -228,7 +210,7 @@ public abstract class TruffleInstrument {
         }
 
         /**
-         * Standard error writer for {@link com.oracle.truffle.api.vm.PolyglotEngine} this
+         * Standard error writer for {@link org.graalvm.polyglot.Engine} this
          * {@link TruffleInstrument instrument} is being executed in.
          *
          * @return writer, never <code>null</code>
@@ -242,14 +224,14 @@ public abstract class TruffleInstrument {
          * Registers additional service. This method can be called multiple time, but only during
          * {@link #onCreate(com.oracle.truffle.api.instrumentation.TruffleInstrument.Env)
          * initialization of the instrument}. These services are made available to users via
-         * {@link com.oracle.truffle.api.vm.PolyglotEngine.Instrument#lookup} query method.
+         * {@link org.graalvm.polyglot.Instrument#lookup} query method.
          *
          * This method can only be called from
          * {@link #onCreate(com.oracle.truffle.api.instrumentation.TruffleInstrument.Env)} method -
          * then the services are collected and cannot be changed anymore.
          *
          * @param service a service to be returned from associated
-         *            {@link com.oracle.truffle.api.vm.PolyglotEngine.Instrument#lookup}
+         *            {@link org.graalvm.polyglot.Instrument#lookup}
          * @throws IllegalStateException if the method is called later than from
          *             {@link #onCreate(com.oracle.truffle.api.instrumentation.TruffleInstrument.Env) }
          *             method
@@ -359,6 +341,70 @@ public abstract class TruffleInstrument {
         }
 
         /**
+         * Parses source snippet of the node's language at the provided node location. The result is
+         * an AST fragment represented by {@link ExecutableNode} that accepts frames valid at the
+         * provided node location, or <code>null</code> when inline parsing is not supported by the
+         * language.
+         *
+         * @param source a source snippet to parse at the provided node location
+         * @param node a context location where the source is parsed at, must not be
+         *            <code>null</code>
+         * @param frame a frame location where the source is parsed at, can be <code>null</code>
+         * @return the executable fragment representing the parsed result, or <code>null</code>
+         * @since 0.31
+         */
+        public ExecutableNode parseInline(Source source, Node node, MaterializedFrame frame) {
+            if (node == null) {
+                throw new IllegalArgumentException("Node must not be null.");
+            }
+            TruffleLanguage.Env env = AccessorInstrumentHandler.engineAccess().getEnvForInstrument(vmObject, source.getLanguage(), source.getMimeType());
+            // Assert that the languages match:
+            assert AccessorInstrumentHandler.langAccess().getLanguageInfo(env) == node.getRootNode().getLanguageInfo();
+            ExecutableNode fragment = AccessorInstrumentHandler.langAccess().parseInline(env, source, node, frame);
+            if (fragment != null) {
+                TruffleLanguage<?> languageSPI = AccessorInstrumentHandler.langAccess().getSPI(env);
+                fragment = new GuardedExecutableNode(languageSPI, fragment, frame);
+            }
+            return fragment;
+        }
+
+        private static class GuardedExecutableNode extends ExecutableNode {
+
+            private final FrameDescriptor frameDescriptor;
+            @Child private ExecutableNode fragment;
+
+            GuardedExecutableNode(TruffleLanguage<?> languageSPI, ExecutableNode fragment, MaterializedFrame frameLocation) {
+                super(languageSPI);
+                this.frameDescriptor = (frameLocation != null) ? frameLocation.getFrameDescriptor() : null;
+                this.fragment = fragment;
+            }
+
+            @Override
+            public Object execute(VirtualFrame frame) {
+                assert frameDescriptor == null || frameDescriptor == frame.getFrameDescriptor();
+                assureAdopted();
+                Object ret = fragment.execute(frame);
+                assert checkNullOrInterop(ret);
+                return ret;
+            }
+
+            private void assureAdopted() {
+                if (getParent() == null) {
+                    CompilerDirectives.transferToInterpreter();
+                    throw new IllegalStateException("Needs to be inserted into the AST before execution.");
+                }
+            }
+
+            private boolean checkNullOrInterop(Object obj) {
+                if (obj == null) {
+                    return true;
+                }
+                AccessorInstrumentHandler.interopAccess().checkInteropType(obj);
+                return true;
+            }
+        }
+
+        /**
          * Returns <code>true</code> if the given root node is considered an engine evaluation root
          * for the current execution context. Multiple such root nodes can appear on stack frames
          * returned by
@@ -399,12 +445,14 @@ public abstract class TruffleInstrument {
          * of this method is undefined if a type unknown to the language is passed as a value.
          *
          * @param language a language
-         * @param value a known value of that language
+         * @param value a known value of that language, must be an interop type (i.e. either
+         *            implementing TruffleObject or be a primitive value)
          * @return a human readable string representation of the value.
          * @see #findLanguage(java.lang.Object)
          * @since 0.27
          */
         public String toString(LanguageInfo language, Object value) {
+            AccessorInstrumentHandler.interopAccess().checkInteropType(value);
             final TruffleLanguage.Env env = AccessorInstrumentHandler.engineAccess().getEnvForInstrument(language);
             return AccessorInstrumentHandler.langAccess().toStringIfVisible(env, value, false);
         }
@@ -439,12 +487,14 @@ public abstract class TruffleInstrument {
          * language}, if any.
          *
          * @param language a language
-         * @param value a value to find the meta-object of
+         * @param value a value to find the meta-object of, must be an interop type (i.e. either
+         *            implementing TruffleObject or be a primitive value)
          * @return the meta-object, or <code>null</code>
          * @see #findLanguage(java.lang.Object)
          * @since 0.27
          */
         public Object findMetaObject(LanguageInfo language, Object value) {
+            AccessorInstrumentHandler.interopAccess().checkInteropType(value);
             final TruffleLanguage.Env env = AccessorInstrumentHandler.engineAccess().getEnvForInstrument(language);
             return AccessorInstrumentHandler.langAccess().findMetaObject(env, value);
         }
@@ -473,12 +523,14 @@ public abstract class TruffleInstrument {
          * if any.
          *
          * @param language a language
-         * @param value a value to get the source location for
+         * @param value a value to get the source location for, must be an interop type (i.e. either
+         *            implementing TruffleObject or be a primitive value)
          * @return a source location of the object, or <code>null</code>
          * @see #findLanguage(java.lang.Object)
          * @since 0.27
          */
         public SourceSection findSourceLocation(LanguageInfo language, Object value) {
+            AccessorInstrumentHandler.interopAccess().checkInteropType(value);
             final TruffleLanguage.Env env = AccessorInstrumentHandler.engineAccess().getEnvForInstrument(language);
             return AccessorInstrumentHandler.langAccess().findSourceLocation(env, value);
         }
@@ -517,6 +569,77 @@ public abstract class TruffleInstrument {
             return AccessorInstrumentHandler.engineAccess().getEnvForInstrument(languageInfo);
         }
 
+        /**
+         * Returns the polyglot scope - symbols explicitly exported by languages.
+         *
+         * @return a read-only map of symbol names and their values
+         * @since 0.30
+         */
+        public Map<String, ? extends Object> getExportedSymbols() {
+            return AccessorInstrumentHandler.engineAccess().getExportedSymbols(vmObject);
+        }
+
+        /**
+         * Find a list of local scopes enclosing the given {@link Node node}. The scopes contain
+         * variables that are valid at the provided node and that have a relation to it. Unless the
+         * node is in a global scope, it is expected that there is at least one scope provided, that
+         * corresponds to the enclosing function. Global top scopes are provided by
+         * {@link #findTopScopes(java.lang.String)}. The iteration order corresponds with the scope
+         * nesting, from the inner-most to the outer-most.
+         * <p>
+         * Scopes may depend on the information provided by the frame. <br/>
+         * Lexical scopes are returned when <code>frame</code> argument is <code>null</code>.
+         *
+         * @param node a node to get the enclosing scopes for. The node needs to be inside a
+         *            {@link RootNode} associated with a language.
+         * @param frame The current frame the node is in, or <code>null</code> for lexical access
+         *            when the program is not running, or is not suspended at the node's location.
+         * @return an {@link Iterable} providing list of scopes from the inner-most to the
+         *         outer-most.
+         * @see TruffleLanguage#findLocalScopes(java.lang.Object, com.oracle.truffle.api.nodes.Node,
+         *      com.oracle.truffle.api.frame.Frame)
+         * @since 0.30
+         */
+        public Iterable<Scope> findLocalScopes(Node node, Frame frame) {
+            RootNode rootNode = node.getRootNode();
+            if (rootNode == null) {
+                throw new IllegalArgumentException("The node " + node + " does not have a RootNode.");
+            }
+            LanguageInfo languageInfo = rootNode.getLanguageInfo();
+            if (languageInfo == null) {
+                throw new IllegalArgumentException("The root node " + rootNode + " does not have a language associated.");
+            }
+            final TruffleLanguage.Env env = AccessorInstrumentHandler.engineAccess().getEnvForInstrument(languageInfo);
+            Iterable<Scope> langScopes = AccessorInstrumentHandler.langAccess().findLocalScopes(env, node, frame);
+            assert langScopes != null : languageInfo.getId();
+            return langScopes;
+        }
+
+        /**
+         * Find a list of top scopes of a language. The iteration order corresponds with the scope
+         * nesting, from the inner-most to the outer-most.
+         *
+         * @param languageId a language id.
+         * @return a list of top scopes, can be empty when no top scopes are provided by the
+         *         language
+         * @see TruffleLanguage#findTopScopes(java.lang.Object)
+         * @since 0.30
+         */
+        public Iterable<Scope> findTopScopes(String languageId) {
+            LanguageInfo languageInfo = getLanguages().get(languageId);
+            if (languageInfo == null) {
+                throw new IllegalArgumentException("Unknown language: " + languageId + ". Known languages are: " + getLanguages().keySet());
+            }
+            final TruffleLanguage.Env env = AccessorInstrumentHandler.engineAccess().getEnvForInstrument(languageInfo);
+            return findTopScopes(env);
+        }
+
+        static Iterable<Scope> findTopScopes(TruffleLanguage.Env env) {
+            Iterable<Scope> langScopes = AccessorInstrumentHandler.langAccess().findTopScopes(env);
+            assert langScopes != null : AccessorInstrumentHandler.langAccess().getLanguageInfo(env).getId();
+            return langScopes;
+        }
+
     }
 
     /**
@@ -532,21 +655,21 @@ public abstract class TruffleInstrument {
         /**
          * A custom machine identifier for this instrument. If not defined then the fully qualified
          * class name is used.
-         * 
+         *
          * @since 0.12
          */
         String id() default "";
 
         /**
          * The name of the instrument in an arbitrary format for humans.
-         * 
+         *
          * @since 0.12
          */
         String name() default "";
 
         /**
          * The version for instrument in an arbitrary format.
-         * 
+         *
          * @since 0.12
          */
         String version() default "";
@@ -566,11 +689,8 @@ public abstract class TruffleInstrument {
          * method and instantiate and {@link Env#registerService(java.lang.Object) register} all
          * here in defined services.
          * <p>
-         * Instruments
-         * {@link com.oracle.truffle.api.vm.PolyglotEngine.Instrument#setEnabled(boolean) get
-         * automatically enabled} when their registered
-         * {@link com.oracle.truffle.api.vm.PolyglotEngine.Instrument#lookup(java.lang.Class)
-         * service is requested}.
+         * Instruments automatically get created when their registered
+         * {@link org.graalvm.polyglot.Instrument#lookup(java.lang.Class) service is requested}.
          *
          * @since 0.25
          * @return list of service types that this instrument can provide
@@ -580,7 +700,7 @@ public abstract class TruffleInstrument {
 
     static {
         try {
-            // Instrument is loaded by PolyglotEngine which should load InstrumentationHandler
+            // Instrument is loaded by Engine which should load InstrumentationHandler
             // this is important to load the accessors properly.
             Class.forName(InstrumentationHandler.class.getName(), true, InstrumentationHandler.class.getClassLoader());
         } catch (ClassNotFoundException ex) {

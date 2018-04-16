@@ -26,18 +26,20 @@ import static org.graalvm.compiler.graph.Edges.Type.Inputs;
 import static org.graalvm.compiler.graph.Edges.Type.Successors;
 
 import java.io.IOException;
-import java.nio.channels.WritableByteChannel;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import jdk.vm.ci.meta.ResolvedJavaField;
 
 import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
 import org.graalvm.compiler.bytecode.Bytecode;
 import org.graalvm.compiler.core.common.cfg.BlockMap;
+import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugOptions;
 import org.graalvm.compiler.graph.CachedGraph;
 import org.graalvm.compiler.graph.Edges;
@@ -46,6 +48,8 @@ import org.graalvm.compiler.graph.InputEdges;
 import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.graph.NodeClass;
 import org.graalvm.compiler.graph.NodeMap;
+import org.graalvm.compiler.graph.NodeSourcePosition;
+import org.graalvm.compiler.graph.SourceLanguagePosition;
 import org.graalvm.compiler.nodes.AbstractBeginNode;
 import org.graalvm.compiler.nodes.AbstractEndNode;
 import org.graalvm.compiler.nodes.AbstractMergeNode;
@@ -55,15 +59,11 @@ import org.graalvm.compiler.nodes.ControlSplitNode;
 import org.graalvm.compiler.nodes.FixedNode;
 import org.graalvm.compiler.nodes.PhiNode;
 import org.graalvm.compiler.nodes.ProxyNode;
+import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.VirtualState;
 import org.graalvm.compiler.nodes.cfg.Block;
 import org.graalvm.compiler.nodes.cfg.ControlFlowGraph;
-import jdk.vm.ci.meta.ResolvedJavaMethod;
-import jdk.vm.ci.meta.ResolvedJavaType;
-import jdk.vm.ci.meta.Signature;
-import org.graalvm.compiler.debug.DebugContext;
-import org.graalvm.compiler.graph.NodeSourcePosition;
-import org.graalvm.compiler.nodes.StructuredGraph;
+import org.graalvm.compiler.nodes.util.JavaConstantFormattable;
 import org.graalvm.compiler.phases.schedule.SchedulePhase;
 import org.graalvm.graphio.GraphBlocks;
 import org.graalvm.graphio.GraphElements;
@@ -71,16 +71,30 @@ import org.graalvm.graphio.GraphOutput;
 import org.graalvm.graphio.GraphStructure;
 import org.graalvm.graphio.GraphTypes;
 
+import jdk.vm.ci.meta.JavaType;
+import jdk.vm.ci.meta.ResolvedJavaField;
+import jdk.vm.ci.meta.ResolvedJavaMethod;
+import jdk.vm.ci.meta.Signature;
+import org.graalvm.graphio.GraphLocations;
+
 public class BinaryGraphPrinter implements
                 GraphStructure<BinaryGraphPrinter.GraphInfo, Node, NodeClass<?>, Edges>,
                 GraphBlocks<BinaryGraphPrinter.GraphInfo, Block, Node>,
                 GraphElements<ResolvedJavaMethod, ResolvedJavaField, Signature, NodeSourcePosition>,
+                GraphLocations<ResolvedJavaMethod, NodeSourcePosition, SourceLanguagePosition>,
                 GraphTypes, GraphPrinter {
     private final SnippetReflectionProvider snippetReflection;
     private final GraphOutput<BinaryGraphPrinter.GraphInfo, ResolvedJavaMethod> output;
 
-    public BinaryGraphPrinter(WritableByteChannel channel, SnippetReflectionProvider snippetReflection) throws IOException {
-        this.output = GraphOutput.newBuilder(this).protocolVersion(5, 0).blocks(this).elements(this).types(this).build(channel);
+    public BinaryGraphPrinter(DebugContext ctx, SnippetReflectionProvider snippetReflection) throws IOException {
+        // @formatter:off
+        this.output = ctx.buildOutput(GraphOutput.newBuilder(this).
+                        protocolVersion(5, 0).
+                        blocks(this).
+                        elementsAndLocations(this, this).
+                        types(this)
+        );
+        // @formatter:on
         this.snippetReflection = snippetReflection;
     }
 
@@ -91,7 +105,7 @@ public class BinaryGraphPrinter implements
 
     @Override
     public void beginGroup(DebugContext debug, String name, String shortName, ResolvedJavaMethod method, int bci, Map<Object, Object> properties) throws IOException {
-        output.beginGroup(new GraphInfo(debug, null), name, shortName, method, bci, properties);
+        output.beginGroup(new GraphInfo(debug, null), name, shortName, method, bci, DebugContext.addVersionProperties(properties));
     }
 
     @Override
@@ -264,6 +278,13 @@ public class BinaryGraphPrinter implements
             }
             props.put("category", "floating");
         }
+        if (getSnippetReflectionProvider() != null) {
+            for (Map.Entry<String, Object> prop : props.entrySet()) {
+                if (prop.getValue() instanceof JavaConstantFormattable) {
+                    props.put(prop.getKey(), ((JavaConstantFormattable) prop.getValue()).format(this));
+                }
+            }
+        }
     }
 
     private Object getBlockForNode(Node node, NodeMap<Block> nodeToBlocks) {
@@ -372,8 +393,8 @@ public class BinaryGraphPrinter implements
         if (obj instanceof Class<?>) {
             return ((Class<?>) obj).getName();
         }
-        if (obj instanceof ResolvedJavaType) {
-            return ((ResolvedJavaType) obj).toJavaName();
+        if (obj instanceof JavaType) {
+            return ((JavaType) obj).toJavaName();
         }
         return null;
     }
@@ -480,6 +501,85 @@ public class BinaryGraphPrinter implements
     @Override
     public StackTraceElement methodStackTraceElement(ResolvedJavaMethod method, int bci, NodeSourcePosition pos) {
         return method.asStackTraceElement(bci);
+    }
+
+    @Override
+    public Iterable<SourceLanguagePosition> methodLocation(ResolvedJavaMethod method, int bci, NodeSourcePosition pos) {
+        StackTraceElement e = methodStackTraceElement(method, bci, pos);
+        class JavaSourcePosition implements SourceLanguagePosition {
+
+            @Override
+            public String toShortString() {
+                return e.toString();
+            }
+
+            @Override
+            public int getOffsetEnd() {
+                return -1;
+            }
+
+            @Override
+            public int getOffsetStart() {
+                return -1;
+            }
+
+            @Override
+            public int getLineNumber() {
+                return e.getLineNumber();
+            }
+
+            @Override
+            public URI getURI() {
+                String path = e.getFileName();
+                try {
+                    return path == null ? null : new URI(null, null, path, null);
+                } catch (URISyntaxException ex) {
+                    throw new IllegalArgumentException(ex);
+                }
+            }
+
+            @Override
+            public String getLanguage() {
+                return "Java";
+            }
+        }
+
+        List<SourceLanguagePosition> arr = new ArrayList<>();
+        arr.add(new JavaSourcePosition());
+        NodeSourcePosition at = pos;
+        while (at != null) {
+            SourceLanguagePosition cur = at.getSourceLanguage();
+            if (cur != null) {
+                arr.add(cur);
+            }
+            at = at.getCaller();
+        }
+        return arr;
+    }
+
+    @Override
+    public String locationLanguage(SourceLanguagePosition location) {
+        return location.getLanguage();
+    }
+
+    @Override
+    public URI locationURI(SourceLanguagePosition location) {
+        return location.getURI();
+    }
+
+    @Override
+    public int locationLineNumber(SourceLanguagePosition location) {
+        return location.getLineNumber();
+    }
+
+    @Override
+    public int locationOffsetStart(SourceLanguagePosition location) {
+        return location.getOffsetStart();
+    }
+
+    @Override
+    public int locationOffsetEnd(SourceLanguagePosition location) {
+        return location.getOffsetEnd();
     }
 
     static final class GraphInfo {

@@ -51,6 +51,10 @@ import com.oracle.truffle.api.dsl.test.CachedTestFactory.ChildrenAdoption1Factor
 import com.oracle.truffle.api.dsl.test.CachedTestFactory.ChildrenAdoption2Factory;
 import com.oracle.truffle.api.dsl.test.CachedTestFactory.ChildrenAdoption3Factory;
 import com.oracle.truffle.api.dsl.test.CachedTestFactory.ChildrenAdoption4Factory;
+import com.oracle.truffle.api.dsl.test.CachedTestFactory.ChildrenAdoption5Factory;
+import com.oracle.truffle.api.dsl.test.CachedTestFactory.ChildrenAdoption6Factory;
+import com.oracle.truffle.api.dsl.test.CachedTestFactory.ChildrenAdoption7Factory;
+import com.oracle.truffle.api.dsl.test.CachedTestFactory.NullChildAdoptionNodeGen;
 import com.oracle.truffle.api.dsl.test.CachedTestFactory.TestBoundCacheOverflowContainsFactory;
 import com.oracle.truffle.api.dsl.test.CachedTestFactory.TestCacheFieldFactory;
 import com.oracle.truffle.api.dsl.test.CachedTestFactory.TestCacheMethodFactory;
@@ -419,7 +423,7 @@ public class CachedTest {
     @NodeChild
     static class TestCachesOrder2 extends ValueNode {
 
-        @Specialization(guards = "cachedValue == value")
+        @Specialization(guards = "cachedValue == value", limit = "3")
         static int do1(int value, //
                         @Cached("value") int cachedValue,
                         @Cached("get(cachedValue)") int intermediateValue, //
@@ -456,7 +460,7 @@ public class CachedTest {
             return value;
         }
 
-        @Specialization(guards = {"!guard(value)", "value != cachedValue"})
+        @Specialization(guards = {"!guard(value)", "value != cachedValue"}, limit = "3")
         static int do1(int value, @Cached("get(value)") int cachedValue) {
             return cachedValue;
         }
@@ -482,7 +486,7 @@ public class CachedTest {
     @NodeChild
     static class CacheDimensions1 extends ValueNode {
 
-        @Specialization(guards = "value == cachedValue")
+        @Specialization(guards = "value == cachedValue", limit = "3")
         static int[] do1(int[] value, //
                         @Cached(value = "value", dimensions = 1) int[] cachedValue) {
             return cachedValue;
@@ -519,12 +523,38 @@ public class CachedTest {
         assertEquals(1, cachedField.getAnnotation(CompilationFinal.class).dimensions());
     }
 
+    abstract static class NullChildAdoption extends Node {
+
+        abstract Object execute(Object value);
+
+        @Specialization
+        static int do1(int value, //
+                        @Cached("createNode()") Node cachedValue) {
+            return value;
+        }
+
+        static Node createNode() {
+            return null;
+        }
+
+    }
+
+    @Test
+    public void testNullChildAdoption() throws NoSuchFieldException, SecurityException {
+        NullChildAdoption node;
+
+        node = NullChildAdoptionNodeGen.create();
+
+        // we should be able to return null from nodes.
+        node.execute(42);
+    }
+
     @NodeChild
     abstract static class ChildrenAdoption1 extends ValueNode {
 
         abstract NodeInterface[] execute(Object value);
 
-        @Specialization(guards = "value == cachedValue")
+        @Specialization(guards = "value == cachedValue", limit = "3")
         static NodeInterface[] do1(NodeInterface[] value, @Cached("value") NodeInterface[] cachedValue) {
             return cachedValue;
         }
@@ -536,7 +566,7 @@ public class CachedTest {
 
         abstract NodeInterface execute(Object value);
 
-        @Specialization(guards = "value == cachedValue")
+        @Specialization(guards = "value == cachedValue", limit = "3")
         static NodeInterface do1(NodeInterface value, @Cached("value") NodeInterface cachedValue) {
             return cachedValue;
         }
@@ -548,7 +578,7 @@ public class CachedTest {
 
         abstract Node[] execute(Object value);
 
-        @Specialization(guards = "value == cachedValue")
+        @Specialization(guards = "value == cachedValue", limit = "3")
         static Node[] do1(Node[] value, @Cached("value") Node[] cachedValue) {
             return cachedValue;
         }
@@ -560,9 +590,57 @@ public class CachedTest {
 
         abstract Node execute(Object value);
 
-        @Specialization(guards = "value == cachedValue")
+        @Specialization(guards = "value == cachedValue", limit = "3")
         static Node do1(Node value, @Cached("value") Node cachedValue) {
             return cachedValue;
+        }
+
+    }
+
+    @NodeChild
+    abstract static class ChildrenAdoption5 extends ValueNode {
+
+        abstract Node[] execute(Object value);
+
+        @Specialization
+        static Node[] do1(Node value, @Cached("createChildren(value)") Node[] cachedValue) {
+            return cachedValue;
+        }
+
+        protected static Node[] createChildren(Node value) {
+            return new Node[]{value};
+        }
+
+    }
+
+    @NodeChild
+    abstract static class ChildrenAdoption6 extends ValueNode {
+
+        abstract NodeInterface execute(Node value);
+
+        @Specialization
+        static NodeInterface do1(Node value, @Cached("createChild(value)") NodeInterface cachedValue) {
+            return cachedValue;
+        }
+
+        protected static NodeInterface createChild(Node node) {
+            return node;
+        }
+
+    }
+
+    @NodeChild
+    abstract static class ChildrenAdoption7 extends ValueNode {
+
+        abstract NodeInterface[] execute(Object value);
+
+        @Specialization
+        static NodeInterface[] do1(Node value, @Cached("createChildren(value)") NodeInterface[] cachedValue) {
+            return cachedValue;
+        }
+
+        protected static NodeInterface[] createChildren(Node value) {
+            return new Node[]{value};
         }
 
     }
@@ -572,7 +650,7 @@ public class CachedTest {
         ChildrenAdoption1 root = createNode(ChildrenAdoption1Factory.getInstance(), false);
         Node[] children = new Node[]{new ValueNode()};
         root.execute(children);
-        Assert.assertTrue(hasParent(root, children[0].getParent()));
+        Assert.assertTrue(hasParent(root, children[0]));
     }
 
     @Test
@@ -581,7 +659,7 @@ public class CachedTest {
         Node child = new ValueNode();
         root.execute(child);
         root.adoptChildren();
-        Assert.assertTrue(hasParent(root, child.getParent()));
+        Assert.assertTrue(hasParent(root, child));
     }
 
     @Test
@@ -589,7 +667,7 @@ public class CachedTest {
         ChildrenAdoption3 root = createNode(ChildrenAdoption3Factory.getInstance(), false);
         Node[] children = new Node[]{new ValueNode()};
         root.execute(children);
-        Assert.assertTrue(hasParent(root, children[0].getParent()));
+        Assert.assertTrue(hasParent(root, children[0]));
     }
 
     @Test
@@ -597,7 +675,31 @@ public class CachedTest {
         ChildrenAdoption4 root = createNode(ChildrenAdoption4Factory.getInstance(), false);
         Node child = new ValueNode();
         root.execute(child);
-        Assert.assertTrue(hasParent(root, child.getParent()));
+        Assert.assertTrue(hasParent(root, child));
+    }
+
+    @Test
+    public void testChildrenAdoption5() {
+        ChildrenAdoption5 root = createNode(ChildrenAdoption5Factory.getInstance(), false);
+        Node child = new ValueNode();
+        root.execute(child);
+        Assert.assertTrue(hasParent(root, child));
+    }
+
+    @Test
+    public void testChildrenAdoption6() {
+        ChildrenAdoption6 root = createNode(ChildrenAdoption6Factory.getInstance(), false);
+        Node child = new ValueNode();
+        root.execute(child);
+        Assert.assertTrue(hasParent(root, child));
+    }
+
+    @Test
+    public void testChildrenAdoption7() {
+        ChildrenAdoption7 root = createNode(ChildrenAdoption7Factory.getInstance(), false);
+        Node child = new ValueNode();
+        root.execute(child);
+        Assert.assertTrue(hasParent(root, child));
     }
 
     private static boolean hasParent(Node parent, Node node) {

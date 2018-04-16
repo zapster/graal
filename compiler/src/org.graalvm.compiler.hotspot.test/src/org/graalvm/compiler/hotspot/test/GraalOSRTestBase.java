@@ -29,13 +29,17 @@ import org.graalvm.compiler.bytecode.Bytecode;
 import org.graalvm.compiler.bytecode.BytecodeDisassembler;
 import org.graalvm.compiler.bytecode.BytecodeStream;
 import org.graalvm.compiler.bytecode.ResolvedJavaMethodBytecode;
+import org.graalvm.compiler.core.GraalCompilerOptions;
+import org.graalvm.compiler.core.CompilationWrapper.ExceptionAction;
 import org.graalvm.compiler.core.target.Backend;
 import org.graalvm.compiler.core.test.GraalCompilerTest;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.debug.TTY;
 import org.graalvm.compiler.hotspot.CompilationTask;
+import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
 import org.graalvm.compiler.hotspot.HotSpotGraalCompiler;
+import org.graalvm.compiler.hotspot.HotSpotGraalRuntimeProvider;
 import org.graalvm.compiler.java.BciBlockMapping;
 import org.graalvm.compiler.java.BciBlockMapping.BciBlock;
 import org.graalvm.compiler.nodes.StructuredGraph;
@@ -76,6 +80,13 @@ public abstract class GraalOSRTestBase extends GraalCompilerTest {
         HotSpotCompilationRequest request = new HotSpotCompilationRequest((HotSpotResolvedJavaMethod) method, bci, jvmciEnv);
         HotSpotGraalCompiler compiler = (HotSpotGraalCompiler) runtime.getCompiler();
         CompilationTask task = new CompilationTask(runtime, compiler, request, true, true, debug.getOptions());
+        if (method instanceof HotSpotResolvedJavaMethod) {
+            HotSpotGraalRuntimeProvider graalRuntime = compiler.getGraalRuntime();
+            GraalHotSpotVMConfig config = graalRuntime.getVMConfig();
+            if (((HotSpotResolvedJavaMethod) method).hasCodeAtLevel(bci, config.compilationLevelFullOptimization)) {
+                return;
+            }
+        }
         HotSpotCompilationRequestResult result = task.runCompilation(debug);
         if (result.getFailure() != null) {
             throw new GraalError(result.getFailureMessage());
@@ -93,11 +104,11 @@ public abstract class GraalOSRTestBase extends GraalCompilerTest {
         BciBlockMapping bciBlockMapping = BciBlockMapping.create(stream, code, options, debug);
 
         for (BciBlock block : bciBlockMapping.getBlocks()) {
-            if (block.startBci != -1) {
-                int bci = block.startBci;
+            if (block.getStartBci() != -1) {
+                int bci = block.getStartBci();
                 for (BciBlock succ : block.getSuccessors()) {
-                    if (succ.startBci != -1) {
-                        int succBci = succ.startBci;
+                    if (succ.getStartBci() != -1) {
+                        int succBci = succ.getStartBci();
                         if (succBci < bci) {
                             // back edge
                             return succBci;
@@ -119,8 +130,14 @@ public abstract class GraalOSRTestBase extends GraalCompilerTest {
     }
 
     private void compileOSR(OptionValues options, ResolvedJavaMethod method) {
+        OptionValues goptions = options;
+        // Silence diagnostics for permanent bailout errors as they
+        // are expected for some OSR tests.
+        if (!GraalCompilerOptions.CompilationBailoutAction.hasBeenSet(options)) {
+            goptions = new OptionValues(options, GraalCompilerOptions.CompilationBailoutAction, ExceptionAction.Silent);
+        }
         // ensure eager resolving
-        StructuredGraph graph = parseEager(method, AllowAssumptions.YES, options);
+        StructuredGraph graph = parseEager(method, AllowAssumptions.YES, goptions);
         DebugContext debug = graph.getDebug();
         int bci = getBackedgeBCI(debug, method);
         assert bci != -1;

@@ -24,16 +24,23 @@
  */
 package org.graalvm.nativeimage.impl;
 
+import java.nio.charset.Charset;
+
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion.CCharPointerHolder;
 import org.graalvm.word.UnsignedWord;
 
 public interface CTypeConversionSupport {
-    CCharPointer toCString(CharSequence javaString, CCharPointer buffer, UnsignedWord bufferSize);
+
+    UnsignedWord toCString(CharSequence javaString, Charset charset, CCharPointer buffer, UnsignedWord bufferSize);
+
+    UnsignedWord toCString(CharSequence javaString, CCharPointer buffer, UnsignedWord bufferSize);
 
     CCharPointerHolder toCString(CharSequence javaString);
 
     String toJavaString(CCharPointer cString);
 
     String toJavaString(CCharPointer cString, UnsignedWord length);
+
+    String toJavaString(CCharPointer cString, UnsignedWord length, Charset charset);
 }
