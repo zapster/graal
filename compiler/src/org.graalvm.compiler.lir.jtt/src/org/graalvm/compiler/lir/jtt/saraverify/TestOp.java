@@ -155,7 +155,6 @@ public class TestOp {
         @Def protected AllocatableValue result;
         @Use protected AllocatableValue x;
         @Use protected AllocatableValue y;
-        @Temp protected AllocatableValue raxTemp;
 
         public TestBinary(ArithmeticOpcode opcode, AllocatableValue result, AllocatableValue x, AllocatableValue y) {
             super(TYPE);
