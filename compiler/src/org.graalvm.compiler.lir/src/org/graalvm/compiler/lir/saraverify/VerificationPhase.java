@@ -71,7 +71,8 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     }
 
     public boolean verifyDataFlow(Map<Value, Set<DefNode>> inputDuSequences, Map<Value, Set<DefNode>> outputDuSequences, DebugContext debugContext) {
-// String dirName = Long.toString(System.currentTimeMillis()) + "_" +
+        // TODO: remove debug
+        // String dirName = Long.toString(System.currentTimeMillis()) + "_" +
 // debugContext.getDescription().toString();
 // Path dir = FileSystems.getDefault().getPath("SARADuSequenceWebCreation").resolve(dirName);
 // Path inputDir = dir.resolve("input");
@@ -200,6 +201,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     public List<DuSequenceWeb> createDuSequenceWebs(Map<Value, Set<DefNode>> nodes) {
         List<DuSequenceWeb> duSequenceWebs = new ArrayList<>();
         Map<Node, DuSequenceWeb> nodeDuSequenceWeb = new HashMap<>();
+        // TODO: remove debug
         // int graphIndex = 0;
 
         for (Set<DefNode> nodeList : nodes.values()) {
@@ -218,7 +220,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                     duSequenceWebs.add(web);
                 }
 
-                // TODO
+                // TODO: remove debug
                 // assert duSequenceWebs.contains(web);
                 // printDuSequenceWebGraph(web, node, graphIndex, dir);
                 // graphIndex++;
@@ -295,6 +297,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         }
     }
 
+    @SuppressWarnings("unused")
     private static void printDuSequenceWebGraph(DuSequenceWeb web, DefNode actualNode, int graphIndex, Path dir) {
         Path file = dir.resolve("DSW_" + graphIndex + ".gv");
 
