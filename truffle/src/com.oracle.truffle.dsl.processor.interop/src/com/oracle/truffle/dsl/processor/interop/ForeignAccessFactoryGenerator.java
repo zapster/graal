@@ -82,6 +82,9 @@ final class ForeignAccessFactoryGenerator {
         w.append("package ").append(packageName).append(";\n\n");
         appendImports(w);
         Utils.appendFactoryGeneratedFor(w, "", receiverTypeClass, ElementUtils.getQualifiedName(element));
+        if (ElementUtils.isDeprecated(element)) {
+            Utils.suppressDeprecationWarnings(w, "");
+        }
         Utils.appendVisibilityModifier(w, element);
         w.append("final class ").append(simpleClassName);
         w.append(" implements StandardFactory, Factory {\n");
@@ -100,6 +103,7 @@ final class ForeignAccessFactoryGenerator {
         appendFactoryAccessUnbox(w);
         appendFactoryAccessRead(w);
         appendFactoryAccessWrite(w);
+        appendFactoryAccessRemove(w);
         appendFactoryAccessExecute(w);
         appendFactoryAccessInvoke(w);
         appendFactoryAccessNew(w);
@@ -313,6 +317,13 @@ final class ForeignAccessFactoryGenerator {
         w.append("    @Override").append("\n");
         w.append("    public CallTarget accessWrite() {").append("\n");
         appendOptionalHandlerBody(w, Message.WRITE);
+        w.append("    }").append("\n");
+    }
+
+    private void appendFactoryAccessRemove(Writer w) throws IOException {
+        w.append("    @Override").append("\n");
+        w.append("    public CallTarget accessRemove() {").append("\n");
+        appendOptionalHandlerBody(w, Message.REMOVE);
         w.append("    }").append("\n");
     }
 

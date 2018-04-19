@@ -1,18 +1,18 @@
 suite = {
-  "mxversion" : "5.128.4",
+  "mxversion" : "5.141.0",
   "name" : "sdk",
   "sourceinprojectwhitelist" : [],
-  "url" : "https://github.com/graalvm/graal",
+  "url" : "https://github.com/oracle/graal",
   "developer" : {
     "name" : "Graal developers",
     "email" : "graal-dev@openjdk.java.net",
     "organization" : "Graal",
-    "organizationUrl" : "https://github.com/graalvm/graal",
+    "organizationUrl" : "https://github.com/oracle/graal",
   },
   "scm" : {
-    "url" : "https://github.com/graalvm/graal",
-    "read" : "https://github.com/graalvm/graal.git",
-    "write" : "git@github.com:graalvm/graal.git",
+    "url" : "https://github.com/oracle/graal",
+    "read" : "https://github.com/oracle/graal.git",
+    "write" : "git@github.com:oracle/graal.git",
   },
   "repositories" : {
     "lafo-snapshots" : {
@@ -69,6 +69,7 @@ suite = {
       "dependencies" : [],
       "checkstyle" : "org.graalvm.word",
       "javaCompliance" : "1.8",
+      "checkstyleVersion" : "8.8",
       "workingSets" : "API,SDK",
     },
 
@@ -108,6 +109,24 @@ suite = {
       "javaCompliance" : "1.8",
       "workingSets" : "API,SDK,Test",
     },
+    "org.graalvm.collections" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "checkstyle" : "org.graalvm.word",
+      "javaCompliance" : "1.8",
+      "workingSets" : "API,SDK",
+    },
+    "org.graalvm.collections.test" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "mx:JUNIT",
+        "org.graalvm.collections",
+      ],
+      "checkstyle" : "org.graalvm.word",
+      "javaCompliance" : "1.8",
+      "workingSets" : "API,SDK,Test",
+    },
   },
   "licenses" : {
     "UPL" : {
@@ -123,6 +142,7 @@ suite = {
       "dependencies" : [
         "org.graalvm.polyglot",
         "org.graalvm.nativeimage",
+        "org.graalvm.collections",
       ],
       "distDependencies" : [],
       "maven" : {
@@ -130,8 +150,16 @@ suite = {
         "artifactId" : "graal-sdk"
       },
       "javadocType": "api",
-      "description" : """GraalVM is an ecosystem for compiling and running applications written in multiple languages.
-GraalVM removes the isolation between programming languages and enables interoperability in a shared runtime.""",
+      "description" : "GraalVM is an ecosystem for compiling and running applications written in multiple languages.\nGraalVM removes the isolation between programming languages and enables interoperability in a shared runtime.",
+    },
+    "SDK_TEST" : {
+      "subDir" : "src",
+      "dependencies" : [
+        "org.graalvm.collections.test",
+      ],
+      "distDependencies" : [
+        "GRAAL_SDK",
+      ],
     },
     "WORD_API" : {
       "subDir" : "src",
@@ -155,7 +183,12 @@ GraalVM removes the isolation between programming languages and enables interope
       "distDependencies" : [
         "GRAAL_SDK",
       ],
-      "maven": False,
+      "maven" : {
+        "groupId" : "org.graalvm",
+        "artifactId" : "launcher-common"
+      },
+      "description" : "Common infrastructure to create language launchers using the Polyglot API.",
+      "allowsJavadocWarnings": True,
     },
     "POLYGLOT_TCK" : {
       "subDir" : "src",

@@ -22,6 +22,7 @@
  */
 package org.graalvm.compiler.truffle.test;
 
+import static org.graalvm.compiler.serviceprovider.GraalServices.Java8OrEarlier;
 import static org.graalvm.compiler.test.SubprocessUtil.getVMCommandLine;
 import static org.graalvm.compiler.test.SubprocessUtil.withoutDebuggerArguments;
 
@@ -41,9 +42,7 @@ import org.graalvm.compiler.options.OptionDescriptor;
 import org.graalvm.compiler.options.OptionDescriptors;
 import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionValues;
-import org.graalvm.compiler.options.OptionValuesAccess;
 import org.graalvm.compiler.options.OptionsParser;
-import org.graalvm.compiler.serviceprovider.JDK9Method;
 import org.graalvm.compiler.test.SubprocessUtil;
 import org.graalvm.compiler.test.SubprocessUtil.Subprocess;
 import org.junit.Assert;
@@ -62,8 +61,6 @@ public class LazyInitializationTest {
     private final Class<?> hotSpotGraalCompilerFactoryOptions;
     private final Class<?> hotSpotGraalJVMCIServiceLocatorShared;
     private final Class<?> jvmciVersionCheck;
-
-    private static boolean Java8OrEarlier = System.getProperty("java.specification.version").compareTo("1.9") < 0;
 
     public LazyInitializationTest() {
         hotSpotVMEventListener = forNameOrNull("jdk.vm.ci.hotspot.services.HotSpotVMEventListener");
@@ -174,7 +171,8 @@ public class LazyInitializationTest {
                     OptionDescriptors optionDescriptors = cls.asSubclass(OptionDescriptors.class).newInstance();
                     for (OptionDescriptor option : optionDescriptors) {
                         whitelist.add(option.getDeclaringClass());
-                        whitelist.add(option.getType());
+                        whitelist.add(option.getOptionValueType());
+                        whitelist.add(option.getOptionType().getDeclaringClass());
                     }
                 } catch (ReflectiveOperationException e) {
                 }
@@ -214,17 +212,12 @@ public class LazyInitializationTest {
             return true;
         }
 
-        if (JDK9Method.JAVA_SPECIFICATION_VERSION >= 9 && cls.equals(JDK9Method.class)) {
-            // Graal initialization needs access to Module API on JDK 9.
-            return true;
-        }
-
         if (cls.equals(jvmciVersionCheck)) {
             // The Graal initialization needs to check the JVMCI version.
             return true;
         }
 
-        if (JVMCICompilerFactory.class.isAssignableFrom(cls)) {
+        if (JVMCICompilerFactory.class.isAssignableFrom(cls) || cls.getName().equals("org.graalvm.compiler.hotspot.IsGraalPredicate")) {
             // The compiler factories have to be loaded and instantiated by the JVMCI.
             return true;
         }
@@ -238,7 +231,7 @@ public class LazyInitializationTest {
             return true;
         }
 
-        if (cls == Assertions.class || cls == OptionsParser.class || cls == OptionValues.class || OptionValuesAccess.class.isAssignableFrom(cls)) {
+        if (cls == Assertions.class || cls == OptionsParser.class || cls == OptionValues.class || cls.getName().equals("org.graalvm.compiler.hotspot.HotSpotGraalOptionValues")) {
             // Classes implementing Graal option loading
             return true;
         }

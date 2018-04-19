@@ -23,8 +23,9 @@
 package org.graalvm.compiler.truffle.test.builtins;
 
 import org.graalvm.compiler.options.OptionDescriptor;
-import org.graalvm.compiler.truffle.TruffleCompilerOptions;
-import org.graalvm.compiler.truffle.TruffleCompilerOptions_OptionDescriptors;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions_OptionDescriptors;
+
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.nodes.NodeInfo;
@@ -45,7 +46,7 @@ public abstract class SLGetOptionBuiltin extends SLGraalRuntimeBuiltin {
                 return convertValue(TruffleCompilerOptions.getValue(option.getOptionKey()));
             }
         }
-        throw new SLAssertionError("No such option named \"" + name + "\" found in " + TruffleCompilerOptions.class.getName());
+        throw new SLAssertionError("No such option named \"" + name + "\" found in " + TruffleCompilerOptions.class.getName(), this);
     }
 
     private static Object convertValue(Object value) {

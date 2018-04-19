@@ -1,24 +1,36 @@
 # overlay version
-overlay = e2bd133045fa760a959f96fc488b86f6bc522603
+overlay = 6f4b88a4acc9895abdd60473e21aac1257ee8fca
 
+# oraclejdk* are released OracleJDK binaries
 # labsjdk* are JDKs based on OracleJDK binaries
 # openjdk* are JDKs based on OpenJDK binaries
 jdks: {
-  labsjdk8 : {name : labsjdk, version : "8u151-jvmci-0.38", platformspecific: true}
-  labsjdk9 : {name : labsjdk, version : "9+181", platformspecific: true}
-  labsjdk8Debug : {name : labsjdk, version : "8u151-jvmci-0.38-fastdebug", platformspecific: true}
+  labsjdk8 : {name : labsjdk, version : "8u161-jvmci-0.42", platformspecific: true}
+  labsjdk8Debug : {name : labsjdk, version : "8u161-jvmci-0.42-fastdebug", platformspecific: true}
+  oraclejdk9 : {name : oraclejdk, version : "9.0.4+11", platformspecific: true}
+  oraclejdk10 : {name : oraclejdk, version : "10+46", platformspecific: true}
+
+  # Snapshot of http://hg.openjdk.java.net/jdk/jdk
+  oraclejdkSNAPSHOT : {name : labsjdk, version : "20180413-151126", platformspecific: true}
 }
 
-# Overlay placeholder for pinning mx to a specific revision
-mx : {}
+# This must always point to HEAD in the master branch but can be used to point
+# to another branch/commit in a Graal PR when mx changes are required for the PR.
+mx : {
+  packages : {
+    mx: "HEAD"
+  }
+}
 
-labsjdk8 :      { downloads : { JAVA_HOME : ${jdks.labsjdk8} }}
-labsjdk8Debug : { downloads : { JAVA_HOME : ${jdks.labsjdk8Debug} }}
+labsjdk8 :      { downloads : { JAVA_HOME : ${jdks.labsjdk8},      EXTRA_JAVA_HOMES : { pathlist :[ ${jdks.oraclejdk9} ]} }}
+labsjdk8Debug : { downloads : { JAVA_HOME : ${jdks.labsjdk8Debug}, EXTRA_JAVA_HOMES : { pathlist :[ ${jdks.oraclejdk9} ]} }}
 
 # GR-5675
 # openjdk8 :      { downloads : { JAVA_HOME : ${jdks.openjdk8} }}
 
-labsjdk9 :      { downloads : { JAVA_HOME : ${jdks.labsjdk9},   EXTRA_JAVA_HOMES : { pathlist :[ ${jdks.labsjdk8} ]} }}
+oraclejdk9 :      { downloads : { JAVA_HOME : ${jdks.oraclejdk9},   EXTRA_JAVA_HOMES : { pathlist :[ ${jdks.labsjdk8} ]} }}
+oraclejdk10 :     { downloads : { JAVA_HOME : ${jdks.oraclejdk10},  EXTRA_JAVA_HOMES : { pathlist :[ ${jdks.labsjdk8}, ${jdks.oraclejdk9} ]} }}
+oraclejdk11 :     { downloads : { JAVA_HOME : ${jdks.oraclejdkSNAPSHOT},  EXTRA_JAVA_HOMES : { pathlist :[ ${jdks.labsjdk8}, ${jdks.oraclejdk10} ]} }}
 
 common : ${mx} {
   timelimit : "30:00"
@@ -69,6 +81,10 @@ solaris-sparcv9 : ${solaris} {
 
 linux-sparcv9 : ${linux} {
   capabilities : [linux, sparcv9]
+}
+
+linux-aarch64 : ${linux} {
+  capabilities : [linux, aarch64]
 }
 
 eclipse : {
@@ -122,6 +138,54 @@ maven-deploy-dry-run : ${labsjdk8} {
   targets : [gate]
   run : [
     ["mx", "--strict-compliance", "build"]
-    ["mx", "maven-deploy", "--licenses", "GPLv2-CPE,UPL", "--dry-run", "ossrh", "https://this-is-only-a-test"]
+    ["mx", "maven-deploy", "--validate", "full", "--licenses", "GPLv2-CPE,UPL", "--dry-run", "ossrh", "https://this-is-only-a-test"]
   ]
 }
+
+svm-common: ${mx} {
+  environment: {
+    DEFAULT_VM: "server"
+    LANG: "en_US.UTF-8"
+  }
+  logs: [
+    "*/native_image_server.log"
+    "*/svmbuild/*.log"
+    "*/svmbuild/images/*.log"
+    "*/*/stripped/*.map"
+    "*/callgrind.*"
+    "*.bgv"
+  ]
+}
+
+svm-common-linux: ${svm-common} ${linux-amd64} {
+  packages: {
+    make: ">=3.83"
+    gcc-build-essentials: ">=4.9.1" # GCC 4.9.0 fails on cluster
+    ruby: ">=2.1.0"
+    valgrind: ">=3.9.0"
+  }
+  timelimit: "55:00"
+}
+
+svm-capabilities-fast : {
+  capabilities : [linux, amd64, fast]
+}
+
+svm-capabilities-avx2 : {
+  capabilities : [linux, amd64, avx2]
+}
+
+svm-capabilities-manycores : {
+  capabilities : [linux, amd64, manycores, fast]
+}
+
+svm-common-darwin: ${svm-common} ${darwin-amd64} {
+  timelimit: "45:00"
+}
+
+svm-common-sulong: {
+  packages: {
+    llvm: "==3.8"
+  }
+}
+

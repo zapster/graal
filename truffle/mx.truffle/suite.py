@@ -1,5 +1,5 @@
 suite = {
-  "mxversion" : "5.128.5",
+  "mxversion" : "5.149.0",
   "name" : "truffle",
   "sourceinprojectwhitelist" : [],
   "url" : "http://openjdk.java.net/projects/graal",
@@ -10,9 +10,9 @@ suite = {
     "organizationUrl" : "http://openjdk.java.net/projects/graal",
   },
   "scm" : {
-    "url" : "https://github.com/graalvm/truffle",
-    "read" : "https://github.com/graalvm/truffle.git",
-    "write" : "git@github.com:graalvm/truffle.git",
+    "url" : "https://github.com/oracle/graal/tree/master/truffle",
+    "read" : "https://github.com/oracle/graal.git",
+    "write" : "git@github.com:oracle/graal.git",
   },
   "repositories" : {
     "lafo-snapshots" : {
@@ -87,9 +87,10 @@ suite = {
       ],
       "exports" : [
         "<package-info>", # exports all packages containing package-info.java
-        "com.oracle.truffle.api.impl", # exported to graal-core
+        "com.oracle.truffle.api.impl", # exported to the Graal compiler
       ],
       "javaCompliance" : "1.8",
+      "checkstyleVersion" : "8.8",
       "workingSets" : "API,Truffle",
     },
 
@@ -116,6 +117,7 @@ suite = {
         "com.oracle.truffle.api.interop.java",
         "com.oracle.truffle.api.instrumentation",
       ],
+      "forceJavac" : "true",
       "exports" : [
         "<package-info>", # exports all packages containing package-info.java
       ],
@@ -156,7 +158,7 @@ suite = {
       "checkstyle" : "com.oracle.truffle.dsl.processor",
       "javaCompliance" : "1.8",
       "findbugsIgnoresGenerated" : True,
-      "isTestProject" : True,
+      "testProject" : True,
       "annotationProcessors" : ["mx:JMH_1_18", "TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "API,Truffle,Test",
       "jacoco" : "exclude",
@@ -216,6 +218,7 @@ suite = {
       ],
       "checkstyle" : "com.oracle.truffle.dsl.processor",
       "javaCompliance" : "1.8",
+      "checkstyleVersion" : "8.8",
       "imports" : [
         "com.sun.tools.javac.processing",
         "com.sun.tools.javac.model",
@@ -264,7 +267,7 @@ suite = {
    "com.oracle.truffle.api.instrumentation" : {
       "subDir" : "src",
       "sourceDirs" : ["src"],
-      "dependencies" : ["com.oracle.truffle.api"],
+      "dependencies" : ["com.oracle.truffle.api.profiles"],
       "exports" : [
         "<package-info>", # exports all packages containing package-info.java
       ],
@@ -292,6 +295,7 @@ suite = {
       "subDir" : "src",
       "sourceDirs" : ["src"],
       "dependencies" : ["com.oracle.truffle.api.vm"],
+      "generatedDependencies" : ["com.oracle.truffle.api.vm"],
       "runtimeDeps" : [
         "java.desktop"
       ],
@@ -318,6 +322,7 @@ suite = {
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR_INTEROP_INTERNAL"],
       "javaCompliance" : "1.8",
       "workingSets" : "API,Truffle",
+      "testProject" : True,
     },
 
     "com.oracle.truffle.api.interop.java" : {
@@ -349,6 +354,7 @@ suite = {
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
       "javaCompliance" : "1.8",
       "workingSets" : "API,Truffle",
+      "testProject" : True,
     },
 
     "com.oracle.truffle.api.object" : {
@@ -392,6 +398,7 @@ suite = {
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "API,Truffle,Codegen,Test",
       "jacoco" : "exclude",
+      "testProject" : True,
     },
 
     "com.oracle.truffle.object.dsl.processor" : {
@@ -447,13 +454,14 @@ suite = {
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR_INTEROP_INTERNAL"],
       "javaCompliance" : "1.8",
       "workingSets" : "Truffle,Tools",
+      "testProject" : True,
     },
 
     "com.oracle.truffle.object" : {
       "subDir" : "src",
       "sourceDirs" : ["src"],
       "dependencies" : ["com.oracle.truffle.api.object"],
-      "checkstyle" : "com.oracle.truffle.dsl.processor",
+      "checkstyle" : "com.oracle.truffle.api",
       "javaCompliance" : "1.8",
       "workingSets" : "Truffle",
     },
@@ -462,7 +470,7 @@ suite = {
       "subDir" : "src",
       "sourceDirs" : ["src"],
       "dependencies" : ["com.oracle.truffle.object"],
-      "checkstyle" : "com.oracle.truffle.dsl.processor",
+      "checkstyle" : "com.oracle.truffle.api",
       "javaCompliance" : "1.8",
       "workingSets" : "Truffle",
     },
@@ -477,6 +485,7 @@ suite = {
       "checkstyle" : "com.oracle.truffle.dsl.processor",
       "javaCompliance" : "1.8",
       "workingSets" : "Truffle",
+      "testProject" : True,
     },
 
     "com.oracle.truffle.tck" : {
@@ -487,11 +496,44 @@ suite = {
         "mx:JUNIT",
         "sdk:POLYGLOT_TCK"
       ],
+      "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
+      "checkstyle" : "com.oracle.truffle.api",
+      "javaCompliance" : "1.8",
+      "workingSets" : "Truffle,Tools",
+    },
+    "com.oracle.truffle.tck.common" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "sdk:POLYGLOT_TCK"
+      ],
+      "checkstyle" : "com.oracle.truffle.api",
+      "javaCompliance" : "1.8",
+      "workingSets" : "Truffle,Tools",
+    },
+    "com.oracle.truffle.tck.tests" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "mx:JUNIT",
+        "sdk:POLYGLOT_TCK",
+        "com.oracle.truffle.tck.common",
+      ],
       "uses":[
         "org.graalvm.polyglot.tck.LanguageProvider"
       ],
-      "generatedDependencies" : [
-        "com.oracle.truffle.tutorial",
+      "checkstyle" : "com.oracle.truffle.api",
+      "javaCompliance" : "1.8",
+      "workingSets" : "Truffle,Tools",
+      "testProject" : True,
+    },
+    "com.oracle.truffle.tck.instrumentation" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "mx:JUNIT",
+        "TRUFFLE_API",
+        "com.oracle.truffle.tck.common",
       ],
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
       "checkstyle" : "com.oracle.truffle.api",
@@ -510,30 +552,6 @@ suite = {
       "workingSets" : "Truffle,Tools",
     },
 
-    "com.oracle.truffle.tools.profiler" : {
-      "subDir" : "src",
-      "sourceDirs" : ["src"],
-      "dependencies" : ["TRUFFLE_API"],
-      "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
-      "checkstyle" : "com.oracle.truffle.api",
-      "javaCompliance" : "1.8",
-      "workingSets" : "Truffle,Tools",
-    },
-
-    "com.oracle.truffle.tools.profiler.test" : {
-      "subDir" : "src",
-      "sourceDirs" : ["src"],
-      "dependencies" : [
-          "com.oracle.truffle.tools.profiler",
-          "com.oracle.truffle.api.instrumentation.test",
-          "mx:JUNIT"
-          ],
-      "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
-      "checkstyle" : "com.oracle.truffle.api",
-      "javaCompliance" : "1.8",
-      "workingSets" : "Truffle,Tools",
-    },
-
     "com.oracle.truffle.tools.test" : {
       "subDir" : "src",
       "sourceDirs" : ["src"],
@@ -546,26 +564,15 @@ suite = {
       "javaCompliance" : "1.8",
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "Truffle,Tools",
-    },
-
-    "com.oracle.truffle.tools.debug.shell" : {
-      "subDir" : "src",
-      "sourceDirs" : ["src"],
-      "dependencies" : [
-        "com.oracle.truffle.api.vm",
-        "JLINE"
-      ],
-      "checkstyle" : "com.oracle.truffle.api",
-      "javaCompliance" : "1.8",
-      "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
-      "workingSets" : "Truffle,Tools",
+      "testProject" : True,
     },
 
     "com.oracle.truffle.nfi" : {
       "subDir" : "src",
       "sourceDirs" : ["src"],
+      "jniHeaders" : True,
       "dependencies" : [
-        "com.oracle.truffle.api.interop.java",
+        "com.oracle.truffle.api.interop",
         "com.oracle.truffle.nfi.types",
       ],
       "checkstyle" : "com.oracle.truffle.api",
@@ -598,6 +605,7 @@ suite = {
         "com.oracle.truffle.nfi",
       ],
       "buildEnv" : {
+        "CPPFLAGS" : "-I<jnigen:com.oracle.truffle.nfi>",
         "LIBFFI_SRC" : "<path:LIBFFI>",
         "LIBTRUFFLENFI" : "<lib:trufflenfi>",
         "OS" : "<os>",
@@ -619,6 +627,7 @@ suite = {
       "javaProperties" : {
         "native.test.lib" : "<path:TRUFFLE_TEST_NATIVE>/<lib:nativetest>"
       },
+      "testProject" : True,
     },
 
     "com.oracle.truffle.nfi.test.native" : {
@@ -636,6 +645,7 @@ suite = {
         "CPPFLAGS" : "-I<path:TRUFFLE_NFI_NATIVE>/include",
         "OS" : "<os>",
       },
+      "testProject" : True,
     },
 
     "com.oracle.truffle.sl" : {
@@ -645,7 +655,19 @@ suite = {
         "TRUFFLE_API",
       ],
       "javaCompliance" : "1.8",
+      "checkstyleVersion" : "8.8",
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
+      "workingSets" : "Truffle,SimpleLanguage",
+      "license" : "UPL",
+    },
+
+    "com.oracle.truffle.sl.launcher" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "sdk:GRAAL_SDK",
+      ],
+      "javaCompliance" : "1.8",
       "workingSets" : "Truffle,SimpleLanguage",
       "license" : "UPL",
     },
@@ -663,19 +685,7 @@ suite = {
       "workingSets" : "Truffle,SimpleLanguage,Test",
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR", "mx:JMH_1_18"],
       "license" : "UPL",
-    },
-
-    "com.oracle.truffle.tutorial" : {
-      "subDir" : "src",
-      "sourceDirs" : ["src"],
-      "dependencies" : [
-        "TRUFFLE_API",
-      ],
-      "checkstyle" : "com.oracle.truffle.sl",
-      "javaCompliance" : "1.8",
-      "workingSets" : "Truffle,SimpleLanguage,Test",
-      "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
-      "license" : "UPL",
+      "testProject" : True,
     },
    },
 
@@ -709,8 +719,7 @@ suite = {
       "distDependencies" : [
         "sdk:GRAAL_SDK"
       ],
-      "description" : """Truffle is a multi-language framework for executing dynamic languages
-        that achieves high performance when combined with Graal.""",
+      "description" : "Truffle is a multi-language framework for executing dynamic languages\nthat achieves high performance when combined with Graal.",
       "javadocType": "api",
     },
 
@@ -754,8 +763,51 @@ suite = {
         "sdk:POLYGLOT_TCK",
       ],
       "exclude" : ["mx:JUNIT"],
-      "description" : """A collection of tests that can certify language implementation to be compliant
-        with most recent requirements of the Truffle infrastructure and tooling.""",
+      "description" : "A collection of tests that can certify language implementation to be compliant\nwith most recent requirements of the Truffle infrastructure and tooling.",
+      "allowsJavadocWarnings": True,
+    },
+
+    "TRUFFLE_TCK_COMMON" : {
+      "subDir" : "src",
+      "javaCompliance" : "1.8",
+      "dependencies" : [
+        "com.oracle.truffle.tck.common"
+      ],
+      "distDependencies" : [
+        "sdk:POLYGLOT_TCK",
+      ],
+      "description" : "Common types for TCK Tests and Instruments.",
+      "allowsJavadocWarnings": True,
+    },
+
+    "TRUFFLE_TCK_TESTS" : {
+      "subDir" : "src",
+      "javaCompliance" : "1.8",
+      "dependencies" : [
+        "com.oracle.truffle.tck.tests"
+      ],
+      "distDependencies" : [
+        "sdk:POLYGLOT_TCK",
+        "TRUFFLE_TCK_COMMON"
+      ],
+      "exclude" : ["mx:JUNIT"],
+      "description" : "A collection of tests that can certify language implementation to be compliant\nwith most recent requirements of the Truffle infrastructure and tooling.",
+      "allowsJavadocWarnings": True,
+      "testProject" : True,
+    },
+
+    "TRUFFLE_TCK_INSTRUMENTATION" : {
+      "subDir" : "src",
+      "javaCompliance" : "1.8",
+      "dependencies" : [
+        "com.oracle.truffle.tck.instrumentation"
+      ],
+      "distDependencies" : [
+        "TRUFFLE_API",
+        "TRUFFLE_TCK_COMMON"
+      ],
+      "exclude" : ["mx:JUNIT"],
+      "description" : "Instruments used by the Truffle TCK.",
       "allowsJavadocWarnings": True,
     },
 
@@ -805,6 +857,20 @@ suite = {
       "allowsJavadocWarnings": True,
     },
 
+    "TRUFFLE_SL_LAUNCHER" : {
+      "subDir" : "src",
+      "javaCompliance" : "1.8",
+      "dependencies" : [
+        "com.oracle.truffle.sl.launcher",
+      ],
+      "distDependencies" : [
+          "sdk:GRAAL_SDK",
+      ],
+      "license" : "UPL",
+      "description" : "Truffle SL launchers using the polyglot API.",
+      "allowsJavadocWarnings": True,
+    },
+
     "TRUFFLE_SL_TEST" : {
       "subDir" : "src",
       "javaCompliance" : "1.8",
@@ -845,14 +911,13 @@ suite = {
       "subDir" : "src",
       "javaCompliance" : "1.8",
       "dependencies" : [
-        "com.oracle.truffle.tools.debug.shell",
         "com.oracle.truffle.tools"
       ],
       "exclude" : ["JLINE"],
       "distDependencies" : [
           "TRUFFLE_API",
       ],
-      "description" : "Experimental REPL server to build your debugger console for your language.",
+      "description" : "Truffle Tools APIs.",
       "allowsJavadocWarnings": True,
      },
 
@@ -908,30 +973,9 @@ suite = {
        "dependencies" : [
          "com.oracle.truffle.nfi.test.native",
        ],
+       "testDistribution" : True,
       "maven" : False,
      },
 
-     "TRUFFLE_PROFILER": {
-       "dependencies": [
-         "com.oracle.truffle.tools.profiler",
-       ],
-       "distDependencies" : [
-         "TRUFFLE_API",
-       ],
-       "javadocType" : "api",
-       "description" : "The truffle profiler, supporting CPU sampling and tracing. Memory tracing support is experimental"
-     },
-
-     "TRUFFLE_PROFILER_TEST": {
-       "dependencies": [
-         "com.oracle.truffle.tools.profiler.test",
-       ],
-       "distDependencies" : [
-         "TRUFFLE_INSTRUMENT_TEST",
-         "TRUFFLE_PROFILER",
-       ],
-       "description" : "Tests for the truffle profiler.",
-       "maven" : False,
-     },
   },
 }

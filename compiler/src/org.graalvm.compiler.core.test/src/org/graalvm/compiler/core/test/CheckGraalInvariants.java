@@ -103,14 +103,6 @@ import jdk.vm.ci.meta.Value;
  */
 public class CheckGraalInvariants extends GraalCompilerTest {
 
-    public CheckGraalInvariants() {
-        try {
-            Class.forName("java.lang.management.ManagementFactory");
-        } catch (ClassNotFoundException ex) {
-            Assume.assumeNoException("cannot run without java.management JDK9 module", ex);
-        }
-    }
-
     private static boolean shouldVerifyEquals(ResolvedJavaMethod m) {
         if (m.getName().equals("identityEquals")) {
             ResolvedJavaType c = m.getDeclaringClass();
@@ -148,7 +140,7 @@ public class CheckGraalInvariants extends GraalCompilerTest {
         }
 
         protected boolean shouldLoadClass(String className) {
-            return !className.equals("module-info");
+            return !className.equals("module-info") && !className.startsWith("META-INF.versions.");
         }
 
         protected void handleClassLoadingException(Throwable t) {
@@ -191,7 +183,7 @@ public class CheckGraalInvariants extends GraalCompilerTest {
                     for (final Enumeration<? extends ZipEntry> entry = zipFile.entries(); entry.hasMoreElements();) {
                         final ZipEntry zipEntry = entry.nextElement();
                         String name = zipEntry.getName();
-                        if (name.endsWith(".class")) {
+                        if (name.endsWith(".class") && !name.startsWith("META-INF/versions/")) {
                             String className = name.substring(0, name.length() - ".class".length()).replace('/', '.');
                             if (isInNativeImage(className)) {
                                 /*

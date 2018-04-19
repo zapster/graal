@@ -28,6 +28,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -150,7 +151,7 @@ final class JavaClassDesc {
         }
 
         private static void collectPublicMethods(Class<?> type, Map<String, JavaMethodDesc> methodMap, Map<String, JavaMethodDesc> staticMethodMap, Set<Object> visited, Class<?> startType) {
-            boolean isPublicType = Modifier.isPublic(type.getModifiers());
+            boolean isPublicType = Modifier.isPublic(type.getModifiers()) && !Proxy.isProxyClass(type);
             boolean allMethodsPublic = true;
             if (isPublicType) {
                 for (Method m : type.getMethods()) {
@@ -278,11 +279,11 @@ final class JavaClassDesc {
             }
             return null;
         }
+    }
 
-        private static boolean isObjectMethodOverride(Method m) {
-            return ((m.getParameterCount() == 0 && (m.getName().equals("hashCode") || m.getName().equals("toString"))) ||
-                            (m.getParameterCount() == 1 && m.getName().equals("equals") && m.getParameterTypes()[0] == Object.class));
-        }
+    static boolean isObjectMethodOverride(Method m) {
+        return ((m.getParameterCount() == 0 && (m.getName().equals("hashCode") || m.getName().equals("toString"))) ||
+                        (m.getParameterCount() == 1 && m.getName().equals("equals") && m.getParameterTypes()[0] == Object.class));
     }
 
     private static class JNIMembers {
@@ -423,10 +424,6 @@ final class JavaClassDesc {
 
     public JavaMethodDesc getFunctionalMethod() {
         return getMembers().functionalMethod;
-    }
-
-    public boolean implementsFunctionalInterface() {
-        return getFunctionalMethod() != null;
     }
 
     @Override

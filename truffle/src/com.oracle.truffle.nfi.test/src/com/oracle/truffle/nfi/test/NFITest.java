@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -42,10 +42,11 @@ import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.tck.TruffleRunner;
+import org.graalvm.polyglot.Context;
 
 public class NFITest {
 
-    @ClassRule public static TruffleRunner.RunWithPolyglotRule runWithPolyglot = new TruffleRunner.RunWithPolyglotRule();
+    @ClassRule public static TruffleRunner.RunWithPolyglotRule runWithPolyglot = new TruffleRunner.RunWithPolyglotRule(Context.newBuilder().allowNativeAccess(true));
 
     protected static TruffleObject defaultLibrary;
     protected static TruffleObject testLibrary;
@@ -53,7 +54,15 @@ public class NFITest {
     private static CallTarget lookupAndBind;
 
     private static TruffleObject loadLibrary(String lib) {
-        Source source = Source.newBuilder(lib).name("loadLibrary").mimeType("application/x-native").build();
+        String testBackend = System.getProperty("native.test.backend");
+        String sourceString;
+        if (testBackend != null) {
+            sourceString = String.format("with %s %s", testBackend, lib);
+        } else {
+            sourceString = lib;
+        }
+
+        Source source = Source.newBuilder(sourceString).name("loadLibrary").mimeType("application/x-native").build();
         CallTarget target = runWithPolyglot.getTruffleTestEnv().parse(source);
         return (TruffleObject) target.call();
     }

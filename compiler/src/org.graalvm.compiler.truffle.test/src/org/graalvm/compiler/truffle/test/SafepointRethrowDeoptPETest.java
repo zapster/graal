@@ -25,7 +25,7 @@ package org.graalvm.compiler.truffle.test;
 import java.util.concurrent.CountDownLatch;
 
 import org.graalvm.compiler.core.common.GraalOptions;
-import org.graalvm.compiler.truffle.OptimizedCallTarget;
+import org.graalvm.compiler.truffle.runtime.OptimizedCallTarget;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
@@ -208,7 +208,7 @@ public class SafepointRethrowDeoptPETest extends PartialEvaluationTest {
                     /* spin */
                 }
                 /* Thread.sleep(100); */
-                compiledMethod.invalidate();
+                compiledMethod.invalidate(cdl, "timed out");
             } catch (InterruptedException e) {
                 Assert.fail("interrupted");
             }

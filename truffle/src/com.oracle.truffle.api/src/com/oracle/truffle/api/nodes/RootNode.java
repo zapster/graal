@@ -28,7 +28,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
-import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerOptions;
 import com.oracle.truffle.api.RootCallTarget;
@@ -97,7 +96,9 @@ import com.oracle.truffle.api.source.SourceSection;
  * <li>{@link #isInstrumentable()} is overridden and returns <code>true</code>.
  * <li>{@link #getSourceSection()} is overridden and returns a non-null value.
  * <li>The AST contains at least one node that is annotated with
- * {@link com.oracle.truffle.api.instrumentation.Instrumentable} .
+ * {@link com.oracle.truffle.api.instrumentation.Instrumentable}.
+ * <li>It is recommended that children of instrumentable root nodes are tagged with
+ * <code>StandardTags</code>.
  * </ul>
  * <p>
  * <strong>Note:</strong> It is recommended to override {@link #getSourceSection()} and provide a
@@ -106,44 +107,19 @@ import com.oracle.truffle.api.source.SourceSection;
  *
  * @since 0.8 or earlier
  */
-@SuppressWarnings("rawtypes")
-public abstract class RootNode extends Node {
+public abstract class RootNode extends ExecutableNode {
 
     /*
      * Since languages were singletons in the past, we cannot use the Env instance stored in
-     * TruffleLanguage for languages that are not yet migrated. We use this env reference instead
-     * for compatibility.
+     * TruffleLanguage for languages that are not yet migrated. We use this sourceVM reference
+     * instead for compatibility.
      */
     final Object sourceVM;
-    private final LanguageInfo languageInfo;
     private RootCallTarget callTarget;
     @CompilationFinal private FrameDescriptor frameDescriptor;
-    private final SourceSection sourceSection;
     final ReentrantLock lock = new ReentrantLock();
 
     volatile byte instrumentationBits;
-
-    /**
-     * @deprecated use {@link RootNode(TruffleLanguage, FrameDescriptor)} instead. Root nodes do not
-     *             support source sections by default any longer. Please override
-     *             {@link #getSourceSection()} instead if a source section is available.
-     * @since 0.8 or earlier
-     */
-    @Deprecated
-    protected RootNode(Class<? extends TruffleLanguage> language, SourceSection sourceSection, FrameDescriptor frameDescriptor) {
-        CompilerAsserts.neverPartOfCompilation();
-        if (!TruffleLanguage.class.isAssignableFrom(language)) {
-            throw new IllegalStateException();
-        }
-        this.sourceVM = getCurrentVM();
-        this.languageInfo = Node.ACCESSOR.languageSupport().getLegacyLanguageInfo(sourceVM, language);
-        this.sourceSection = sourceSection;
-        if (frameDescriptor == null) {
-            this.frameDescriptor = new FrameDescriptor();
-        } else {
-            this.frameDescriptor = frameDescriptor;
-        }
-    }
 
     /**
      * Creates new root node with a given language instance. The language instance is obtainable
@@ -172,19 +148,14 @@ public abstract class RootNode extends Node {
      * @since 0.25
      */
     protected RootNode(TruffleLanguage<?> language, FrameDescriptor frameDescriptor) {
+        super(language);
         CompilerAsserts.neverPartOfCompilation();
-        if (language != null) {
-            this.languageInfo = Node.ACCESSOR.languageSupport().getLanguageInfo(language);
-            if (languageInfo == null) {
-                throw new IllegalArgumentException("Truffle language instance is not initialized.");
-            }
+        if (this.languageInfo != null) {
             this.sourceVM = Node.ACCESSOR.engineSupport().getVMFromLanguageObject(this.languageInfo.getEngineObject());
         } else {
             this.sourceVM = getCurrentVM();
-            this.languageInfo = null;
         }
         this.frameDescriptor = frameDescriptor == null ? new FrameDescriptor() : frameDescriptor;
-        this.sourceSection = null;
     }
 
     private static Object getCurrentVM() {
@@ -194,30 +165,6 @@ public abstract class RootNode extends Node {
         } else {
             return null;
         }
-    }
-
-    /**
-     * Returns the language instance associated with this root node. The language instance is
-     * intended for internal use in languages and is only accessible if the concrete type of the
-     * language is known. Public information about the language can be accessed using
-     * {@link #getLanguageInfo()}. The language is <code>null</code> if the root node is not
-     * associated with a <code>null</code> language.
-     *
-     * @see #getLanguageInfo()
-     * @since 0.25
-     */
-    public final <C extends TruffleLanguage> C getLanguage(Class<C> languageClass) {
-        if (languageInfo == null) {
-            return null;
-        }
-        TruffleLanguage<?> language = languageInfo.getSpi();
-        if (language.getClass() != languageClass) {
-            if (!languageClass.isInstance(language) || languageClass == TruffleLanguage.class || !TruffleLanguage.class.isAssignableFrom(languageClass)) {
-                CompilerDirectives.transferToInterpreter();
-                throw new ClassCastException("Illegal language class specified. Expected " + language.getClass().getName() + ".");
-            }
-        }
-        return languageClass.cast(language);
     }
 
     /**
@@ -234,19 +181,10 @@ public abstract class RootNode extends Node {
      * @since 0.27
      */
     public final <C, T extends TruffleLanguage<C>> C getCurrentContext(Class<T> languageClass) {
-        CompilerAsserts.partialEvaluationConstant(languageClass);
+        if (languageInfo == null) {
+            return null;
+        }
         return getLanguage(languageClass).getContextReference().get();
-    }
-
-    /**
-     * Returns public information about the language. The language can be assumed equal if the
-     * instances of the language info instance are the same. To access internal details of the
-     * language within the language implementation use {@link #getLanguage(Class)}.
-     *
-     * @since 0.25
-     */
-    public final LanguageInfo getLanguageInfo() {
-        return languageInfo;
     }
 
     /** @since 0.8 or earlier */
@@ -255,17 +193,6 @@ public abstract class RootNode extends Node {
         RootNode root = (RootNode) super.copy();
         root.frameDescriptor = frameDescriptor;
         return root;
-    }
-
-    /**
-     * Returns the source section associated with this {@link RootNode}. Returns <code>null</code>
-     * if by default. Can be called on any thread and without a language context.
-     *
-     * @since 0.13
-     */
-    @Override
-    public SourceSection getSourceSection() {
-        return sourceSection;
     }
 
     /**
@@ -405,6 +332,7 @@ public abstract class RootNode extends Node {
      * @return the value of the execution
      * @since 0.8 or earlier
      */
+    @Override
     public abstract Object execute(VirtualFrame frame);
 
     /** @since 0.8 or earlier */
@@ -428,10 +356,11 @@ public abstract class RootNode extends Node {
     }
 
     /**
-     * Returns the {@link ExecutionContext} associated with this <code>RootNode</code>. This allows
-     * the correct <code>ExecutionContext</code> to be determined for a <code>RootNode</code> (and
-     * so also for a {@link RootCallTarget} and a {@link FrameInstance} obtained from the call
-     * stack) without prior knowledge of the language it has come from.
+     * Returns the {@link com.oracle.truffle.api.ExecutionContext} associated with this
+     * <code>RootNode</code>. This allows the correct <code>ExecutionContext</code> to be determined
+     * for a <code>RootNode</code> (and so also for a {@link RootCallTarget} and a
+     * {@link FrameInstance} obtained from the call stack) without prior knowledge of the language
+     * it has come from.
      *
      * Returns <code>null</code> by default.
      *

@@ -22,17 +22,14 @@
  */
 package com.oracle.truffle.api.test.polyglot;
 
-import java.io.IOException;
-import java.util.List;
-
-import org.graalvm.options.OptionDescriptor;
 import org.graalvm.options.OptionDescriptors;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.Scope;
 import com.oracle.truffle.api.TruffleLanguage;
-import com.oracle.truffle.api.frame.MaterializedFrame;
+import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.nodes.ExecutableNode;
 import com.oracle.truffle.api.nodes.Node;
-import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
 import com.oracle.truffle.api.test.polyglot.ProxyLanguage.LanguageContext;
 
@@ -42,9 +39,9 @@ import com.oracle.truffle.api.test.polyglot.ProxyLanguage.LanguageContext;
 @TruffleLanguage.Registration(id = ProxyLanguage.ID, name = ProxyLanguage.ID, version = "1.0", mimeType = ProxyLanguage.ID)
 public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
 
-    static final String ID = "proxyLanguage";
+    public static final String ID = "proxyLanguage";
 
-    static class LanguageContext {
+    public static class LanguageContext {
         final Env env;
 
         LanguageContext(Env env) {
@@ -57,24 +54,36 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
         delegate.wrapper = false;
     }
     private boolean wrapper = true;
+    protected ProxyLanguage languageInstance;
 
     public static void setDelegate(ProxyLanguage delegate) {
         delegate.wrapper = false;
         ProxyLanguage.delegate = delegate;
     }
 
-    @Override
-    protected LanguageContext createContext(com.oracle.truffle.api.TruffleLanguage.Env env) {
-        if (wrapper) {
-            return delegate.createContext(env);
-        } else {
-            return null;
-        }
+    public static LanguageContext getCurrentContext() {
+        return getCurrentContext(ProxyLanguage.class);
+    }
+
+    public static ContextReference<LanguageContext> getCurrentContextReference() {
+        return getCurrentLanguage(ProxyLanguage.class).getContextReference();
     }
 
     @Override
+    protected LanguageContext createContext(com.oracle.truffle.api.TruffleLanguage.Env env) {
+        if (wrapper) {
+            delegate.languageInstance = this;
+            return delegate.createContext(env);
+        } else {
+            return new LanguageContext(env);
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
     protected Object getLanguageGlobal(LanguageContext context) {
         if (wrapper) {
+            delegate.languageInstance = this;
             return delegate.getLanguageGlobal(context);
         } else {
             return null;
@@ -84,6 +93,7 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected boolean isObjectOfLanguage(Object object) {
         if (wrapper) {
+            delegate.languageInstance = this;
             return delegate.isObjectOfLanguage(object);
         } else {
             return false;
@@ -102,6 +112,7 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected void disposeContext(LanguageContext context) {
         if (wrapper) {
+            delegate.languageInstance = this;
             delegate.disposeContext(context);
         } else {
             super.disposeContext(context);
@@ -112,6 +123,7 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     protected void disposeThread(LanguageContext context, Thread thread) {
 
         if (wrapper) {
+            delegate.languageInstance = this;
             delegate.disposeThread(context, thread);
         } else {
             super.disposeThread(context, thread);
@@ -119,27 +131,19 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     }
 
     @Override
-    protected Object findExportedSymbol(LanguageContext context, String globalName, boolean onlyExplicit) {
-        if (wrapper) {
-            return delegate.findExportedSymbol(context, globalName, onlyExplicit);
-        } else {
-            return super.findExportedSymbol(context, globalName, onlyExplicit);
-        }
-
-    }
-
-    @Override
     protected Object findMetaObject(LanguageContext context, Object value) {
         if (wrapper) {
+            delegate.languageInstance = this;
             return delegate.findMetaObject(context, value);
         } else {
-            return super.findMetaObject(context, value);
+            return value.toString();
         }
     }
 
     @Override
     protected SourceSection findSourceLocation(LanguageContext context, Object value) {
         if (wrapper) {
+            delegate.languageInstance = this;
             return delegate.findSourceLocation(context, value);
         } else {
             return super.findSourceLocation(context, value);
@@ -149,6 +153,7 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected void initializeContext(LanguageContext context) throws Exception {
         if (wrapper) {
+            delegate.languageInstance = this;
             delegate.initializeContext(context);
         } else {
             super.initializeContext(context);
@@ -159,6 +164,7 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected void initializeMultiThreading(LanguageContext context) {
         if (wrapper) {
+            delegate.languageInstance = this;
             delegate.initializeMultiThreading(context);
         } else {
             super.initializeMultiThreading(context);
@@ -168,6 +174,7 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected void initializeThread(LanguageContext context, Thread thread) {
         if (wrapper) {
+            delegate.languageInstance = this;
             delegate.initializeThread(context, thread);
         } else {
             super.initializeThread(context, thread);
@@ -177,6 +184,7 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected boolean isThreadAccessAllowed(Thread thread, boolean singleThreaded) {
         if (wrapper) {
+            delegate.languageInstance = this;
             return delegate.isThreadAccessAllowed(thread, singleThreaded);
         } else {
             return super.isThreadAccessAllowed(thread, singleThreaded);
@@ -186,25 +194,17 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected boolean isVisible(LanguageContext context, Object value) {
         if (wrapper) {
+            delegate.languageInstance = this;
             return delegate.isVisible(context, value);
         } else {
             return super.isVisible(context, value);
         }
     }
 
-    @SuppressWarnings("deprecation")
-    @Override
-    protected Object lookupSymbol(LanguageContext context, String symbolName) {
-        if (wrapper) {
-            return delegate.lookupSymbol(context, symbolName);
-        } else {
-            return super.lookupSymbol(context, symbolName);
-        }
-    }
-
     @Override
     protected OptionDescriptors getOptionDescriptors() {
         if (wrapper) {
+            delegate.languageInstance = this;
             return delegate.getOptionDescriptors();
         } else {
             return super.getOptionDescriptors();
@@ -214,48 +214,50 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected String toString(LanguageContext context, Object value) {
         if (wrapper) {
+            delegate.languageInstance = this;
             return delegate.toString(context, value);
         } else {
-            return super.toString(context, value);
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    @Override
-    protected List<OptionDescriptor> describeOptions() {
-        if (wrapper) {
-            return delegate.describeOptions();
-        } else {
-            return super.describeOptions();
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    @Override
-    protected Object evalInContext(Source source, Node node, MaterializedFrame mFrame) throws IOException {
-        if (wrapper) {
-            return delegate.evalInContext(source, node, mFrame);
-        } else {
-            return super.evalInContext(source, node, mFrame);
+            return value.toString();
         }
     }
 
     @Override
     protected CallTarget parse(com.oracle.truffle.api.TruffleLanguage.ParsingRequest request) throws Exception {
         if (wrapper) {
+            delegate.languageInstance = this;
             return delegate.parse(request);
         } else {
             return super.parse(request);
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Override
-    protected CallTarget parse(Source code, Node context, String... argumentNames) throws Exception {
+    protected Iterable<Scope> findTopScopes(LanguageContext context) {
         if (wrapper) {
-            return delegate.parse(code, context, argumentNames);
+            delegate.languageInstance = this;
+            return delegate.findTopScopes(context);
         } else {
-            return super.parse(code, context, argumentNames);
+            return super.findTopScopes(context);
+        }
+    }
+
+    @Override
+    protected Iterable<Scope> findLocalScopes(LanguageContext context, Node node, Frame frame) {
+        if (wrapper) {
+            delegate.languageInstance = this;
+            return delegate.findLocalScopes(context, node, frame);
+        } else {
+            return super.findLocalScopes(context, node, frame);
+        }
+    }
+
+    @Override
+    protected ExecutableNode parse(InlineParsingRequest request) throws Exception {
+        if (wrapper) {
+            delegate.languageInstance = this;
+            return delegate.parse(request);
+        } else {
+            return super.parse(request);
         }
     }
 

@@ -23,10 +23,10 @@
 package org.graalvm.compiler.truffle.test.builtins;
 
 import org.graalvm.compiler.options.OptionDescriptor;
-import org.graalvm.compiler.truffle.OptimizedCallTarget;
-import org.graalvm.compiler.truffle.TruffleCompilerOptions;
-import org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleOptionsOverrideScope;
-import org.graalvm.compiler.truffle.TruffleCompilerOptions_OptionDescriptors;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions_OptionDescriptors;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleOptionsOverrideScope;
+import org.graalvm.compiler.truffle.runtime.OptimizedCallTarget;
 
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Truffle;
@@ -56,14 +56,14 @@ public abstract class SLCallWithOptionOverrideBuiltin extends SLGraalRuntimeBuil
     }
 
     @TruffleBoundary
-    private static TruffleOptionsOverrideScope override(String name, Object value) {
+    private TruffleOptionsOverrideScope override(String name, Object value) {
         TruffleCompilerOptions_OptionDescriptors options = new TruffleCompilerOptions_OptionDescriptors();
         for (OptionDescriptor option : options) {
             if (option.getName().equals(name)) {
                 return TruffleCompilerOptions.overrideOptions(option.getOptionKey(), convertValue(value));
             }
         }
-        throw new SLAssertionError("No such option named \"" + name + "\" found in " + TruffleCompilerOptions.class.getName());
+        throw new SLAssertionError("No such option named \"" + name + "\" found in " + TruffleCompilerOptions.class.getName(), this);
     }
 
     private static Object convertValue(Object value) {

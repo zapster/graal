@@ -83,17 +83,16 @@ def createBenchmarkShortcut(benchSuite, args):
     return mx_benchmark.benchmark([benchSuite + ":" + benchname] + remaining_args)
 
 
-# dacapo suite parsers.
-def _create_dacapo_parser():
+def _create_temporary_workdir_parser():
     parser = ArgumentParser(add_help=False, usage=mx_benchmark._mx_benchmark_usage_example + " -- <options> -- ...")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--keep-scratch", action="store_true", help="Do not delete scratch directory after benchmark execution.")
     group.add_argument("--no-scratch", action="store_true", help="Do not execute benchmark in scratch directory.")
     return parser
 
-mx_benchmark.parsers["dacapo_benchmark_suite"] = ParserEntry(
-    _create_dacapo_parser(),
-    "\n\nFlags for DaCapo-style benchmark suites:\n"
+mx_benchmark.parsers["temporary_workdir_parser"] = ParserEntry(
+    _create_temporary_workdir_parser(),
+    "\n\nFlags for benchmark suites with temporary working directories:\n"
 )
 
 class JvmciJdkVm(mx_benchmark.OutputCapturingJavaVm):
@@ -116,8 +115,28 @@ class JvmciJdkVm(mx_benchmark.OutputCapturingJavaVm):
         if tag and tag != mx_compiler._JVMCI_JDK_TAG:
             mx.abort("The '{0}/{1}' VM requires '--jdk={2}'".format(
                 self.name(), self.config_name(), mx_compiler._JVMCI_JDK_TAG))
-        mx.get_jdk(tag=mx_compiler._JVMCI_JDK_TAG).run_java(
+        return mx.get_jdk(tag=mx_compiler._JVMCI_JDK_TAG).run_java(
             args, out=out, err=out, cwd=cwd, nonZeroIsFatal=False)
+
+    def rules(self, output, benchmarks, bmSuiteArgs):
+        if benchmarks and len(benchmarks) == 1:
+            return [
+                mx_benchmark.StdOutRule(
+                    # r"Statistics for (?P<methods>[0-9]+) bytecoded nmethods for JVMCI:\n total in heap  = (?P<value>[0-9]+)",
+                    r"Statistics for (?P<methods>[0-9]+) bytecoded nmethods for JVMCI:\n total in heap  = (?P<value>[0-9]+)",
+                    {
+                        "benchmark": benchmarks[0],
+                        "vm": "jvmci",
+                        "metric.name": "code-size",
+                        "metric.value": ("<value>", int),
+                        "metric.unit": "B",
+                        "metric.type": "numeric",
+                        "metric.score-function": "id",
+                        "metric.better": "lower",
+                        "metric.iteration": 0,
+                    })
+            ]
+        return []
 
 
 mx_benchmark.add_java_vm(JvmciJdkVm('server', 'default', ['-server', '-XX:-EnableJVMCI']), _suite, 2)
@@ -142,9 +161,13 @@ def build_jvmci_vm_variants(raw_name, raw_config_name, extra_args, variants, inc
 _graal_variants = [
     ('tracera', ['-Dgraal.TraceRA=true'], 11),
     ('tracera-bu', ['-Dgraal.TraceRA=true', '-Dgraal.TraceRAPolicy=BottomUpOnly'], 10),
-    ('g1gc', ['-XX:+UseG1GC'], 12)
+    ('g1gc', ['-XX:+UseG1GC'], 12),
+    ('no-comp-oops', ['-XX:-UseCompressedOops'], 0),
+    ('no-splitting', ['-Dgraal.TruffleSplitting=false'], 0),
+    ('limit-truffle-inlining', ['-Dgraal.TruffleMaximumRecursiveInlining=2'], 0),
+    ('no-splitting-limit-truffle-inlining', ['-Dgraal.TruffleSplitting=false', '-Dgraal.TruffleMaximumRecursiveInlining=2'], 0),
 ]
-build_jvmci_vm_variants('server', 'graal-core', ['-server', '-XX:+EnableJVMCI', '-Dgraal.CompilerConfiguration=core', '-Djvmci.Compiler=graal'], _graal_variants, suite=_suite, priority=15)
+build_jvmci_vm_variants('server', 'graal-core', ['-server', '-XX:+EnableJVMCI', '-Dgraal.CompilerConfiguration=community', '-Djvmci.Compiler=graal'], _graal_variants, suite=_suite, priority=15)
 
 # On 64 bit systems -client is not supported. Nevertheless, when running with -server, we can
 # force the VM to just compile code with C1 but not with C2 by adding option -XX:TieredStopAtLevel=1.
@@ -447,10 +470,49 @@ class AveragingBenchmarkMixin(object):
             averageResult = next(result for result in warmupResults if result["metric.iteration"] == 0).copy()
             averageResult["metric.value"] = totalTimeForAverage / resultIterations
             averageResult["metric.name"] = "time"
+            averageResult["metric.average-over"] = resultIterations
             results.append(averageResult)
 
 
-class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchmarkMixin):
+class TemporaryWorkdirMixin(mx_benchmark.VmBenchmarkSuite):
+    def before(self, bmSuiteArgs):
+        parser = mx_benchmark.parsers["temporary_workdir_parser"].parser
+        bmArgs, otherArgs = parser.parse_known_args(bmSuiteArgs)
+        self.keepScratchDir = bmArgs.keep_scratch
+        if not bmArgs.no_scratch:
+            self._create_tmp_workdir()
+        else:
+            mx.warn("NO scratch directory created! (--no-scratch)")
+            self.workdir = None
+        super(TemporaryWorkdirMixin, self).before(otherArgs)
+
+    def _create_tmp_workdir(self):
+        self.workdir = mkdtemp(prefix=self.name() + '-work.', dir='.')
+
+    def workingDirectory(self, benchmarks, bmSuiteArgs):
+        return self.workdir
+
+    def after(self, bmSuiteArgs):
+        if hasattr(self, "keepScratchDir") and self.keepScratchDir:
+            mx.warn("Scratch directory NOT deleted (--keep-scratch): {0}".format(self.workdir))
+        elif self.workdir:
+            rmtree(self.workdir)
+        super(TemporaryWorkdirMixin, self).after(bmSuiteArgs)
+
+    def repairDatapointsAndFail(self, benchmarks, bmSuiteArgs, partialResults, message):
+        try:
+            super(TemporaryWorkdirMixin, self).repairDatapointsAndFail(benchmarks, bmSuiteArgs, partialResults, message)
+        finally:
+            if self.workdir:
+                # keep old workdir for investigation, create a new one for further benchmarking
+                mx.warn("Keeping scratch directory after failed benchmark: {0}".format(self.workdir))
+                self._create_tmp_workdir()
+
+    def parserNames(self):
+        return super(TemporaryWorkdirMixin, self).parserNames() + ["temporary_workdir_parser"]
+
+
+class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchmarkMixin, TemporaryWorkdirMixin):
     """Base benchmark suite for DaCapo-based benchmarks.
 
     This suite can only run a single benchmark in one VM invocation.
@@ -463,37 +525,6 @@ class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchma
 
     def benchSuiteName(self):
         return self.name()
-
-    def before(self, bmSuiteArgs):
-        parser = mx_benchmark.parsers["dacapo_benchmark_suite"].parser
-        bmArgs, _ = parser.parse_known_args(bmSuiteArgs)
-        self.keepScratchDir = bmArgs.keep_scratch
-        if not bmArgs.no_scratch:
-            self._create_tmp_workdir()
-        else:
-            mx.warn("NO scratch directory created! (--no-scratch)")
-            self.workdir = None
-
-    def _create_tmp_workdir(self):
-        self.workdir = mkdtemp(prefix='dacapo-work.', dir='.')
-
-    def workingDirectory(self, benchmarks, bmSuiteArgs):
-        return self.workdir
-
-    def after(self, bmSuiteArgs):
-        if hasattr(self, "keepScratchDir") and self.keepScratchDir:
-            mx.warn("Scratch directory NOT deleted (--keep-scratch): {0}".format(self.workdir))
-        elif self.workdir:
-            rmtree(self.workdir)
-
-    def repairDatapointsAndFail(self, benchmarks, bmSuiteArgs, partialResults, message):
-        try:
-            super(BaseDaCapoBenchmarkSuite, self).repairDatapointsAndFail(benchmarks, bmSuiteArgs, partialResults, message)
-        finally:
-            if self.workdir:
-                # keep old workdir for investigation, create a new one for further benchmarking
-                mx.warn("Keeping scratch directory after failed benchmark: {0}".format(self.workdir))
-                self._create_tmp_workdir()
 
     def daCapoClasspathEnvVarName(self):
         raise NotImplementedError()
@@ -512,9 +543,6 @@ class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchma
 
     def daCapoIterations(self):
         raise NotImplementedError()
-
-    def parserNames(self):
-        return super(BaseDaCapoBenchmarkSuite, self).parserNames() + ["dacapo_benchmark_suite"]
 
     def validateEnvironment(self):
         if not self.daCapoPath():
@@ -541,12 +569,6 @@ class BaseDaCapoBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchma
             else:
                 iterations = iterations + self.getExtraIterationCount(iterations)
                 return ["-n", str(iterations)] + remaining
-
-    def vmArgs(self, bmSuiteArgs):
-        parser = mx_benchmark.parsers["dacapo_benchmark_suite"].parser
-        _, remainingBmSuiteArgs = parser.parse_known_args(bmSuiteArgs)
-        vmArgs = super(BaseDaCapoBenchmarkSuite, self).vmArgs(remainingBmSuiteArgs)
-        return vmArgs
 
     def createCommandLineArgs(self, benchmarks, bmSuiteArgs):
         if benchmarks is None:
@@ -711,7 +733,7 @@ _daCapoIterations = {
 }
 
 
-class DaCapoBenchmarkSuite(BaseDaCapoBenchmarkSuite):
+class DaCapoBenchmarkSuite(BaseDaCapoBenchmarkSuite): #pylint: disable=too-many-ancestors
     """DaCapo 9.12 (Bach) benchmark suite implementation."""
 
     def name(self):
@@ -779,7 +801,7 @@ _daCapoScalaConfig = {
 }
 
 
-class ScalaDaCapoBenchmarkSuite(BaseDaCapoBenchmarkSuite):
+class ScalaDaCapoBenchmarkSuite(BaseDaCapoBenchmarkSuite): #pylint: disable=too-many-ancestors
     """Scala DaCapo benchmark suite implementation."""
 
     def name(self):
@@ -804,6 +826,13 @@ class ScalaDaCapoBenchmarkSuite(BaseDaCapoBenchmarkSuite):
                     re.escape(r"Line count validation failed for stdout.log, expecting 1039 found 1040"),
                 ]
         return skip_patterns
+
+    def vmArgs(self, bmSuiteArgs):
+        vmArgs = super(ScalaDaCapoBenchmarkSuite, self).vmArgs(bmSuiteArgs)
+        # Do not add corba module on JDK>=11 (http://openjdk.java.net/jeps/320)
+        if mx_compiler.jdk.javaCompliance >= '9' and mx_compiler.jdk.javaCompliance < '11':
+            vmArgs += ["--add-modules", "java.corba"]
+        return vmArgs
 
 
 mx_benchmark.add_bm_suite(ScalaDaCapoBenchmarkSuite())
@@ -869,6 +898,9 @@ _allSpecJVM2008Benches = [
     'xml.transform',
     'xml.validation'
 ]
+_allSpecJVM2008BenchesJDK9 = list(_allSpecJVM2008Benches)
+_allSpecJVM2008BenchesJDK9.remove('compiler.compiler') # GR-8452: SpecJVM2008 compiler.compiler does not work on JDK9
+_allSpecJVM2008BenchesJDK9.remove('startup.compiler.compiler')
 
 
 class SpecJvm2008BenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
@@ -916,8 +948,19 @@ class SpecJvm2008BenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
         runArgs = self.runArgs(bmSuiteArgs)
         return vmArgs + ["-jar"] + [self.specJvmPath()] + runArgs + benchmarks
 
+    def runArgs(self, bmSuiteArgs):
+        runArgs = super(SpecJvm2008BenchmarkSuite, self).runArgs(bmSuiteArgs)
+        if mx_compiler.jdk.javaCompliance >= '9':
+            # GR-8452: SpecJVM2008 compiler.compiler does not work on JDK9
+            # Skips initial check benchmark which tests for javac.jar on classpath.
+            runArgs += ["-pja", "-Dspecjvm.run.initial.check=false"]
+        return runArgs
+
     def benchmarkList(self, bmSuiteArgs):
-        return _allSpecJVM2008Benches
+        if mx_compiler.jdk.javaCompliance >= '9':
+            return _allSpecJVM2008BenchesJDK9
+        else:
+            return _allSpecJVM2008Benches
 
     def successPatterns(self):
         return [
@@ -1194,6 +1237,8 @@ class SpecJbb2015BenchmarkSuite(mx_benchmark.JavaBenchmarkSuite):
         if benchmarks is not None:
             mx.abort("No benchmark should be specified for the selected suite.")
         vmArgs = self.vmArgs(bmSuiteArgs)
+        if mx_compiler.jdk.javaCompliance >= '9':
+            vmArgs += ["--add-modules", "java.xml.bind"]
         runArgs = self.runArgs(bmSuiteArgs)
         return vmArgs + ["-jar", self.specJbbClassPath(), "-m", "composite"] + runArgs
 
@@ -1343,7 +1388,7 @@ class JMHDistWhiteboxBenchmarkSuite(mx_benchmark.JMHDistBenchmarkSuite):
 mx_benchmark.add_bm_suite(JMHDistWhiteboxBenchmarkSuite())
 
 
-class RenaissanceBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchmarkMixin):
+class RenaissanceBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchmarkMixin, TemporaryWorkdirMixin):
     """Renaissance benchmark suite implementation.
     """
     def name(self):
@@ -1366,18 +1411,8 @@ class RenaissanceBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchm
             raise RuntimeError(
                 "The RENAISSANCE environment variable was not specified.")
 
-    def before(self, bmSuiteArgs):
-        self.workdir = mkdtemp(prefix='renaissance-work.', dir='.')
-
-    def after(self, bmSuiteArgs):
-        if self.workdir:
-            rmtree(self.workdir)
-
     def validateReturnCode(self, retcode):
         return retcode == 0
-
-    def workingDirectory(self, benchmarks, bmSuiteArgs):
-        return self.workdir
 
     def classpathAndMainClass(self):
         mainClass = "org.renaissance.RenaissanceSuite"
@@ -1406,9 +1441,6 @@ class RenaissanceBenchmarkSuite(mx_benchmark.JavaBenchmarkSuite, AveragingBenchm
         return []
 
     def failurePatterns(self):
-        return []
-
-    def flakySuccessPatterns(self):
         return []
 
     def rules(self, out, benchmarks, bmSuiteArgs):

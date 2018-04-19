@@ -134,6 +134,11 @@ def add_jvmci_classpath_entry(entry):
     """
     _jvmci_classpath.append(entry)
 
+if jdk.javaCompliance != '9' and jdk.javaCompliance != '10':
+    # The jdk.internal.vm.compiler.management module is
+    # not available in 9 nor upgradeable in 10
+    add_jvmci_classpath_entry(JVMCIClasspathEntry('GRAAL_MANAGEMENT'))
+
 _bootclasspath_appends = []
 
 def add_bootclasspath_append(dep):
@@ -255,7 +260,7 @@ def ctw(args, extraVMarguments=None):
     elif not configArgs:
         vmargs.append('-DCompileTheWorld.Config=Inline=false')
 
-    # suppress menubar and dock when running on Mac; exclude x11 classes as they may cause VM crashes (on Solaris)
+    # suppress menubar and dock when running on Mac
     vmargs = ['-Djava.awt.headless=true'] + vmargs
 
     if args.cp:
@@ -266,7 +271,10 @@ def ctw(args, extraVMarguments=None):
         # Default to the CompileTheWorld.SUN_BOOT_CLASS_PATH token
         cp = None
 
-    vmargs.append('-DCompileTheWorld.ExcludeMethodFilter=sun.awt.X11.*.*')
+    # Exclude X11 classes as they may cause VM crashes (on Solaris)
+    exclusionPrefix = '-DCompileTheWorld.ExcludeMethodFilter='
+    exclusions = ','.join([a[len(exclusionPrefix):] for a in vmargs if a.startswith(exclusionPrefix)] + ['sun.awt.X11.*.*'])
+    vmargs.append(exclusionPrefix + exclusions)
 
     if _get_XX_option_value(vmargs + _remove_empty_entries(extraVMarguments), 'UseJVMCICompiler', False):
         vmargs.append('-XX:+BootstrapJVMCI')
@@ -453,8 +461,14 @@ def _gate_dacapo(name, iterations, extraVMarguments=None, force_serial_gc=True, 
         args += ['-t', str(threads)]
     _gate_java_benchmark(vmargs + ['-jar', dacapoJar, name] + args, r'^===== DaCapo 9\.12 ([a-zA-Z0-9_]+) PASSED in ([0-9]+) msec =====')
 
+def _jdk_includes_corba(jdk):
+    # corba has been removed since JDK11 (http://openjdk.java.net/jeps/320)
+    return jdk.javaCompliance < '11'
+
 def _gate_scala_dacapo(name, iterations, extraVMarguments=None):
     vmargs = ['-Xms2g', '-XX:+UseSerialGC', '-XX:-UseCompressedOops', '-Dgraal.CompilationFailureAction=ExitVM'] + _remove_empty_entries(extraVMarguments)
+    if name == 'actors' and jdk.javaCompliance >= '9' and _jdk_includes_corba(jdk):
+        vmargs += ['--add-modules', 'java.corba']
     scalaDacapoJar = mx.library('DACAPO_SCALA').get_path(True)
     _gate_java_benchmark(vmargs + ['-jar', scalaDacapoJar, name, '-n', str(iterations)], r'^===== DaCapo 0\.1\.0(-SNAPSHOT)? ([a-zA-Z0-9_]+) PASSED in ([0-9]+) msec =====')
 
@@ -466,8 +480,8 @@ def jvmci_ci_version_gate_runner(tasks):
 
 def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVMarguments=None):
     if jdk.javaCompliance >= '9':
-        with Task('JDK9_java_base_test', tasks, tags=GraalTags.test) as t:
-            if t: java_base_unittest(_remove_empty_entries(extraVMarguments))
+        with Task('JDK_java_base_test', tasks, tags=['javabasetest']) as t:
+            if t: java_base_unittest(_remove_empty_entries(extraVMarguments) + [])
 
     # Run unit tests in hosted mode
     for r in unit_test_runs:
@@ -546,6 +560,9 @@ def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVM
         'scalaxb':    1,
         'tmt':        1
     }
+    if not _jdk_includes_corba(jdk):
+        mx.warn('Removing scaladacapo:actors from benchmarks because corba has been removed since JDK11 (http://openjdk.java.net/jeps/320)')
+        del scala_dacapos['actors']
     for name, iterations in sorted(scala_dacapos.iteritems()):
         with Task('ScalaDaCapo:' + name, tasks, tags=GraalTags.benchmarktest) as t:
             if t: _gate_scala_dacapo(name, iterations, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler'])
@@ -555,8 +572,9 @@ def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVM
         if t: _gate_dacapo('pmd', 1, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler', '-Xbatch'])
 
     # ensure benchmark counters still work
-    with Task('DaCapo_pmd:BenchmarkCounters', tasks, tags=GraalTags.test) as t:
-        if t: _gate_dacapo('pmd', 1, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler', '-Dgraal.LIRProfileMoves=true', '-Dgraal.GenericDynamicCounters=true', '-XX:JVMCICounterSize=10'])
+    if mx.get_arch() != 'aarch64': # GR-8364 Exclude benchmark counters on AArch64
+        with Task('DaCapo_pmd:BenchmarkCounters', tasks, tags=GraalTags.test) as t:
+            if t: _gate_dacapo('pmd', 1, _remove_empty_entries(extraVMarguments) + ['-XX:+UseJVMCICompiler', '-Dgraal.LIRProfileMoves=true', '-Dgraal.GenericDynamicCounters=true', '-XX:JVMCICounterSize=10'])
 
     # ensure -Xcomp still works
     with Task('XCompMode:product', tasks, tags=GraalTags.test) as t:
@@ -573,16 +591,22 @@ def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVM
 
     with Task('Javadoc', tasks, tags=GraalTags.doc) as t:
         # metadata package was deprecated, exclude it
-        if t: mx.javadoc(['--exclude-packages', 'com.oracle.truffle.api.metadata'], quietForNoPackages=True)
+        if t: mx.javadoc(['--exclude-packages', 'com.oracle.truffle.api.metadata,com.oracle.truffle.api.interop.java,com.oracle.truffle.api.vm'], quietForNoPackages=True)
 
 graal_unit_test_runs = [
     UnitTestRun('UnitTests', [], tags=GraalTags.test),
 ]
 
-_registers = 'o0,o1,o2,o3,f8,f9,d32,d34' if mx.get_arch() == 'sparcv9' else 'rbx,r11,r10,r14,xmm3,xmm11,xmm14'
+_registers = {
+    'sparcv9': 'o0,o1,o2,o3,f8,f9,d32,d34',
+    'amd64': 'rbx,r11,r10,r14,xmm3,xmm11,xmm14',
+    'aarch64': 'r0,r1,r2,r3,r4,v0,v1,v2,v3'
+}
+if mx.get_arch() not in _registers:
+    mx.warn('No registers for register pressure tests are defined for architecture ' + mx.get_arch())
 
 _defaultFlags = ['-Dgraal.CompilationWatchDogStartDelay=60.0D']
-_assertionFlags = ['-esa']
+_assertionFlags = ['-esa', '-Dgraal.DetailedAsserts=true']
 _graalErrorFlags = ['-Dgraal.CompilationFailureAction=ExitVM']
 _graalEconomyFlags = ['-Dgraal.CompilerConfiguration=economy']
 _verificationFlags = ['-Dgraal.VerifyGraalGraphs=true', '-Dgraal.VerifyGraalGraphEdges=true', '-Dgraal.VerifyGraalPhasesSize=true', '-Dgraal.VerifyPhases=true']
@@ -590,7 +614,7 @@ _coopFlags = ['-XX:-UseCompressedOops']
 _gcVerificationFlags = ['-XX:+UnlockDiagnosticVMOptions', '-XX:+VerifyBeforeGC', '-XX:+VerifyAfterGC']
 _g1VerificationFlags = ['-XX:-UseSerialGC', '-XX:+UseG1GC']
 _exceptionFlags = ['-Dgraal.StressInvokeWithExceptionNode=true']
-_registerPressureFlags = ['-Dgraal.RegisterPressure=' + _registers]
+_registerPressureFlags = ['-Dgraal.RegisterPressure=' + _registers[mx.get_arch()]]
 _immutableCodeFlags = ['-Dgraal.ImmutableCode=true']
 
 graal_bootstrap_tests = [
@@ -847,26 +871,37 @@ def run_vm(args, nonZeroIsFatal=True, out=None, err=None, cwd=None, timeout=None
     return run_java(args, nonZeroIsFatal=nonZeroIsFatal, out=out, err=err, cwd=cwd, timeout=timeout)
 
 class GraalArchiveParticipant:
+
+    providersRE = re.compile(r'(?:META-INF/versions/([1-9][0-9]*)/)?META-INF/providers/(.+)')
     def __init__(self, dist, isTest=False):
         self.dist = dist
         self.isTest = isTest
 
     def __opened__(self, arc, srcArc, services):
         self.services = services
+        self.versionedServices = {}
         self.arc = arc
 
     def __add__(self, arcname, contents):
-        if arcname.startswith('META-INF/providers/'):
+        m = GraalArchiveParticipant.providersRE.match(arcname)
+        if m:
             if self.isTest:
                 # The test distributions must not have their @ServiceProvider
                 # generated providers converted to real services otherwise
                 # bad things can happen such as InvocationPlugins being registered twice.
                 pass
             else:
-                provider = arcname[len('META-INF/providers/'):]
+                provider = m.group(2)
                 for service in contents.strip().split(os.linesep):
                     assert service
-                    self.services.setdefault(service, []).append(provider)
+                    version = m.group(1)
+                    if version is None:
+                        # Non-versioned service
+                        self.services.setdefault(service, []).append(provider)
+                    else:
+                        # Versioned service
+                        services = self.versionedServices.setdefault(version, {})
+                        services.setdefault(service, []).append(provider)
             return True
         elif arcname.endswith('_OptionDescriptors.class'):
             if self.isTest:
@@ -883,7 +918,11 @@ class GraalArchiveParticipant:
         return False
 
     def __closing__(self):
-        pass
+        for version, services in self.versionedServices.iteritems():
+            for service, providers in services.iteritems():
+                arcname = 'META-INF/versions/{}/META-INF/services/{}'.format(version, service)
+                # Convert providers to a set before printing to remove duplicates
+                self.arc.zf.writestr(arcname, '\n'.join(frozenset(providers)) + '\n')
 
 mx.add_argument('--vmprefix', action='store', dest='vm_prefix', help='prefix for running the VM (e.g. "gdb --args")', metavar='<prefix>')
 mx.add_argument('--gdb', action='store_const', const='gdb --args', dest='vm_prefix', help='alias for --vmprefix "gdb --args"')
@@ -895,7 +934,7 @@ def sl(args):
     mx_truffle.sl(args)
 
 def java_base_unittest(args):
-    """tests whether graal compiler runs on JDK9 with limited set of modules"""
+    """tests whether graal compiler runs on a JDK with a minimal set of modules"""
     jlink = mx.exe_suffix(join(jdk.home, 'bin', 'jlink'))
     if not exists(jlink):
         raise mx.JDKConfigException('jlink tool does not exist: ' + jlink)
@@ -917,7 +956,13 @@ def java_base_unittest(args):
 
     basejdk = mx.JDKConfig(basejdk_dir)
     savedJava = jdk.java
+    saved_jvmci_classpath = list(_jvmci_classpath)
     try:
+        # Remove GRAAL_MANAGEMENT from the module path as it
+        # depends on the java.management module which is not in
+        # the limited module set
+        _jvmci_classpath[:] = [e for e in _jvmci_classpath if e._name != 'GRAAL_MANAGEMENT']
+
         jdk.java = basejdk.java
         if mx_gate.Task.verbose:
             extra_args = ['--verbose', '--enable-timing']
@@ -926,6 +971,7 @@ def java_base_unittest(args):
         mx_unittest.unittest(['--suite', 'compiler', '--fail-fast'] + extra_args + args)
     finally:
         jdk.java = savedJava
+        _jvmci_classpath[:] = saved_jvmci_classpath
 
 def microbench(*args):
     mx.abort("`mx microbench` is deprecated.\n" +
@@ -1068,7 +1114,7 @@ mx.update_commands(_suite, {
     'ctw': [ctw, '[-vmoptions|noinline|nocomplex|full]'],
     'nodecostdump' : [_nodeCostDump, ''],
     'verify_jvmci_ci_versions': [verify_jvmci_ci_versions, ''],
-    'java_base_unittest' : [java_base_unittest, 'Runs unittest on JDK9 java.base "only" module(s)'],
+    'java_base_unittest' : [java_base_unittest, 'Runs unittest on JDK java.base "only" module(s)'],
     'microbench': [microbench, ''],
     'javadoc': [javadoc, ''],
     'makegraaljdk': [makegraaljdk, '[options]'],

@@ -45,6 +45,7 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Fallback;
+import com.oracle.truffle.api.dsl.ReportPolymorphism;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.dsl.TypeSystemReference;
 import com.oracle.truffle.api.interop.ArityException;
@@ -62,6 +63,7 @@ import com.oracle.truffle.sl.nodes.interop.SLForeignToSLTypeNodeGen;
 import com.oracle.truffle.sl.runtime.SLFunction;
 import com.oracle.truffle.sl.runtime.SLUndefinedNameException;
 
+@ReportPolymorphism
 @TypeSystemReference(SLTypes.class)
 public abstract class SLDispatchNode extends Node {
 
@@ -138,8 +140,8 @@ public abstract class SLDispatchNode extends Node {
      * When no specialization fits, the receiver is not an object (which is a type error).
      */
     @Fallback
-    protected static Object unknownFunction(Object function, @SuppressWarnings("unused") Object[] arguments) {
-        throw SLUndefinedNameException.undefinedFunction(function);
+    protected Object unknownFunction(Object function, @SuppressWarnings("unused") Object[] arguments) {
+        throw SLUndefinedNameException.undefinedFunction(this, function);
     }
 
     /**
@@ -147,7 +149,7 @@ public abstract class SLDispatchNode extends Node {
      * Truffle's interop API to execute the foreign function.
      */
     @Specialization(guards = "isForeignFunction(function)")
-    protected static Object doForeign(TruffleObject function, Object[] arguments,
+    protected Object doForeign(TruffleObject function, Object[] arguments,
                     // The child node to call the foreign function
                     @Cached("createCrossLanguageCallNode(arguments)") Node crossLanguageCallNode,
                     // The child node to convert the result of the foreign call to a SL value
@@ -161,7 +163,7 @@ public abstract class SLDispatchNode extends Node {
 
         } catch (ArityException | UnsupportedTypeException | UnsupportedMessageException e) {
             /* Foreign access was not successful. */
-            throw SLUndefinedNameException.undefinedFunction(function);
+            throw SLUndefinedNameException.undefinedFunction(this, function);
         }
     }
 

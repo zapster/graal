@@ -40,16 +40,19 @@
  */
 package com.oracle.truffle.sl.test;
 
+import static com.oracle.truffle.tck.DebuggerTester.getSourceImpl;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-
-import static com.oracle.truffle.tck.DebuggerTester.getSourceImpl;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.LinkedList;
 
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.Source;
+import org.graalvm.polyglot.Value;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -63,20 +66,16 @@ import com.oracle.truffle.api.debug.DebugStackFrame;
 import com.oracle.truffle.api.debug.DebugValue;
 import com.oracle.truffle.api.debug.Debugger;
 import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.SuspendAnchor;
 import com.oracle.truffle.api.debug.SuspendedEvent;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.ForeignAccess;
 import com.oracle.truffle.api.interop.ForeignAccess.Factory;
+import com.oracle.truffle.api.interop.ForeignAccess.StandardFactory;
 import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.SourceSection;
-
-import org.graalvm.polyglot.Context;
-import org.graalvm.polyglot.Engine;
-import org.graalvm.polyglot.Source;
-import org.graalvm.polyglot.Value;
-import com.oracle.truffle.api.interop.ForeignAccess.StandardFactory;
 
 public class SLDebugDirectTest {
     private static final Object UNASSIGNED = new Object();
@@ -184,7 +183,7 @@ public class SLDebugDirectTest {
                         UNASSIGNED, "res", UNASSIGNED);
         continueExecution();
 
-        Value value = context.importSymbol("test").execute();
+        Value value = context.getBindings("sl").getMember("test").execute();
         assertExecutedOK();
         Assert.assertEquals("2\n", getOut());
         Assert.assertTrue(value.isNumber());
@@ -206,7 +205,7 @@ public class SLDebugDirectTest {
                         "1", "res", UNASSIGNED);
         continueExecution();
 
-        Value value = context.importSymbol("test").execute();
+        Value value = context.getBindings("sl").getMember("test").execute();
         assertExecutedOK();
         Assert.assertEquals("2\n", getOut());
         Assert.assertTrue(value.isNumber());
@@ -257,7 +256,7 @@ public class SLDebugDirectTest {
         assertLocation("test", 3, true, "println(res)", "res", "2");
         stepOut();
 
-        Value value = context.importSymbol("test");
+        Value value = context.getBindings("sl").getMember("test");
         assertTrue(value.canExecute());
         Value resultValue = value.execute();
         String resultStr = resultValue.toString();
@@ -304,7 +303,7 @@ public class SLDebugDirectTest {
             nh.pauseDone();
         });
 
-        Value value = context.importSymbol("interopFunction").execute(nh);
+        Value value = context.getBindings("sl").getMember("interopFunction").execute(nh);
 
         assertExecutedOK();
         assertTrue(value.isBoolean());
@@ -333,7 +332,7 @@ public class SLDebugDirectTest {
         assertLocation("nullTest", 3, true, "return res", "res", "NULL");
         continueExecution();
 
-        Value value = context.importSymbol("nullTest").execute();
+        Value value = context.getBindings("sl").getMember("nullTest").execute();
         assertExecutedOK();
 
         String val = value.toString();
@@ -384,7 +383,7 @@ public class SLDebugDirectTest {
             Assert.assertEquals(line, suspendedSourceSection.getStartLine());
             Assert.assertEquals(code, suspendedSourceSection.getCharacters());
 
-            Assert.assertEquals(isBefore, suspendedEvent.isHaltedBefore());
+            Assert.assertEquals(isBefore, suspendedEvent.getSuspendAnchor() == SuspendAnchor.BEFORE);
             final DebugStackFrame frame = suspendedEvent.getTopStackFrame();
             assertEquals(name, frame.getName());
 

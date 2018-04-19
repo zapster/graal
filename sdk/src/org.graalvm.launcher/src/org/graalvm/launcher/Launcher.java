@@ -51,6 +51,7 @@ import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.options.OptionCategory;
 import org.graalvm.options.OptionDescriptor;
 import org.graalvm.options.OptionDescriptors;
+import org.graalvm.options.OptionType;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.Instrument;
 import org.graalvm.polyglot.Language;
@@ -118,13 +119,6 @@ public abstract class Launcher {
         System.exit(e.getExitCode());
     }
 
-    /**
-     * Sets the version action that will be executed before launching.
-     */
-    protected void setVersionAction(VersionAction versionAction) {
-        this.versionAction = versionAction;
-    }
-
     protected static class AbortException extends RuntimeException {
         static final long serialVersionUID = 4681646279864737876L;
         private final int exitCode;
@@ -163,7 +157,7 @@ public abstract class Launcher {
      * Exits the launcher with the provided exit code.
      *
      * This exits by throwing an {@link AbortException}.
-     * 
+     *
      * @param exitCode the exit code of the launcher process.
      */
     protected final AbortException exit(int exitCode) {
@@ -174,7 +168,7 @@ public abstract class Launcher {
      * Exits the launcher, indicating failure.
      *
      * This aborts by throwing an {@link AbortException}.
-     * 
+     *
      * @param message an error message that will be printed to {@linkplain System#err stderr}. If
      *            null, nothing will be printed.
      */
@@ -186,7 +180,7 @@ public abstract class Launcher {
      * Exits the launcher, with the provided exit code.
      *
      * This aborts by throwing an {@link AbortException}.
-     * 
+     *
      * @param message an error message that will be printed to {@linkplain System#err stderr}. If
      *            null, nothing will be printed.
      * @param exitCode the exit code of the launcher process.
@@ -200,7 +194,7 @@ public abstract class Launcher {
      * Exits the launcher, indicating failure because of the provided {@link Throwable}.
      *
      * This aborts by throwing an {@link AbortException}.
-     * 
+     *
      * @param t the exception that causes the launcher to abort.
      */
     protected final AbortException abort(Throwable t) {
@@ -211,7 +205,7 @@ public abstract class Launcher {
      * Exits the launcher with the provided exit code because of the provided {@link Throwable}.
      *
      * This aborts by throwing an {@link AbortException}.
-     * 
+     *
      * @param t the exception that causes the launcher to abort.
      * @param exitCode the exit code of the launcher process.
      */
@@ -232,7 +226,7 @@ public abstract class Launcher {
      * This tries to build a helpful error message based on exception.
      *
      * This aborts by throwing an {@link AbortException}.
-     * 
+     *
      * @param e the exception that causes the launcher to abort.
      */
     protected final AbortException abort(IOException e) {
@@ -245,7 +239,7 @@ public abstract class Launcher {
      * This tries to build a helpful error message based on exception.
      *
      * This aborts by throwing an {@link AbortException}.
-     * 
+     *
      * @param e the exception that causes the launcher to abort.
      * @param exitCode the exit code of the launcher process
      */
@@ -267,7 +261,7 @@ public abstract class Launcher {
      * Exits the launcher, indicating failure because of an invalid argument.
      *
      * This aborts by throwing an {@link AbortException}.
-     * 
+     *
      * @param argument the problematic argument.
      * @param message an error message that is printed to {@linkplain System#err stderr}.
      */
@@ -328,7 +322,7 @@ public abstract class Launcher {
     /**
      * Prints a help message to {@linkplain System#out stdout}. This only prints options that belong
      * to categories {@code maxCategory or less}.
-     * 
+     *
      * @param maxCategory the maximum category of options that should be printed.
      */
     protected abstract void printHelp(OptionCategory maxCategory);
@@ -340,7 +334,7 @@ public abstract class Launcher {
 
     /**
      * Add all known arguments to the {@code options} list.
-     * 
+     *
      * @param options list to which valid arguments must be added.
      */
     protected abstract void collectArguments(Set<String> options);
@@ -381,7 +375,7 @@ public abstract class Launcher {
      * Returns the name of the main class for this launcher.
      *
      * Typically:
-     * 
+     *
      * <pre>
      * return MyLauncher.class.getName();
      * </pre>
@@ -391,9 +385,18 @@ public abstract class Launcher {
     }
 
     /**
+     * The return value specifies the default VM when none of --jvm, --native options is used.
+     *
+     * @return the default VMType
+     */
+    protected VMType getDefaultVMType() {
+        return VMType.Native;
+    }
+
+    /**
      * Returns true if the current launcher was compiled ahead-of-time to native code.
      */
-    protected static boolean isAOT() {
+    public static boolean isAOT() {
         return IS_AOT;
     }
 
@@ -407,12 +410,12 @@ public abstract class Launcher {
 
         switch (versionAction) {
             case PrintAndContinue:
-                printVersion();
+                printPolyglotVersions();
                 // fall through
             case None:
                 break;
             case PrintAndExit:
-                printVersion();
+                printPolyglotVersions();
                 return true;
         }
         boolean printDefaultHelp = help || ((helpExpert || helpDebug) && !helpTools && !helpLanguages);
@@ -422,9 +425,9 @@ public abstract class Launcher {
             System.out.println();
             System.out.println("Runtime Options:");
             printOption("--polyglot",                   "Run with all other guest languages accessible.");
-            printOption("--native",                     "Run using the native launcher with limited Java access (default).");
+            printOption("--native",                     "Run using the native launcher with limited Java access" + (this.getDefaultVMType() == VMType.Native ? " (default)" : "") + ".");
             printOption("--native.[option]",            "Pass options to the native image. To see available options, use '--native.help'.");
-            printOption("--jvm",                        "Run on the Java Virtual Machine with Java access.");
+            printOption("--jvm",                        "Run on the Java Virtual Machine with Java access" + (this.getDefaultVMType() == VMType.JVM ? " (default)" : "") + ".");
             printOption("--jvm.[option]",               "Pass options to the JVM; for example, '--jvm.classpath=myapp.jar'. To see available options. use '--jvm.help'.");
             printOption("--help",                       "Print this help message.");
             printOption("--help:languages",             "Print options for all installed languages.");
@@ -433,8 +436,8 @@ public abstract class Launcher {
             if (helpExpert || helpDebug) {
                 printOption("--help:debug",             "Print additional options for debugging.");
             }
-            printOption("--version",                    "Print version information and exit.");
-            printOption("--show-version",               "Print version information and continue execution.");
+            printOption("--version:graalvm",            "Print GraalVM version information and exit.");
+            printOption("--show-version:graalvm",       "Print GraalVM version information and continue execution.");
             // @formatter:on
             List<PrintableOption> engineOptions = new ArrayList<>();
             for (OptionDescriptor descriptor : getTempEngine().getOptions()) {
@@ -535,10 +538,10 @@ public abstract class Launcher {
             case "--help:languages":
                 helpLanguages = true;
                 return true;
-            case "--version":
+            case "--version:graalvm":
                 versionAction = VersionAction.PrintAndExit;
                 return true;
-            case "--show-version":
+            case "--show-version:graalvm":
                 versionAction = VersionAction.PrintAndContinue;
                 return true;
             case "--polyglot":
@@ -632,8 +635,8 @@ public abstract class Launcher {
         options.add("--help:languages");
         options.add("--help:tools");
         options.add("--help:expert");
-        options.add("--version");
-        options.add("--show-version");
+        options.add("--version:graalvm");
+        options.add("--show-version:graalvm");
         if (helpExpert || helpDebug) {
             options.add("--help:debug");
         }
@@ -728,32 +731,43 @@ public abstract class Launcher {
         printOption(option, description, 2);
     }
 
-    private static void printOption(String option, String description, int indentation) {
-        StringBuilder indent = new StringBuilder(indentation);
-        for (int i = 0; i < indentation; i++) {
-            indent.append(' ');
-        }
-        String desc = description != null ? description : "";
-        desc = wrap(desc);
-        String[] descLines = desc.split(System.lineSeparator());
-        if (option.length() >= 45 && description != null) {
-            System.out.println(String.format("%s%s%n%s%-45s%s", indent, option, indent, "", descLines[0]));
-        } else {
-            System.out.println(String.format("%s%-45s%s", indent, option, descLines[0]));
-        }
-        for (int i = 1; i < descLines.length; i++) {
-            System.out.println(String.format("%s%-45s%s", indent, "", descLines[i]));
-        }
+    private static String spaces(int length) {
+        return new String(new char[length]).replace('\0', ' ');
     }
 
     private static String wrap(String s) {
         final int width = 120;
         StringBuilder sb = new StringBuilder(s);
-        int i = 0;
-        while (i + width < sb.length() && (i = sb.lastIndexOf(" ", i + width)) != -1) {
-            sb.replace(i, i + 1, System.lineSeparator());
+        int cursor = 0;
+        while (cursor + width < sb.length()) {
+            int i = sb.lastIndexOf(" ", cursor + width);
+            if (i == -1 || i < cursor) {
+                i = sb.indexOf(" ", cursor + width);
+            }
+            if (i != -1) {
+                sb.replace(i, i + 1, System.lineSeparator());
+                cursor = i;
+            } else {
+                break;
+            }
         }
         return sb.toString();
+    }
+
+    private static void printOption(String option, String description, int indentation) {
+        String indent = spaces(indentation);
+        String desc = wrap(description != null ? description : "");
+        String nl = System.lineSeparator();
+        String[] descLines = desc.split(nl);
+        int optionWidth = 45;
+        if (option.length() >= optionWidth && description != null) {
+            System.out.println(indent + option + nl + indent + spaces(optionWidth) + descLines[0]);
+        } else {
+            System.out.println(indent + option + spaces(optionWidth - option.length()) + descLines[0]);
+        }
+        for (int i = 1; i < descLines.length; i++) {
+            System.out.println(indent + spaces(optionWidth) + descLines[i]);
+        }
     }
 
     private static void printOption(PrintableOption option) {
@@ -893,7 +907,7 @@ public abstract class Launcher {
     }
 
     class Native {
-        void maybeExec(List<String> args, boolean isPolyglot, Map<String, String> polyglotOptions, VMType defaultVmType) {
+        void maybeExec(List<String> args, boolean isPolyglot, Map<String, String> polyglotOptions, VMType defaultVmType, boolean allowExec) {
             assert isAOT();
             VMType vmType = null;
             boolean polyglot = false;
@@ -953,24 +967,7 @@ public abstract class Launcher {
                         throw exit();
                     }
                     if (arg.startsWith("--native.")) {
-                        int eqIdx = arg.indexOf('=');
-                        String key;
-                        String value;
-                        if (eqIdx < 0) {
-                            key = arg.substring("--native.".length());
-                            value = null;
-                        } else {
-                            key = arg.substring("--native.".length(), eqIdx);
-                            value = arg.substring(eqIdx + 1);
-                        }
-                        if (value == null) {
-                            value = "true";
-                        }
-                        OptionDescriptor descriptor = RuntimeOptions.getOptions().get(key);
-                        if (descriptor == null) {
-                            throw abort("Unknown native option: " + key);
-                        }
-                        RuntimeOptions.set(key, descriptor.getKey().getType().convert(value));
+                        setNativeOption(arg.substring("--native.".length()));
                     }
                     iterator.remove();
                 } else if (arg.equals("--polyglot")) {
@@ -986,11 +983,137 @@ public abstract class Launcher {
                 if (!isPolyglot && polyglot) {
                     remainingArgs.add(0, "--polyglot");
                 }
+                if (!allowExec) {
+                    abort("--jvm.* options not supported");
+                }
                 execJVM(jvmArgs, remainingArgs, polyglotOptions);
             } else if (!isPolyglot && polyglot) {
                 assert jvmArgs.isEmpty();
+                if (!allowExec) {
+                    abort("--polyglot option not supported");
+                }
                 execNativePolyglot(remainingArgs, polyglotOptions);
             }
+        }
+
+        private void setNativeOption(String arg) {
+            if (arg.startsWith("Dgraal.")) {
+                setGraalStyleRuntimeOption(arg.substring("Dgraal.".length()));
+            } else if (arg.startsWith("D")) {
+                setSystemProperty(arg.substring("D".length()));
+            } else if (arg.startsWith("XX:")) {
+                setRuntimeOption(arg.substring("XX:".length()));
+            } else if (arg.startsWith("X") && isXOption(arg)) {
+                setXOption(arg.substring("X".length()));
+            } else {
+                throw abort("Unrecognized --native option: '--native." + arg + "'. Such arguments should start with '--native.D', '--native.XX:', or '--native.X'");
+            }
+        }
+
+        private void setGraalStyleRuntimeOption(String arg) {
+            if (arg.startsWith("+") || arg.startsWith("-")) {
+                throw abort("Dgraal option must use <name>=<value> format, not +/- prefix");
+            }
+            int eqIdx = arg.indexOf('=');
+            String key;
+            String value;
+            if (eqIdx < 0) {
+                key = arg;
+                value = "";
+            } else {
+                key = arg.substring(0, eqIdx);
+                value = arg.substring(eqIdx + 1);
+            }
+            OptionDescriptor descriptor = RuntimeOptions.getOptions().get(key);
+            if (descriptor == null) {
+                throw unknownOption(key);
+            }
+            try {
+                RuntimeOptions.set(key, descriptor.getKey().getType().convert(value));
+            } catch (IllegalArgumentException iae) {
+                throw abort("Invalid argument: '--native." + arg + "': " + iae.getMessage());
+            }
+
+        }
+
+        public void setSystemProperty(String arg) {
+            int eqIdx = arg.indexOf('=');
+            String key;
+            String value;
+            if (eqIdx < 0) {
+                key = arg;
+                value = "";
+            } else {
+                key = arg.substring(0, eqIdx);
+                value = arg.substring(eqIdx + 1);
+            }
+            System.setProperty(key, value);
+        }
+
+        public void setRuntimeOption(String arg) {
+            int eqIdx = arg.indexOf('=');
+            String key;
+            Object value;
+            if (arg.startsWith("+") || arg.startsWith("-")) {
+                key = arg.substring(1);
+                if (eqIdx >= 0) {
+                    throw abort("Invalid argument: '--native." + arg + "': Use either +/- or =, but not both");
+                }
+                OptionDescriptor descriptor = RuntimeOptions.getOptions().get(key);
+                if (descriptor == null) {
+                    throw unknownOption(key);
+                }
+                if (!isBooleanOption(descriptor)) {
+                    throw abort("Invalid argument: " + key + " is not a boolean option, set it with --native.XX:" + key + "=<value>.");
+                }
+                value = arg.startsWith("+");
+            } else if (eqIdx > 0) {
+                key = arg.substring(0, eqIdx);
+                OptionDescriptor descriptor = RuntimeOptions.getOptions().get(key);
+                if (descriptor == null) {
+                    throw unknownOption(key);
+                }
+                if (isBooleanOption(descriptor)) {
+                    throw abort("Boolean option '" + key + "' must be set with +/- prefix, not <name>=<value> format.");
+                }
+                try {
+                    value = descriptor.getKey().getType().convert(arg.substring(eqIdx + 1));
+                } catch (IllegalArgumentException iae) {
+                    throw abort("Invalid argument: '--native." + arg + "': " + iae.getMessage());
+                }
+            } else {
+                throw abort("Invalid argument: '--native." + arg + "'. Prefix boolean options with + or -, suffix other options with <name>=<value>");
+            }
+            RuntimeOptions.set(key, value);
+        }
+
+        /* Is an option that starts with an 'X' one of the recognized X options? */
+        private boolean isXOption(String arg) {
+            return (arg.startsWith("Xmn") || arg.startsWith("Xms") || arg.startsWith("Xmx") || arg.startsWith("Xss"));
+        }
+
+        /* Set a `-X` option, given something like "mx2g". */
+        private void setXOption(String arg) {
+            try {
+                RuntimeOptions.set(arg, null);
+            } catch (RuntimeException re) {
+                throw abort("Invalid argument: '--native.X" + arg + "' does not specify a valid number.");
+            }
+        }
+
+        private void helpXOption() {
+            printOption("--native.Xmn<value>", "Sets the maximum size of the young generation, in bytes.");
+            printOption("--native.Xmx<value>", "Sets the maximum size of the heap, in bytes.");
+            printOption("--native.Xms<value>", "Sets the minimum size of the heap, in bytes.");
+            printOption("--native.Xss<value>", "Sets the size of each thread stack, in bytes.");
+        }
+
+        private boolean isBooleanOption(OptionDescriptor descriptor) {
+            return descriptor.getKey().getType().equals(OptionType.defaultType(Boolean.class));
+        }
+
+        private AbortException unknownOption(String key) {
+            throw abort("Unknown native option: " + key + ". Use --native.help to list available options.");
         }
 
         private void printJvmHelp() {
@@ -1016,8 +1139,34 @@ public abstract class Launcher {
                 sortedOptions.put(descriptor.getName(), descriptor);
             }
             for (Entry<String, OptionDescriptor> entry : sortedOptions.entrySet()) {
-                printOption("--native." + entry.getKey() + "=<value>", entry.getValue().getHelp());
+                OptionDescriptor descriptor = entry.getValue();
+                String helpMsg = descriptor.getHelp();
+                int helpLen = helpMsg.length();
+                if (helpLen > 0 && helpMsg.charAt(helpLen - 1) != '.') {
+                    helpMsg += '.';
+                }
+                if (isBooleanOption(descriptor)) {
+                    Boolean val = (Boolean) descriptor.getKey().getDefaultValue();
+                    if (helpLen != 0) {
+                        helpMsg += ' ';
+                    }
+                    if (val == null || !((boolean) val)) {
+                        helpMsg += "Default: - (disabled).";
+                    } else {
+                        helpMsg += "Default: + (enabled).";
+                    }
+                    printOption("--native.XX:\u00b1" + entry.getKey(), helpMsg);
+                } else {
+                    Object def = descriptor.getKey().getDefaultValue();
+                    if (def instanceof String) {
+                        def = '"' + String.valueOf(def) + '"';
+                    }
+                    printOption("--native.XX:" + entry.getKey() + "=" + def, helpMsg);
+                }
             }
+            System.out.println("System properties:");
+            printOption("--native.D<property>=<value>", "Sets a system property");
+            helpXOption();
         }
 
         private void execNativePolyglot(List<String> args, Map<String, String> polyglotOptions) {

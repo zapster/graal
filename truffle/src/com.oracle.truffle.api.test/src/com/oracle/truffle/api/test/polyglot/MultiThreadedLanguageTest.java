@@ -129,6 +129,9 @@ public class MultiThreadedLanguageTest {
         try {
             valueConsumer.accept(value);
         } catch (UnsupportedOperationException e) {
+        } catch (ClassCastException e) {
+        } catch (IllegalArgumentException e) {
+        } catch (NullPointerException e) {
         }
     }
 
@@ -571,6 +574,7 @@ public class MultiThreadedLanguageTest {
         }).asHostObject();
         try {
             engine.close();
+            Assert.fail();
         } catch (PolyglotException e) {
             assertTrue(e.isInternalError());
             assertTrue(e.getMessage().contains("The language did not complete all polyglot threads but should have"));
@@ -684,9 +688,7 @@ public class MultiThreadedLanguageTest {
         executors.clear();
         for (Entry<Object, Set<Thread>> entry : initializedThreadsPerContext.entrySet()) {
             if (!entry.getValue().isEmpty()) {
-                // throw new AssertionError("Threads initialized but not disposed for context " +
-                // entry.getKey() +
-                // ": " + entry.getValue());
+                throw new AssertionError("Threads initialized but not disposed for context " + entry.getKey() + ": " + entry.getValue());
             }
         }
     }

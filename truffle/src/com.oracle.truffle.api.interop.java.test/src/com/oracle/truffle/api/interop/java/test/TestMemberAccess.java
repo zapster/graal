@@ -25,7 +25,6 @@
 package com.oracle.truffle.api.interop.java.test;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -49,9 +48,10 @@ import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
-import com.oracle.truffle.api.interop.java.JavaInterop;
+import com.oracle.truffle.api.interop.java.*;
 import com.oracle.truffle.api.nodes.Node;
 
+@SuppressWarnings("deprecation")
 public class TestMemberAccess {
 
     private final Node newNode = Message.createNew(0).createNode();
@@ -154,24 +154,6 @@ public class TestMemberAccess {
     public void testKeysAndInternalKeysOnInstance() throws Exception {
         TruffleObject instance = JavaInterop.asTruffleObject(new TestClass());
         assertKeys(instance);
-    }
-
-    @Test
-    public void testUnderscoreKeys() throws Exception {
-        TruffleObject testClass = JavaInterop.asTruffleObject(Test_Underscore.class);
-        assertKeys(testClass);
-
-        CallUnderscore call = JavaInterop.asJavaObject(CallUnderscore.class, testClass);
-
-        Object obj = call.create__Lcom_oracle_truffle_api_interop_java_test_Test_1Underscore_2();
-        assertNotNull("An object created", obj);
-        assertTrue("Instance of my class", obj instanceof Test_Underscore);
-
-        Object copy = call.copy__Lcom_oracle_truffle_api_interop_java_test_Test_1Underscore_2Lcom_oracle_truffle_api_interop_java_test_Test_1Underscore_2(obj);
-        assertNotNull("An object copied", copy);
-        assertTrue("Instance of my class again", copy instanceof Test_Underscore);
-
-        assertEquals(obj, copy);
     }
 
     private void assertKeys(TruffleObject obj) throws UnsupportedMessageException {
@@ -347,7 +329,7 @@ public class TestMemberAccess {
         try {
             ForeignAccess.sendRead(readNode, arrayObject, 0);
             fail();
-        } catch (UnknownIdentifierException e) {
+        } catch (UnsupportedMessageException e) {
         }
     }
 
@@ -366,12 +348,12 @@ public class TestMemberAccess {
     @Test
     public void testOverloadedConstructor2() throws InteropException {
         TruffleObject testClass = JavaInterop.asTruffleObject(TestConstructor.class);
-        // TODO support conversion from double to float (preferred over double to int)
-        try {
-            ForeignAccess.sendNew(newNode, testClass, 4.2);
-            fail();
-        } catch (IllegalArgumentException e) {
-        }
+        TruffleObject testObj;
+        testObj = (TruffleObject) ForeignAccess.sendNew(newNode, testClass, (short) 42);
+        assertEquals(int.class.getName(), ForeignAccess.sendRead(readNode, testObj, "ctor"));
+        testObj = (TruffleObject) ForeignAccess.sendNew(newNode, testClass, 4.2f);
+        // TODO prioritize conversion from double to float over double to int
+        // assertEquals(float.class.getName(), ForeignAccess.sendRead(readNode, testObj, "ctor"));
     }
 
     @Test
