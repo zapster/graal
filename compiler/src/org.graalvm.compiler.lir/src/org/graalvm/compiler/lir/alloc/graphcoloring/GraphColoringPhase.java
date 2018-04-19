@@ -24,17 +24,17 @@ package org.graalvm.compiler.lir.alloc.graphcoloring;
 
 import org.graalvm.compiler.core.common.alloc.RegisterAllocationConfig;
 import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.lir.alloc.RegisterAllocationPhase;
 import org.graalvm.compiler.lir.alloc.lsra.LinearScanPhase;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.gen.LIRGeneratorTool.MoveFactory;
-import org.graalvm.compiler.lir.phases.AllocationPhase;
 import org.graalvm.compiler.options.Option;
 import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionType;
 
 import jdk.vm.ci.code.TargetDescription;
 
-public class GraphColoringPhase extends AllocationPhase {
+public class GraphColoringPhase extends RegisterAllocationPhase {
     private static final LinearScanPhase phase = new LinearScanPhase();
 
     public static class Options {
