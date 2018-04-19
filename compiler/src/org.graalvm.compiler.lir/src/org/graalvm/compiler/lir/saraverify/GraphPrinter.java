@@ -55,13 +55,14 @@ public class GraphPrinter {
     private static void printDuSequences(Map<Value, Set<DefNode>> duSequences, Path dir) {
 
         for (Entry<Value, Set<DefNode>> entry : duSequences.entrySet()) {
-            Path file = dir.resolve("DS_" + entry.getKey() + ".gv");
+            String valueString = entry.getKey().toString().replace("\"", "").replace("/", "_");
+            Path file = dir.resolve("DS_" + valueString + ".gv");
 
-            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
                 writer.write("digraph finite_state_machine {\n" +           //
                                 "    graph [ " + "fontname = \"Helvetica-Oblique\",\n" +        //
                                 " fontsize = 18,\n" +                          //
-                                "label=\"\\n\\n\\nDu Sequence of value " + entry.getKey() + "\" ];\n" +         //
+                                "label=\"\\n\\n\\nDu Sequence of value " + entry.getKey().toString().replace("\"", "\\\"") + "\" ];\n" +         //
                                 "    node [shape = rectangle];\n");
 
                 HashSet<Node> visited = new HashSet<>();
@@ -156,7 +157,7 @@ public class GraphPrinter {
             return "vstack:" + virtualStackSlot.getId();
         }
 
-        return value.toString();
+        return value.toString().replace("\"", "\\\"");
     }
 
     private static void printDuSequenceWebs(List<DuSequenceWeb> duSequenceWebs, Path dir) {
@@ -165,7 +166,7 @@ public class GraphPrinter {
         for (DuSequenceWeb duSequenceWeb : duSequenceWebs) {
             Path file = dir.resolve("DSW_" + i + ".gv");
 
-            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
                 writer.write("digraph finite_state_machine {\n" +
                                 "    graph [ fontname = \"Helvetica-Oblique\",\n" +        //
                                 " fontsize = 18,\n" +                           //
