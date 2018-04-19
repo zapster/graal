@@ -3,6 +3,7 @@ package org.graalvm.compiler.lir.saraverify;
 import static org.graalvm.compiler.lir.LIRInstruction.OperandFlag.REG;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -112,19 +113,15 @@ public class DuSequenceAnalysis {
 
         initializeCollections();
 
-        // add leaf blocks to queue
-        for (AbstractBlockBase<?> block : blocks) {
-            if (block.getSuccessorCount() == 0) {
-                blockQueue.set(block.getId());
-            }
-        }
+        blockQueue.set(0, blockCount);
 
-        assert blockQueue.cardinality() > 0;
+        Set<AbstractBlockBase<?>> visited = new HashSet<>();
 
         while (!blockQueue.isEmpty()) {
             int blockIndex = blockQueue.previousSetBit(blockCount);
             AbstractBlockBase<?> block = blocks[blockIndex];
             blockQueue.clear(blockIndex);
+            visited.add(block);
 
             Map<Value, Set<Node>> mergedUnfinishedDuSequences = mergeMaps(blockUnfinishedDuSequences, block.getSuccessors());
             determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, startBlock);
@@ -140,6 +137,8 @@ public class DuSequenceAnalysis {
                 }
             }
         }
+
+        assert Arrays.stream(blocks).allMatch(block -> visited.contains(block)) : "Not all blocks were visited during the Du-Sequence analysis.";
 
         Map<Value, Set<Node>> startBlockUnfinishedDuSequences = blockUnfinishedDuSequences.get(startBlock);
         analyseUndefinedValues(duSequences, startBlockUnfinishedDuSequences, registerAttributes, dummyRegDefs, dummyConstDefs);
