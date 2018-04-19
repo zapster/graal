@@ -28,8 +28,6 @@ import org.graalvm.compiler.debug.Assertions;
 import org.graalvm.compiler.lir.alloc.AllocationStageVerifier;
 import org.graalvm.compiler.lir.alloc.graphcoloring.GraphColoringPhase;
 import org.graalvm.compiler.lir.alloc.lsra.LinearScanPhase;
-import org.graalvm.compiler.lir.alloc.trace.GlobalLivenessAnalysisPhase;
-import org.graalvm.compiler.lir.alloc.trace.TraceBuilderPhase;
 import org.graalvm.compiler.lir.alloc.trace.TraceRegisterAllocationPhase;
 import org.graalvm.compiler.lir.dfa.LocationMarkerPhase;
 import org.graalvm.compiler.lir.dfa.MarkBasePointersPhase;
@@ -45,8 +43,6 @@ public class AllocationStage extends LIRPhaseSuite<AllocationContext> {
         if (GraphColoringPhase.Options.LIROptGraphColoringPhase.getValue(options)) {
             appendPhase(new GraphColoringPhase());
         } else if (TraceRA.getValue(options)) {
-            appendPhase(new TraceBuilderPhase());
-            appendPhase(new GlobalLivenessAnalysisPhase());
             appendPhase(new TraceRegisterAllocationPhase());
         } else {
             appendPhase(new LinearScanPhase());
