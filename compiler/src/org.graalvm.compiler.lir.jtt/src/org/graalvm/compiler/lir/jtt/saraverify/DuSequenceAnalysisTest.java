@@ -329,12 +329,12 @@ public class DuSequenceAnalysisTest {
 
     @Test
     public void testMergeMaps0() {
-        Map<Integer, Set<Integer>> map1 = new HashMap<>();
-        Map<Integer, Map<Integer, Set<Integer>>> map = new HashMap<>();
+        Map<Value, Set<Integer>> map1 = new HashMap<>();
+        Map<Integer, Map<Value, Set<Integer>>> map = new HashMap<>();
         map.put(3, map1);
         map.put(5, map1);
 
-        Map<Integer, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
+        Map<Value, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
 
         assertEquals(true, mergedMap.entrySet().stream().allMatch(entry -> entry.getValue().isEmpty()));
     }
@@ -343,41 +343,41 @@ public class DuSequenceAnalysisTest {
     public void testMergeMaps1() {
         Set<Integer> set = asSet(8, 9);
 
-        Map<Integer, Set<Integer>> map1 = new HashMap<>();
-        Map<Integer, Map<Integer, Set<Integer>>> map = new HashMap<>();
-        map1.put(1, set);
+        Map<Value, Set<Integer>> map1 = new HashMap<>();
+        Map<Integer, Map<Value, Set<Integer>>> map = new HashMap<>();
+        map1.put(r0.asValue(), set);
         map.put(3, map1);
         map.put(5, new HashMap<>());
 
-        Map<Integer, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
+        Map<Value, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
 
         assertEquals(1, mergedMap.keySet().size());
 
-        Set<Integer> actualList = mergedMap.get(1);
+        Set<Integer> actualList = mergedMap.get(r0.asValue());
         assertNotEquals(null, actualList);
         assertEquals(true, actualList.equals(set));
     }
 
     @Test
     public void testMergeMaps2() {
-        Map<Integer, Set<Integer>> map1 = new HashMap<>();
-        Map<Integer, Set<Integer>> map2 = new HashMap<>();
-        map1.put(1, asSet(10));
-        map1.put(2, asSet(11, 12));
-        map1.put(3, asSet(13, 14));
-        map1.put(4, asSet());
-        map2.put(1, asSet(10));
-        map2.put(2, asSet(11, 12, 15));
-        map2.put(4, asSet(16, 17, 18));
+        Map<Value, Set<Integer>> map1 = new HashMap<>();
+        Map<Value, Set<Integer>> map2 = new HashMap<>();
+        map1.put(r1.asValue(), asSet(10));
+        map1.put(r2.asValue(), asSet(11, 12));
+        map1.put(r3.asValue(), asSet(13, 14));
+        map1.put(rax.asValue(), asSet());
+        map2.put(r1.asValue(), asSet(10));
+        map2.put(r2.asValue(), asSet(11, 12, 15));
+        map2.put(rax.asValue(), asSet(16, 17, 18));
 
-        Map<Integer, Map<Integer, Set<Integer>>> map = new HashMap<>();
+        Map<Integer, Map<Value, Set<Integer>>> map = new HashMap<>();
         map.put(1, map1);
         map.put(2, map2);
-        Map<Integer, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2});
-        assertEquals(true, mergedMap.get(1).equals(asSet(10)));
-        assertEquals(true, mergedMap.get(2).equals(asSet(11, 12, 15)));
-        assertEquals(true, mergedMap.get(3).equals(asSet(13, 14)));
-        assertEquals(true, mergedMap.get(4).equals(asSet(16, 17, 18)));
+        Map<Value, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2});
+        assertEquals(true, mergedMap.get(r1.asValue()).equals(asSet(10)));
+        assertEquals(true, mergedMap.get(r2.asValue()).equals(asSet(11, 12, 15)));
+        assertEquals(true, mergedMap.get(r3.asValue()).equals(asSet(13, 14)));
+        assertEquals(true, mergedMap.get(rax.asValue()).equals(asSet(16, 17, 18)));
     }
 
     @Test
