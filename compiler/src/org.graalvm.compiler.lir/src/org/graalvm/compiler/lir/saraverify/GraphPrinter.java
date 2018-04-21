@@ -13,6 +13,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 
 import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.VirtualStackSlot;
@@ -220,6 +221,8 @@ public class GraphPrinter {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
             }
+        } else {
+            GraalError.shouldNotReachHere("Directory " + dir + " does already exist.");
         }
     }
 }
