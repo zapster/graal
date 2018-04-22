@@ -318,8 +318,6 @@ public class DuSequenceAnalysis {
         assert resultNodes.stream().allMatch(node -> !node.isDefNode()) : "unfinished du-sequence with definition node";
 
         MoveNode moveNode = new MoveNode(result, input, instruction, 0, 0);
-        // assert nodes.stream().filter(node -> node.equals(moveNode)).count() > 1 : "duplicate
-        // node";
         Optional<Node> optionalMoveNode = nodes.stream().filter(node -> node.equals(moveNode)).findFirst();
 
         Set<Node> inputNodes = getOrCreateSet(unfinishedDuSequences, input);
@@ -362,7 +360,7 @@ public class DuSequenceAnalysis {
 
             AllocatableValue allocatableValue = ValueUtil.asAllocatableValue(value);
 
-            assert unfinishedNodes.stream().allMatch(node -> !node.isDefNode());
+            assert unfinishedNodes.stream().allMatch(node -> !node.isDefNode()) : "finished du-sequence in unfinished du-sequences map";
 
             DefNode defNode = new DefNode(allocatableValue, instruction, defOperandPosition);
             Optional<Node> optionalDefNode = nodes.stream().filter(node -> node.equals(defNode)).findFirst();
