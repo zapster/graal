@@ -5,7 +5,7 @@ import java.util.ListIterator;
 import org.graalvm.compiler.api.directives.GraalDirectives;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.jtt.JTTTest;
-import org.graalvm.compiler.lir.alloc.lsra.LinearScanPhase;
+import org.graalvm.compiler.lir.alloc.RegisterAllocationPhase;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
 import org.graalvm.compiler.lir.phases.LIRSuites;
@@ -41,7 +41,7 @@ public class DemoTest extends JTTTest {
     protected LIRSuites createLIRSuites(OptionValues opts) {
         LIRSuites lirSuites = super.createLIRSuites(opts);
 
-        ListIterator<LIRPhase<AllocationContext>> phase = lirSuites.getAllocationStage().findPhase(LinearScanPhase.class);
+        ListIterator<LIRPhase<AllocationContext>> phase = lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
         assert phase != null;
         phase.add(new DemoInjector());
 
