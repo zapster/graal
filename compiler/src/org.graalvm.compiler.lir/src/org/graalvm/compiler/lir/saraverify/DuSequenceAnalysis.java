@@ -450,13 +450,7 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visit(Value phiIn, Value phiOut) {
-            if (LIRValueUtil.isConstantValue(phiOut)) {
-                ConstantValue phiOutConstantValue = (ConstantValue) phiOut;
-                phiOutConstantValue = new ConstantValue(ValueKind.Illegal, phiOutConstantValue.getConstant());
-                insertMoveNode(unfinishedDuSequences, phiIn, phiOutConstantValue, instruction);
-            } else {
-                insertMoveNode(unfinishedDuSequences, phiIn, phiOut, instruction);
-            }
+            insertMoveNode(unfinishedDuSequences, phiIn, phiOut, instruction);
         }
 
     }
