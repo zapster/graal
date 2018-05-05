@@ -40,7 +40,9 @@ import org.graalvm.compiler.lir.ssa.SSAUtil;
 import org.graalvm.compiler.lir.ssa.SSAUtil.PhiValueVisitor;
 
 import jdk.vm.ci.code.Register;
+import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.code.RegisterAttributes;
+import jdk.vm.ci.code.RegisterValue;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Constant;
@@ -124,7 +126,7 @@ public class DuSequenceAnalysis {
             visited.add(block);
 
             Map<Value, Set<Node>> mergedUnfinishedDuSequences = mergeMaps(blockUnfinishedDuSequences, block.getSuccessors());
-            determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, startBlock);
+            determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, startBlock, lirGenRes.getRegisterConfig().getCallerSaveRegisters());
 
             Map<Value, Set<Node>> previousUnfinishedDuSequences = blockUnfinishedDuSequences.get(block);
 
@@ -143,10 +145,6 @@ public class DuSequenceAnalysis {
         Map<Value, Set<Node>> startBlockUnfinishedDuSequences = blockUnfinishedDuSequences.get(startBlock);
         analyseUndefinedValues(duSequences, startBlockUnfinishedDuSequences, registerAttributes, dummyRegDefs, dummyConstDefs);
 
-        // TODO: assertion for hashcode collision of nodes
-// assert nodes.size() == nodes.stream().mapToInt(node -> node.hashCode()).distinct().count() //
-// : "Hashcode collision of nodes.";
-
         return new AnalysisResult(duSequences, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
     }
 
@@ -157,7 +155,7 @@ public class DuSequenceAnalysis {
         // analysis of given instructions
         Map<Value, Set<DefNode>> duSequences = new ValueHashMap<>();
         Map<Value, Set<Node>> unfinishedDuSequences = new ValueHashMap<>();
-        determineDuSequences(null, null, instructions, duSequences, unfinishedDuSequences, null);
+        determineDuSequences(null, null, instructions, duSequences, unfinishedDuSequences, null, null);
 
         // analysis of dummy instructions
         analyseUndefinedValues(duSequences, unfinishedDuSequences, registerAttributes,
@@ -167,7 +165,7 @@ public class DuSequenceAnalysis {
     }
 
     private void determineDuSequences(LIR lir, AbstractBlockBase<?> block, List<LIRInstruction> instructions, Map<Value, Set<DefNode>> duSequences,
-                    Map<Value, Set<Node>> unfinishedDuSequences, AbstractBlockBase<?> startBlock) {
+                    Map<Value, Set<Node>> unfinishedDuSequences, AbstractBlockBase<?> startBlock, RegisterArray callerSavedRegisters) {
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(duSequences, unfinishedDuSequences);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(unfinishedDuSequences);
 
@@ -179,6 +177,8 @@ public class DuSequenceAnalysis {
             useOperandPosition = 0;
 
             if (inst instanceof JumpOp) {
+                assert !inst.destroysCallerSavedRegisters() : "caller saved registers are not handled";
+
                 // jump
                 JumpOp jumpInst = (JumpOp) inst;
 
@@ -188,15 +188,19 @@ public class DuSequenceAnalysis {
                     SSAUtil.forEachPhiValuePair(lir, block.getSuccessors()[0], block, visitor);
                 }
             } else if (inst.isValueMoveOp()) {
+                assert !inst.destroysCallerSavedRegisters() : "caller saved registers are not handled";
+
                 // value move
                 ValueMoveOp moveInst = (ValueMoveOp) inst;
                 insertMoveNode(unfinishedDuSequences, moveInst.getResult(), moveInst.getInput(), inst);
             } else if (inst.isLoadConstantOp()) {
+                assert !inst.destroysCallerSavedRegisters() : "caller saved registers are not handled";
+
                 // load constant
                 LoadConstantOp loadConstantOp = (LoadConstantOp) inst;
                 insertMoveNode(unfinishedDuSequences, loadConstantOp.getResult(), new ConstantValue(ValueKind.Illegal, loadConstantOp.getConstant()), inst);
             } else if (block == startBlock || !(inst instanceof LabelOp)) {
-                visitValues(inst, defConsumer, useConsumer, useConsumer);
+                visitValues(inst, defConsumer, useConsumer, duSequences, unfinishedDuSequences, callerSavedRegisters);
 
                 instructionDefOperandCount.put(inst, defOperandPosition);
                 instructionUseOperandCount.put(inst, useOperandPosition);
@@ -290,17 +294,60 @@ public class DuSequenceAnalysis {
         unfinishedDuSequences.clear();
     }
 
-    private static void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,
-                    InstructionValueConsumer useConsumer, InstructionValueConsumer aliveConsumer) {
+    private void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,
+                    InstructionValueConsumer useConsumer, Map<Value, Set<DefNode>> duSequences, Map<Value, Set<Node>> unfinishedDuSequences, RegisterArray callerSavedRegisters) {
 
-        instruction.visitEachAlive(aliveConsumer);
-        // TODO: instruction.forEachState(proc); alive
-
-        // TODO: instruction.destroysCallerSavedRegisters()
+        instruction.visitEachAlive(useConsumer);
+        instruction.visitEachState(useConsumer);
         instruction.visitEachOutput(defConsumer);
+
+        // caller saved registers are handled like temp values
+        if (instruction.destroysCallerSavedRegisters()) {
+            callerSavedRegisters.forEach(register -> {
+                RegisterValue registerValue = register.asValue();
+                insertUseNode(instruction, registerValue, unfinishedDuSequences);
+                insertDefNode(instruction, registerValue, duSequences, unfinishedDuSequences);
+            });
+        }
+
         instruction.visitEachTemp(useConsumer);
-        instruction.visitEachTemp(defConsumer);// TODO: throw error, if open usage (make assertion)
+        instruction.visitEachTemp(defConsumer);
         instruction.visitEachInput(useConsumer);
+    }
+
+    private void insertDefNode(LIRInstruction instruction, Value value, Map<Value, Set<DefNode>> duSequences, Map<Value, Set<Node>> unfinishedDuSequences) {
+        if (ValueUtil.isIllegal(value)) {
+            // value is part of a composite value
+            defOperandPosition++;
+            return;
+        }
+
+        Set<Node> unfinishedNodes = unfinishedDuSequences.get(value);
+        if (unfinishedNodes == null) {
+            // definition of a value, which is not used or usage is not present yet (loops)
+            defOperandPosition++;
+            return;
+        }
+
+        AllocatableValue allocatableValue = ValueUtil.asAllocatableValue(value);
+
+        assert unfinishedNodes.stream().allMatch(node -> !node.isDefNode()) : "finished du-sequence in unfinished du-sequences map";
+
+        DefNode defNode = new DefNode(allocatableValue, instruction, defOperandPosition);
+        Optional<Node> optionalDefNode = nodes.stream().filter(node -> node.equals(defNode)).findFirst();
+
+        if (!optionalDefNode.isPresent()) {
+            Set<DefNode> defNodes = getOrCreateSet(duSequences, value);
+            defNodes.add(defNode);
+            defNode.addAllNextNodes(unfinishedNodes);
+            nodes.add(defNode);
+        } else {
+            optionalDefNode.get().addAllNextNodes(unfinishedNodes);
+        }
+
+        unfinishedDuSequences.remove(value);
+
+        defOperandPosition++;
     }
 
     private void insertMoveNode(Map<Value, Set<Node>> unfinishedDuSequences, Value result, Value input, LIRInstruction instruction) {
@@ -333,6 +380,28 @@ public class DuSequenceAnalysis {
         }
     }
 
+    private void insertUseNode(LIRInstruction instruction, Value value, Map<Value, Set<Node>> unfinishedDuSequences) {
+        if (ValueUtil.isIllegal(value) || LIRValueUtil.isConstantValue(value)) {
+            // value is part of a composite value, uninitialized or a constant
+            useOperandPosition++;
+            return;
+        }
+
+        Set<Node> nodesList = getOrCreateSet(unfinishedDuSequences, value);
+
+        UseNode useNode = new UseNode(value, instruction, useOperandPosition);
+        Optional<Node> optionalUseNode = nodes.stream().filter(node -> node.equals(useNode)).findFirst();
+
+        if (!optionalUseNode.isPresent()) {
+            nodes.add(useNode);
+            nodesList.add(useNode);
+        } else {
+            nodesList.add(optionalUseNode.get());
+        }
+
+        useOperandPosition++;
+    }
+
     class DefInstructionValueConsumer implements InstructionValueConsumer {
 
         Map<Value, Set<DefNode>> duSequences;
@@ -345,38 +414,7 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            if (ValueUtil.isIllegal(value)) {
-                // value is part of a composite value
-                defOperandPosition++;
-                return;
-            }
-
-            Set<Node> unfinishedNodes = unfinishedDuSequences.get(value);
-            if (unfinishedNodes == null) {
-                // definition of a value, which is not used or usage is not present yet (loops)
-                defOperandPosition++;
-                return;
-            }
-
-            AllocatableValue allocatableValue = ValueUtil.asAllocatableValue(value);
-
-            assert unfinishedNodes.stream().allMatch(node -> !node.isDefNode()) : "finished du-sequence in unfinished du-sequences map";
-
-            DefNode defNode = new DefNode(allocatableValue, instruction, defOperandPosition);
-            Optional<Node> optionalDefNode = nodes.stream().filter(node -> node.equals(defNode)).findFirst();
-
-            if (!optionalDefNode.isPresent()) {
-                Set<DefNode> defNodes = getOrCreateSet(duSequences, value);
-                defNodes.add(defNode);
-                defNode.addAllNextNodes(unfinishedNodes);
-                nodes.add(defNode);
-            } else {
-                optionalDefNode.get().addAllNextNodes(unfinishedNodes);
-            }
-
-            unfinishedDuSequences.remove(value);
-
-            defOperandPosition++;
+            insertDefNode(instruction, value, duSequences, unfinishedDuSequences);
         }
 
     }
@@ -391,25 +429,11 @@ public class DuSequenceAnalysis {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            if (ValueUtil.isIllegal(value) || flags.contains(OperandFlag.UNINITIALIZED) || LIRValueUtil.isConstantValue(value)) {
-                // value is part of a composite value, uninitialized or a constant
+            if (flags.contains(OperandFlag.UNINITIALIZED)) {
                 useOperandPosition++;
                 return;
             }
-
-            Set<Node> nodesList = getOrCreateSet(unfinishedDuSequences, value);
-
-            UseNode useNode = new UseNode(value, instruction, useOperandPosition);
-            Optional<Node> optionalUseNode = nodes.stream().filter(node -> node.equals(useNode)).findFirst();
-
-            if (!optionalUseNode.isPresent()) {
-                nodes.add(useNode);
-                nodesList.add(useNode);
-            } else {
-                nodesList.add(optionalUseNode.get());
-            }
-
-            useOperandPosition++;
+            insertUseNode(instruction, value, unfinishedDuSequences);
         }
 
     }
