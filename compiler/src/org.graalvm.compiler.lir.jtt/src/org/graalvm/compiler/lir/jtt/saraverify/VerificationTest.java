@@ -369,7 +369,6 @@ public class VerificationTest extends JTTTest {
 
     @Test
     public void testCreateDuSequenceWebs() {
-        VerificationPhase verificationPhase = new VerificationPhase();
         Map<Value, Set<DefNode>> nodes = new HashMap<>();
 
         TestDef defOp1 = new TestDef(r0.asValue());
@@ -401,7 +400,7 @@ public class VerificationTest extends JTTTest {
         expectedWebs.add(web1);
         expectedWebs.add(web2);
 
-        List<DuSequenceWeb> actualWebs = verificationPhase.createDuSequenceWebs(nodes);
+        List<DuSequenceWeb> actualWebs = DuSequenceAnalysis.createDuSequenceWebs(nodes);
         Assert.assertEquals(2, actualWebs.size());
 
         assertTrue(actualWebs.contains(web1));
@@ -410,7 +409,6 @@ public class VerificationTest extends JTTTest {
 
     @Test
     public void testCreateDuSequenceWebs2() {
-        VerificationPhase verificationPhase = new VerificationPhase();
         Map<Value, Set<DefNode>> nodes = new HashMap<>();
 
         TestDef defOp1 = new TestDef(v0);
@@ -432,7 +430,7 @@ public class VerificationTest extends JTTTest {
 
         nodes.put(v0, DuSequenceAnalysisTest.asSet(defNode1, defNode2, defNode3));
 
-        List<DuSequenceWeb> actualWebs = verificationPhase.createDuSequenceWebs(nodes);
+        List<DuSequenceWeb> actualWebs = DuSequenceAnalysis.createDuSequenceWebs(nodes);
         DuSequenceWeb expectedWeb = new DuSequenceWeb();
         expectedWeb.addNodes(Arrays.asList(defNode1, defNode2, defNode3));
         expectedWeb.addNodes(Arrays.asList(useNode1, useNode2));
@@ -442,14 +440,14 @@ public class VerificationTest extends JTTTest {
 
         Map<Value, Set<DefNode>> nodes2 = new HashMap<>();
         nodes2.put(v0, DuSequenceAnalysisTest.asSet(defNode2, defNode1, defNode3));
-        List<DuSequenceWeb> actualWebs2 = verificationPhase.createDuSequenceWebs(nodes2);
+        List<DuSequenceWeb> actualWebs2 = DuSequenceAnalysis.createDuSequenceWebs(nodes2);
 
         Assert.assertEquals(1, actualWebs.size());
         assertTrue(expectedWeb.equals(actualWebs2.get(0)));
 
         Map<Value, Set<DefNode>> nodes3 = new HashMap<>();
         nodes3.put(v0, DuSequenceAnalysisTest.asSet(defNode1, defNode3, defNode2));
-        List<DuSequenceWeb> actualWebs3 = verificationPhase.createDuSequenceWebs(nodes3);
+        List<DuSequenceWeb> actualWebs3 = DuSequenceAnalysis.createDuSequenceWebs(nodes3);
 
         Assert.assertEquals(1, actualWebs3.size());
         assertTrue(expectedWeb.equals(actualWebs3.get(0)));
@@ -457,7 +455,6 @@ public class VerificationTest extends JTTTest {
 
     @Test
     public void testCreateDuSequenceWebs3() {
-        VerificationPhase verificationPhase = new VerificationPhase();
         Map<Value, Set<DefNode>> nodes = new HashMap<>();
 
         TestDef defOp = new TestDef(r0.asValue());
@@ -480,7 +477,7 @@ public class VerificationTest extends JTTTest {
         DuSequenceWeb web = new DuSequenceWeb();
         web.addNodes(Arrays.asList(defNode, moveNode1, moveNode2, useNode));
 
-        List<DuSequenceWeb> actualWebs = verificationPhase.createDuSequenceWebs(nodes);
+        List<DuSequenceWeb> actualWebs = DuSequenceAnalysis.createDuSequenceWebs(nodes);
         Assert.assertEquals(1, actualWebs.size());
 
         Assert.assertEquals(web, actualWebs.get(0));

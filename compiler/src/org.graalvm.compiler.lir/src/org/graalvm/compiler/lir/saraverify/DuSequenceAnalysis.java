@@ -454,4 +454,69 @@ public class DuSequenceAnalysis {
         }
 
     }
+
+    public static List<DuSequenceWeb> createDuSequenceWebs(Map<Value, Set<DefNode>> nodes) {
+        List<DuSequenceWeb> duSequenceWebs = new ArrayList<>();
+        Map<Node, DuSequenceWeb> nodeDuSequenceWeb = new HashMap<>();
+
+        for (Set<DefNode> nodeList : nodes.values()) {
+            for (DefNode node : nodeList) {
+                List<Node> visitedNodes = new ArrayList<>();
+
+                DuSequenceWeb web = createDuSequenceWeb(node, nodeDuSequenceWeb, visitedNodes, duSequenceWebs);
+
+                if (web == null) {
+                    web = new DuSequenceWeb();
+                    duSequenceWebs.add(web);
+                }
+                web.addNodes(visitedNodes);
+
+                if (!duSequenceWebs.contains(web)) {
+                    duSequenceWebs.add(web);
+                }
+
+                final DuSequenceWeb finalWeb = web;
+
+                Set<DefNode> defNodes = web.getDefNodes();
+                defNodes.stream().forEach(defNode -> nodeDuSequenceWeb.put(defNode, finalWeb));
+
+                Set<MoveNode> moveNodes = web.getMoveNodes();
+                moveNodes.stream().forEach(moveNode -> nodeDuSequenceWeb.put(moveNode, finalWeb));
+
+                Set<UseNode> useNodes = web.getUseNodes();
+                useNodes.stream().forEach(useNode -> nodeDuSequenceWeb.put(useNode, finalWeb));
+            }
+        }
+
+        return duSequenceWebs;
+    }
+
+    private static DuSequenceWeb createDuSequenceWeb(Node node, Map<Node, DuSequenceWeb> nodeDuSequenceWeb, List<Node> visitedNodes, List<DuSequenceWeb> duSequenceWebs) {
+        if (nodeDuSequenceWeb.containsKey(node) || visitedNodes.contains(node)) {
+            return nodeDuSequenceWeb.get(node);
+        }
+
+        visitedNodes.add(node);
+
+        return node.getNextNodes().stream()        //
+                        .map(nextNode -> createDuSequenceWeb(nextNode, nodeDuSequenceWeb, visitedNodes, duSequenceWebs))           //
+                        .filter(web -> web != null)                     //
+                        .reduce(null, (web1, web2) -> mergeDuSequenceWebs(web1, web2, duSequenceWebs));
+    }
+
+    private static DuSequenceWeb mergeDuSequenceWebs(DuSequenceWeb web1, DuSequenceWeb web2, List<DuSequenceWeb> duSequenceWebs) {
+        assert web2 != null;
+
+        if (web1 == null || web1 == web2) {
+            return web2;
+        }
+
+        duSequenceWebs.remove(web2);
+
+        web1.addDefNodes(web2.getDefNodes());
+        web1.addMoveNodes(web2.getMoveNodes());
+        web1.addUseNodes(web2.getUseNodes());
+
+        return web1;
+    }
 }
