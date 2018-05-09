@@ -40,9 +40,7 @@ import org.graalvm.compiler.lir.ssa.SSAUtil;
 import org.graalvm.compiler.lir.ssa.SSAUtil.PhiValueVisitor;
 
 import jdk.vm.ci.code.Register;
-import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.code.RegisterAttributes;
-import jdk.vm.ci.code.RegisterValue;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Constant;
@@ -126,7 +124,7 @@ public class DuSequenceAnalysis {
             visited.add(block);
 
             Map<Value, Set<Node>> mergedUnfinishedDuSequences = mergeMaps(blockUnfinishedDuSequences, block.getSuccessors());
-            determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, startBlock, lirGenRes.getRegisterConfig().getCallerSaveRegisters());
+            determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, startBlock);
 
             Map<Value, Set<Node>> previousUnfinishedDuSequences = blockUnfinishedDuSequences.get(block);
 
@@ -155,7 +153,7 @@ public class DuSequenceAnalysis {
         // analysis of given instructions
         Map<Value, Set<DefNode>> duSequences = new ValueHashMap<>();
         Map<Value, Set<Node>> unfinishedDuSequences = new ValueHashMap<>();
-        determineDuSequences(null, null, instructions, duSequences, unfinishedDuSequences, null, null);
+        determineDuSequences(null, null, instructions, duSequences, unfinishedDuSequences, null);
 
         // analysis of dummy instructions
         analyseUndefinedValues(duSequences, unfinishedDuSequences, registerAttributes,
@@ -165,7 +163,7 @@ public class DuSequenceAnalysis {
     }
 
     private void determineDuSequences(LIR lir, AbstractBlockBase<?> block, List<LIRInstruction> instructions, Map<Value, Set<DefNode>> duSequences,
-                    Map<Value, Set<Node>> unfinishedDuSequences, AbstractBlockBase<?> startBlock, RegisterArray callerSavedRegisters) {
+                    Map<Value, Set<Node>> unfinishedDuSequences, AbstractBlockBase<?> startBlock) {
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(duSequences, unfinishedDuSequences);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(unfinishedDuSequences);
 
@@ -200,7 +198,7 @@ public class DuSequenceAnalysis {
                 LoadConstantOp loadConstantOp = (LoadConstantOp) inst;
                 insertMoveNode(unfinishedDuSequences, loadConstantOp.getResult(), new ConstantValue(ValueKind.Illegal, loadConstantOp.getConstant()), inst);
             } else if (block == startBlock || !(inst instanceof LabelOp)) {
-                visitValues(inst, defConsumer, useConsumer, duSequences, unfinishedDuSequences, callerSavedRegisters);
+                SARAVerifyUtil.visitValues(inst, defConsumer, useConsumer);
 
                 instructionDefOperandCount.put(inst, defOperandPosition);
                 instructionUseOperandCount.put(inst, useOperandPosition);
@@ -292,27 +290,6 @@ public class DuSequenceAnalysis {
         }
 
         unfinishedDuSequences.clear();
-    }
-
-    private void visitValues(LIRInstruction instruction, InstructionValueConsumer defConsumer,
-                    InstructionValueConsumer useConsumer, Map<Value, Set<DefNode>> duSequences, Map<Value, Set<Node>> unfinishedDuSequences, RegisterArray callerSavedRegisters) {
-
-        instruction.visitEachAlive(useConsumer);
-        instruction.visitEachState(useConsumer);
-        instruction.visitEachOutput(defConsumer);
-
-        // caller saved registers are handled like temp values
-        if (instruction.destroysCallerSavedRegisters()) {
-            callerSavedRegisters.forEach(register -> {
-                RegisterValue registerValue = register.asValue();
-                insertUseNode(instruction, registerValue, unfinishedDuSequences);
-                insertDefNode(instruction, registerValue, duSequences, unfinishedDuSequences);
-            });
-        }
-
-        instruction.visitEachTemp(useConsumer);
-        instruction.visitEachTemp(defConsumer);
-        instruction.visitEachInput(useConsumer);
     }
 
     private void insertDefNode(LIRInstruction instruction, Value value, Map<Value, Set<DefNode>> duSequences, Map<Value, Set<Node>> unfinishedDuSequences) {
