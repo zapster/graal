@@ -31,8 +31,8 @@ import org.graalvm.compiler.lir.saraverify.DefNode;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis;
 import org.graalvm.compiler.lir.saraverify.DuSequenceWeb;
 import org.graalvm.compiler.lir.saraverify.MoveNode;
+import org.graalvm.compiler.lir.saraverify.SimpleVerificationPhase;
 import org.graalvm.compiler.lir.saraverify.UseNode;
-import org.graalvm.compiler.lir.saraverify.VerificationPhase;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -486,7 +486,8 @@ public class VerificationTest extends JTTTest {
     @Test
     public void testVerifyOperandCount() {
         Map<LIRInstruction, Integer> emptyMap = new HashMap<>();
-        assertTrue(VerificationPhase.verifyOperandCount(emptyMap, emptyMap, emptyMap, emptyMap));
+        assertTrue(SimpleVerificationPhase.verifyOperandCount(emptyMap, emptyMap, emptyMap, emptyMap));
+        throw GraalError.unimplemented("Test using VerificationPhase");
     }
 
     @Test
@@ -502,7 +503,8 @@ public class VerificationTest extends JTTTest {
         operandDefCountMap.put(returnOp, 0);
         operandUseCountMap.put(returnOp, 2);
 
-        assertTrue(VerificationPhase.verifyOperandCount(operandDefCountMap, operandUseCountMap, operandDefCountMap, operandUseCountMap));
+        assertTrue(SimpleVerificationPhase.verifyOperandCount(operandDefCountMap, operandUseCountMap, operandDefCountMap, operandUseCountMap));
+        throw GraalError.unimplemented("Test using VerificationPhase");
     }
 
     @Test
@@ -530,7 +532,8 @@ public class VerificationTest extends JTTTest {
         outputOperandUseCount.put(labelOp, 0);
         outputOperandUseCount.put(returnOp, 2);
 
-        assertTrue(VerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+        assertTrue(SimpleVerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+        throw GraalError.unimplemented("Test using VerificationPhase");
     }
 
     @Test
@@ -558,7 +561,8 @@ public class VerificationTest extends JTTTest {
         outputOperandUseCount.put(moveOp, 1);
         outputOperandUseCount.put(returnOp, 2);
 
-        assertTrue(VerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+        assertTrue(SimpleVerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+        throw GraalError.unimplemented("Test using VerificationPhase");
     }
 
     @Test
@@ -583,7 +587,8 @@ public class VerificationTest extends JTTTest {
         outputOperandUseCount.put(labelOp, 0);
         outputOperandUseCount.put(returnOp, 2);
 
-        assertFalse(VerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+        assertFalse(SimpleVerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+        throw GraalError.unimplemented("Test using VerificationPhase");
     }
 
     @Test
@@ -608,7 +613,8 @@ public class VerificationTest extends JTTTest {
         outputOperandUseCount.put(labelOp, 0);
         outputOperandUseCount.put(returnOp, 2);
 
-        assertFalse(VerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+        assertFalse(SimpleVerificationPhase.verifyOperandCount(inputOperandDefCount, inputOperandUseCount, outputOperandDefCount, outputOperandUseCount));
+        throw GraalError.unimplemented("Test using VerificationPhase");
     }
 
     private static AnalysisResult getAnalysisResult(DuSequenceAnalysis duSequenceAnalysis, List<LIRInstruction> instructions) {
@@ -616,7 +622,8 @@ public class VerificationTest extends JTTTest {
     }
 
     private void assertVerifyDataFlow(boolean expected, Map<Value, Set<DefNode>> inputDuSequences, Map<Value, Set<DefNode>> outputDuSequences) {
-        VerificationPhase verificationPhase = new VerificationPhase();
+        SimpleVerificationPhase verificationPhase = new SimpleVerificationPhase();
         Assert.assertEquals(expected, verificationPhase.verifyDataFlow(inputDuSequences, outputDuSequences, this.getDebugContext()));
+        throw GraalError.unimplemented("Test using VerificationPhase");
     }
 }
