@@ -62,8 +62,6 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                     Constant constant = loadConstantOp.getConstant();
                     DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
 
-                    assert dummyConstDef != null : "No input dummy constant definition found for output constant.";
-
                     insertDefMapping(new ConstantValue(ValueKind.Illegal, constant), dummyConstDef, 0, webs, map);
                 } else if (!instruction.isValueMoveOp()) {
                     SARAVerifyUtil.visitValues(instruction, defConsumer, useConsumer);
