@@ -62,6 +62,9 @@ public final class UniDirectionalTraceBuilder {
         }
     }
 
+    /**
+     * @return a negative integer when {@code a} is more important than {@code b}, 0 if equal, or a positive integer otherwise.
+     */
     private static int compare(AbstractBlockBase<?> a, AbstractBlockBase<?> b) {
         return Double.compare(b.probability(), a.probability());
     }
@@ -147,7 +150,7 @@ public final class UniDirectionalTraceBuilder {
     private AbstractBlockBase<?> selectNext(AbstractBlockBase<?> block) {
         AbstractBlockBase<?> next = null;
         for (AbstractBlockBase<?> successor : block.getSuccessors()) {
-            if (!processed(successor) && (next == null || successor.probability() > next.probability())) {
+            if (!processed(successor) && (next == null || compare(successor, next) < 0)) {
                 next = successor;
             }
         }
