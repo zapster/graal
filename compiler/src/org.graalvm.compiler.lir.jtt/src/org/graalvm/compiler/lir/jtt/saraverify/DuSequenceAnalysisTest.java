@@ -40,6 +40,7 @@ import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 import org.graalvm.compiler.lir.saraverify.MoveNode;
 import org.graalvm.compiler.lir.saraverify.Node;
+import org.graalvm.compiler.lir.saraverify.SARAVerifyUtil;
 import org.graalvm.compiler.lir.saraverify.SARAVerifyValueComparator;
 import org.graalvm.compiler.lir.saraverify.UseNode;
 import org.junit.Rule;
@@ -334,7 +335,7 @@ public class DuSequenceAnalysisTest {
         map.put(3, map1);
         map.put(5, map1);
 
-        Map<Value, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
+        Map<Value, Set<Integer>> mergedMap = SARAVerifyUtil.mergeMaps(map, new Integer[]{3, 5});
 
         assertEquals(true, mergedMap.entrySet().stream().allMatch(entry -> entry.getValue().isEmpty()));
     }
@@ -349,7 +350,7 @@ public class DuSequenceAnalysisTest {
         map.put(3, map1);
         map.put(5, new HashMap<>());
 
-        Map<Value, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{3, 5});
+        Map<Value, Set<Integer>> mergedMap = SARAVerifyUtil.mergeMaps(map, new Integer[]{3, 5});
 
         assertEquals(1, mergedMap.keySet().size());
 
@@ -373,7 +374,7 @@ public class DuSequenceAnalysisTest {
         Map<Integer, Map<Value, Set<Integer>>> map = new HashMap<>();
         map.put(1, map1);
         map.put(2, map2);
-        Map<Value, Set<Integer>> mergedMap = DuSequenceAnalysis.mergeMaps(map, new Integer[]{1, 2});
+        Map<Value, Set<Integer>> mergedMap = SARAVerifyUtil.mergeMaps(map, new Integer[]{1, 2});
         assertEquals(true, mergedMap.get(r1.asValue()).equals(asSet(10)));
         assertEquals(true, mergedMap.get(r2.asValue()).equals(asSet(11, 12, 15)));
         assertEquals(true, mergedMap.get(r3.asValue()).equals(asSet(13, 14)));

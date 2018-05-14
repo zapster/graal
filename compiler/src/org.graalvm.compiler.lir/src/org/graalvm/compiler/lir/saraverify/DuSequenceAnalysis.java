@@ -123,7 +123,7 @@ public class DuSequenceAnalysis {
             blockQueue.clear(blockIndex);
             visited.add(block);
 
-            Map<Value, Set<Node>> mergedUnfinishedDuSequences = mergeMaps(blockUnfinishedDuSequences, block.getSuccessors());
+            Map<Value, Set<Node>> mergedUnfinishedDuSequences = SARAVerifyUtil.mergeMaps(blockUnfinishedDuSequences, block.getSuccessors());
             determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, startBlock);
 
             Map<Value, Set<Node>> previousUnfinishedDuSequences = blockUnfinishedDuSequences.get(block);
@@ -221,29 +221,6 @@ public class DuSequenceAnalysis {
         }
 
         return set;
-    }
-
-    public static <T, V> Map<Value, Set<V>> mergeMaps(Map<T, Map<Value, Set<V>>> map, T[] mergeKeys) {
-        Map<Value, Set<V>> mergedMap = new ValueHashMap<>();
-
-        for (T mergeKey : mergeKeys) {
-            Map<Value, Set<V>> mergeValueMap = map.get(mergeKey);
-
-            if (mergeValueMap != null) {
-                for (Entry<Value, Set<V>> entry : mergeValueMap.entrySet()) {
-                    Set<V> mergedMapValue = mergedMap.get(entry.getKey());
-
-                    if (mergedMapValue == null) {
-                        mergedMapValue = new HashSet<>();
-                        mergedMap.put(entry.getKey(), mergedMapValue);
-                    }
-
-                    Set<V> newValues = entry.getValue().stream().filter(x -> !(mergedMap.get(entry.getKey()).contains(x))).collect(Collectors.toSet());
-                    mergedMapValue.addAll(newValues);
-                }
-            }
-        }
-        return mergedMap;
     }
 
     private static void analyseUndefinedValues(Map<Value, Set<DefNode>> duSequences, Map<Value, Set<Node>> unfinishedDuSequences,
