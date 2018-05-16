@@ -112,13 +112,13 @@ public class SimpleVerificationPhase extends LIRPhase<AllocationContext> {
         Set<UseNode> useNodes2 = web2.getUseNodes();
 
         for (DefNode defNode : defNodes1) {
-            if (!defNodes2.stream().anyMatch(node -> node.verify(defNode))) {
+            if (!defNodes2.stream().anyMatch(node -> node.equalsInstructionAndPosition(defNode))) {
                 return false;
             }
         }
 
         for (UseNode useNode : useNodes1) {
-            if (!useNodes2.stream().anyMatch(node -> node.verify(useNode))) {
+            if (!useNodes2.stream().anyMatch(node -> node.equalsInstructionAndPosition(useNode))) {
                 return false;
             }
         }

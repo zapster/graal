@@ -39,7 +39,19 @@ public class DefNode extends Node {
         }
 
         DefNode defNode = (DefNode) obj;
-        return super.equals(defNode) && defNode.value.equals(this.value) && defNode.defOperandPosition == this.defOperandPosition ? true : false;
+        return equalsInstructionAndPosition(defNode) && defNode.value.equals(this.value);
+    }
+
+    /**
+     * Indicates whether some other defNode is equal to this one regarding the instruction and the
+     * definition operand position.
+     *
+     * @param defNode
+     * @return true if this defNode is the same as the defNode argument regarding the instruction
+     *         and the definition operand position, otherwise false
+     */
+    public boolean equalsInstructionAndPosition(DefNode defNode) {
+        return super.equals(defNode) && this.defOperandPosition == defNode.defOperandPosition;
     }
 
     @Override
@@ -55,9 +67,5 @@ public class DefNode extends Node {
     @Override
     public boolean isUseNode() {
         return false;
-    }
-
-    public boolean verify(DefNode defNode) {
-        return super.equals(defNode) && this.defOperandPosition == defNode.defOperandPosition;
     }
 }

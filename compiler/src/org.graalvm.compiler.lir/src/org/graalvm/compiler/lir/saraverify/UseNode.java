@@ -58,7 +58,19 @@ public class UseNode extends Node {
         }
 
         UseNode useNode = (UseNode) obj;
-        return super.equals(useNode) && useNode.value.equals(this.value) && useNode.useOperandPosition == this.useOperandPosition ? true : false;
+        return equalsInstructionAndPosition(useNode) && useNode.value.equals(this.value);
+    }
+
+    /**
+     * Indicates whether some other useNode is equal to this one regarding the instruction and the
+     * use operand position.
+     *
+     * @param useNode
+     * @return true if this useNode is the same as the useNode argument regarding the instruction
+     *         and the use operand position, otherwise false
+     */
+    public boolean equalsInstructionAndPosition(UseNode useNode) {
+        return super.equals(useNode) && this.useOperandPosition == useNode.useOperandPosition;
     }
 
     @Override
@@ -76,7 +88,4 @@ public class UseNode extends Node {
         return true;
     }
 
-    public boolean verify(UseNode useNode) {
-        return super.equals(useNode) && this.useOperandPosition == useNode.useOperandPosition;
-    }
 }

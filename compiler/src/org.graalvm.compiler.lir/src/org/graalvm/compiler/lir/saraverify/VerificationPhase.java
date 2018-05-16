@@ -85,7 +85,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                                                 return false;
                                             }
                                             DefNode defNode = (DefNode) keyNode;
-                                            return node.verify(defNode);
+                                            return node.equalsInstructionAndPosition(defNode);
                                         })) : "unmapped definitions";
 
         assert webs.stream()        //
@@ -96,7 +96,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                                                 return false;
                                             }
                                             UseNode useNode = (UseNode) keyNode;
-                                            return node.verify(useNode);
+                                            return node.equalsInstructionAndPosition(useNode);
                                         })) : "unmapped usages";
 
         return map;
@@ -106,7 +106,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         DefNode defNode = new DefNode(value, instruction, defOperandPosition);
 
         Optional<DuSequenceWeb> webOptional = webs.stream()     //
-                        .filter(web -> web.getDefNodes().stream().anyMatch(node -> node.verify(defNode)))      //
+                        .filter(web -> web.getDefNodes().stream().anyMatch(node -> node.equalsInstructionAndPosition(defNode)))      //
                         .findAny();
 
         if (webOptional.isPresent()) {
@@ -161,7 +161,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
             UseNode useNode = new UseNode(value, instruction, useOperandPosition);
             Optional<DuSequenceWeb> webOptional = webs.stream()     //
-                            .filter(web -> web.getUseNodes().stream().anyMatch(node -> node.verify(useNode)))      //
+                            .filter(web -> web.getUseNodes().stream().anyMatch(node -> node.equalsInstructionAndPosition(useNode)))      //
                             .findAny();
 
             if (webOptional.isPresent()) {
