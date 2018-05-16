@@ -42,8 +42,10 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             return;
         }
 
+        LIR lir = lirGenRes.getLIR();
         List<DuSequenceWeb> inputDuSequenceWebs = DuSequenceAnalysis.createDuSequenceWebs(inputResult.getDuSequences());
-        Map<Node, DuSequenceWeb> mapping = generateMapping(lirGenRes.getLIR(), inputDuSequenceWebs, inputResult.getDummyRegDefs(), inputResult.getDummyConstDefs());
+        Map<Node, DuSequenceWeb> mapping = generateMapping(lir, inputDuSequenceWebs, inputResult.getDummyRegDefs(), inputResult.getDummyConstDefs());
+        DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping);
     }
 
     private static Map<Node, DuSequenceWeb> generateMapping(LIR lir, List<DuSequenceWeb> webs, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
@@ -74,6 +76,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             insertDefMapping(dummyRegDef.getKey().asValue(), dummyRegDef.getValue(), 0, webs, map);
         }
 
+        // TODO: move assert to method
         assert webs.stream()        //
                         .flatMap(web -> web.getDefNodes().stream())     //
                         .allMatch(node -> map.keySet().stream()     //
