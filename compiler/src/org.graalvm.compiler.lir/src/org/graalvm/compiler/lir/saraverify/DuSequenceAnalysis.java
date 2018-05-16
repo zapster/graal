@@ -132,8 +132,7 @@ public class DuSequenceAnalysis {
                 blockUnfinishedDuSequences.put(block, mergedUnfinishedDuSequences);
 
                 for (AbstractBlockBase<?> predecessor : block.getPredecessors()) {
-                    int predecessorIndex = predecessor.getId();
-                    blockQueue.set(predecessorIndex);
+                    blockQueue.set(predecessor.getId());
                 }
             }
         }
