@@ -57,7 +57,19 @@ public class DefAnalysisSets {
             }
 
             Triple triple = (Triple) obj;
-            return this.location.equals(triple.location) && this.value.equals(triple.value) && this.instructionSequence.equals(triple.instructionSequence);
+            return equalsLocationAndValue(triple) && this.instructionSequence.equals(triple.instructionSequence);
+        }
+
+        /**
+         * Indicates whether some other tripe is equal to this one regarding the location and the
+         * value.
+         *
+         * @param triple
+         * @return true if this triple is the same as the triple argument regarding the location and
+         *         the value, otherwise false
+         */
+        public boolean equalsLocationAndValue(Triple triple) {
+            return this.location.equals(triple.location) && this.value.equals(triple.value);
         }
 
         @Override
@@ -100,7 +112,7 @@ public class DefAnalysisSets {
 
     // TODO: rename or add method equalsLocationAndValue(Triple) to Triple
     public static boolean containsTriple(Triple triple, Set<Triple> set) {
-        return set.stream().anyMatch(t -> t.location.equals(triple.location) && t.value.equals(triple.value));
+        return set.stream().anyMatch(t -> t.equalsLocationAndValue(triple));
     }
 
     public static Stream<Triple> locationUnionStream(List<DefAnalysisSets> defAnalysisSets) {
