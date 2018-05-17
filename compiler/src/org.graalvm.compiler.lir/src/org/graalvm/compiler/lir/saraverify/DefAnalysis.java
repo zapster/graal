@@ -19,15 +19,21 @@ import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.saraverify.DefAnalysisSets.Triple;
 
+import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.meta.Value;
+import jdk.vm.ci.meta.ValueKind;
 
 public class DefAnalysis {
 
-    public static DefAnalysisResult analyse(LIR lir, Map<Node, DuSequenceWeb> mapping) {
+    public static DefAnalysisResult analyse(LIR lir, Map<Node, DuSequenceWeb> mapping, RegisterArray callerSaveRegisters) {
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
         // the map stores the sets after the analysis of the particular block/instruction
         Map<AbstractBlockBase<?>, DefAnalysisSets> blockSets = new HashMap<>();
+
+        // create a list of register values with value kind illegal of caller saved registers
+        List<Value> callerSaveRegisterValues = callerSaveRegisters.asList() //
+                        .stream().map(register -> register.asValue(ValueKind.Illegal)).collect(Collectors.toList());
 
         int blockCount = blocks.length;
         BitSet blockQueue = new BitSet(blockCount);
@@ -44,7 +50,7 @@ public class DefAnalysis {
             visited.add(block);
 
             DefAnalysisSets mergedDefAnalysisSets = mergeDefAnalysisSets(blockSets, block.getPredecessors());
-            computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisSets, mapping);
+            computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisSets, mapping, callerSaveRegisterValues);
             DefAnalysisSets previousDefAnalysisSets = blockSets.get(block);
 
             if (!mergedDefAnalysisSets.equals(previousDefAnalysisSets)) {
@@ -62,15 +68,22 @@ public class DefAnalysis {
     }
 
     private static void computeLocalFlow(ArrayList<LIRInstruction> instructions, DefAnalysisSets defAnalysisSets,
-                    Map<Node, DuSequenceWeb> mapping) {
+                    Map<Node, DuSequenceWeb> mapping, List<Value> callerSaveRegisterValues) {
+
+        List<Value> tempValues = new ArrayList<>();
 
         DefAnalysisCopyValueConsumer copyValueConsumer = new DefAnalysisCopyValueConsumer(defAnalysisSets, mapping);
         DefAnalysisNonCopyValueConsumer nonCopyValueConsumer = new DefAnalysisNonCopyValueConsumer(defAnalysisSets, mapping);
+        DefAnalysisTempValueConsumer tempValueConsumer = new DefAnalysisTempValueConsumer(tempValues);
 
         for (LIRInstruction instruction : instructions) {
+            tempValues.clear();
+
             if (instruction.destroysCallerSavedRegisters()) {
-                // TODO
+                defAnalysisSets.destroyValuesAtLocations(callerSaveRegisterValues, instruction);
             }
+            instruction.visitEachTemp(tempValueConsumer);
+            defAnalysisSets.destroyValuesAtLocations(tempValues, instruction);
         }
     }
 
@@ -99,7 +112,7 @@ public class DefAnalysis {
         return new DefAnalysisSets(locationIntersection, stale, evicted);
     }
 
-    static class DefAnalysisCopyValueConsumer implements InstructionValueConsumer {
+    private static class DefAnalysisCopyValueConsumer implements InstructionValueConsumer {
 
         private DefAnalysisSets defAnalysisSets;
         private Map<Node, DuSequenceWeb> mapping;
@@ -117,7 +130,7 @@ public class DefAnalysis {
 
     }
 
-    static class DefAnalysisNonCopyValueConsumer implements InstructionValueConsumer {
+    private static class DefAnalysisNonCopyValueConsumer implements InstructionValueConsumer {
 
         private DefAnalysisSets defAnalysisSets;
         private Map<Node, DuSequenceWeb> mapping;
@@ -131,6 +144,21 @@ public class DefAnalysis {
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
             // TODO Auto-generated method stub
 
+        }
+
+    }
+
+    private static class DefAnalysisTempValueConsumer implements InstructionValueConsumer {
+
+        private List<Value> tempValues;
+
+        public DefAnalysisTempValueConsumer(List<Value> tempValues) {
+            this.tempValues = tempValues;
+        }
+
+        @Override
+        public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
+            tempValues.add(value);
         }
 
     }
