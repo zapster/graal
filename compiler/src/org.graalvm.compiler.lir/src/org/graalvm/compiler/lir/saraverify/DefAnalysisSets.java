@@ -45,33 +45,33 @@ public class DefAnalysisSets {
          *
          * @return the argument with illegal value kind
          */
-        private AllocatableValue getLocationIllegalValueKind(AllocatableValue location) {
-            if (location.getValueKind().equals(ValueKind.Illegal)) {
-                return location;
+        private AllocatableValue getLocationIllegalValueKind(AllocatableValue locationValue) {
+            if (locationValue.getValueKind().equals(ValueKind.Illegal)) {
+                return locationValue;
             }
 
-            if (ValueUtil.isRegister(location)) {
-                Register register = ValueUtil.asRegister(location);
+            if (ValueUtil.isRegister(locationValue)) {
+                Register register = ValueUtil.asRegister(locationValue);
                 return register.asValue(ValueKind.Illegal);
             }
 
-            if (LIRValueUtil.isVariable(location)) {
-                Variable variable = LIRValueUtil.asVariable(location);
+            if (LIRValueUtil.isVariable(locationValue)) {
+                Variable variable = LIRValueUtil.asVariable(locationValue);
                 return new Variable(ValueKind.Illegal, variable.index);
             }
 
-            if (ValueUtil.isStackSlot(location)) {
-                StackSlot stackSlot = ValueUtil.asStackSlot(location);
+            if (ValueUtil.isStackSlot(locationValue)) {
+                StackSlot stackSlot = ValueUtil.asStackSlot(locationValue);
                 return StackSlot.get(ValueKind.Illegal, stackSlot.getRawOffset(), stackSlot.getRawAddFrameSize());
             }
 
-            if (LIRValueUtil.isVirtualStackSlot(location)) {
-                VirtualStackSlot virtualStackSlot = LIRValueUtil.asVirtualStackSlot(location);
+            if (LIRValueUtil.isVirtualStackSlot(locationValue)) {
+                VirtualStackSlot virtualStackSlot = LIRValueUtil.asVirtualStackSlot(locationValue);
                 return new VirtualStackSlot(virtualStackSlot.getId(), ValueKind.Illegal) {
                 };
             }
 
-            throw GraalError.shouldNotReachHere("Type " + location.getClass() + "not implemented.");
+            throw GraalError.shouldNotReachHere("Type " + locationValue.getClass() + "not implemented.");
         }
 
         @Override
