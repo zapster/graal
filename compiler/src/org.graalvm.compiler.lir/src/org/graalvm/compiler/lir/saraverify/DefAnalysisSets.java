@@ -34,7 +34,7 @@ public class DefAnalysisSets {
             instructionSequence.add(instruction);
         }
 
-        private Triple(AllocatableValue location, DuSequenceWeb value, ArrayList<LIRInstruction> instructionSequence) {
+        public Triple(AllocatableValue location, DuSequenceWeb value, ArrayList<LIRInstruction> instructionSequence) {
             this.location = getLocationIllegalValueKind(location);
             this.value = value;
             this.instructionSequence = instructionSequence;
@@ -176,6 +176,29 @@ public class DefAnalysisSets {
     public static Set<Triple> evictedUnion(List<DefAnalysisSets> defAnalysisSets) {
         Stream<Triple> evictedUnionStream = defAnalysisSets.stream().flatMap(sets -> sets.evicted.stream());
         return evictedUnionStream.collect(Collectors.toSet());
+    }
+
+    public void propagateValue(AllocatableValue result, AllocatableValue input, LIRInstruction instruction) {
+        // for every triple in the location set that consists of the location "input", a new triple
+        // is added to the set, where the location is the argument
+        // "result" and the copy instruction is added to the instruction sequence
+        location.stream().filter(triple -> triple.location.equals(input))  //
+                        .forEach(triple -> {
+                            ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
+                            instructions.add(instruction);
+                            location.add(new Triple(result, triple.value, instructions));
+                        });
+
+        // for every triple in the stale set that consists of the location "input", a new triple is
+        // added to the set, where the location is the argument
+        // "result" and the copy instruction is added to the instruction sequence
+        stale.stream().filter(triple -> triple.location.equals(input))  //
+                        .forEach(triple -> {
+                            ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
+                            instructions.add(instruction);
+                            stale.add(new Triple(result, triple.value, instructions));
+                        });
+
     }
 
     public void destroyValuesAtLocations(List<Value> locationValues, LIRInstruction instruction) {

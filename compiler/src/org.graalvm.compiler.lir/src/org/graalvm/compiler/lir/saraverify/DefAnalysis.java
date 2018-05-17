@@ -17,6 +17,7 @@ import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
+import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.saraverify.DefAnalysisSets.Triple;
 
 import jdk.vm.ci.code.RegisterArray;
@@ -82,8 +83,17 @@ public class DefAnalysis {
             if (instruction.destroysCallerSavedRegisters()) {
                 defAnalysisSets.destroyValuesAtLocations(callerSaveRegisterValues, instruction);
             }
+
+            // temp values are treated like caller saved registers
             instruction.visitEachTemp(tempValueConsumer);
             defAnalysisSets.destroyValuesAtLocations(tempValues, instruction);
+
+            if (instruction.isValueMoveOp()) {
+                // Copy instruction
+                ValueMoveOp valueMoveOp = (ValueMoveOp) instruction;
+
+                defAnalysisSets.propagateValue(valueMoveOp.getResult(), valueMoveOp.getInput(), instruction);
+            }
         }
     }
 
