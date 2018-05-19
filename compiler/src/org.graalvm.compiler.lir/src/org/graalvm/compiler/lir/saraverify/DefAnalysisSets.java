@@ -7,71 +7,29 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.LIRInstruction;
-import org.graalvm.compiler.lir.LIRValueUtil;
-import org.graalvm.compiler.lir.Variable;
-import org.graalvm.compiler.lir.VirtualStackSlot;
 
-import jdk.vm.ci.code.Register;
-import jdk.vm.ci.code.StackSlot;
-import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Value;
-import jdk.vm.ci.meta.ValueKind;
 
 public class DefAnalysisSets {
 
     class Triple {
-        AllocatableValue location;
+        Value location;
         DuSequenceWeb value;
         ArrayList<LIRInstruction> instructionSequence;
 
-        public Triple(AllocatableValue location, DuSequenceWeb value, LIRInstruction instruction) {
-            this.location = getLocationIllegalValueKind(location);
+        public Triple(Value location, DuSequenceWeb value, LIRInstruction instruction) {
+            this.location = SARAVerifyUtil.getValueIllegalValueKind(location);
             this.value = value;
             instructionSequence = new ArrayList<>();
             instructionSequence.add(instruction);
         }
 
-        public Triple(AllocatableValue location, DuSequenceWeb value, ArrayList<LIRInstruction> instructionSequence) {
-            this.location = getLocationIllegalValueKind(location);
+        public Triple(Value location, DuSequenceWeb value, ArrayList<LIRInstruction> instructionSequence) {
+            this.location = SARAVerifyUtil.getValueIllegalValueKind(location);
             this.value = value;
             this.instructionSequence = instructionSequence;
-        }
-
-        /**
-         * Returns the argument with illegal value kind.
-         *
-         * @return the argument with illegal value kind
-         */
-        private AllocatableValue getLocationIllegalValueKind(AllocatableValue locationValue) {
-            if (locationValue.getValueKind().equals(ValueKind.Illegal)) {
-                return locationValue;
-            }
-
-            if (ValueUtil.isRegister(locationValue)) {
-                Register register = ValueUtil.asRegister(locationValue);
-                return register.asValue(ValueKind.Illegal);
-            }
-
-            if (LIRValueUtil.isVariable(locationValue)) {
-                Variable variable = LIRValueUtil.asVariable(locationValue);
-                return new Variable(ValueKind.Illegal, variable.index);
-            }
-
-            if (ValueUtil.isStackSlot(locationValue)) {
-                StackSlot stackSlot = ValueUtil.asStackSlot(locationValue);
-                return StackSlot.get(ValueKind.Illegal, stackSlot.getRawOffset(), stackSlot.getRawAddFrameSize());
-            }
-
-            if (LIRValueUtil.isVirtualStackSlot(locationValue)) {
-                VirtualStackSlot virtualStackSlot = LIRValueUtil.asVirtualStackSlot(locationValue);
-                return new VirtualStackSlot(virtualStackSlot.getId(), ValueKind.Illegal) {
-                };
-            }
-
-            throw GraalError.shouldNotReachHere("Type " + locationValue.getClass() + "not implemented.");
         }
 
         @Override
@@ -178,6 +136,17 @@ public class DefAnalysisSets {
         return evictedUnionStream.collect(Collectors.toSet());
     }
 
+    public void addLocation(Value locationValue, DuSequenceWeb value, LIRInstruction instruction) {
+        location.add(new Triple(locationValue, value, instruction));
+    }
+
+    public void removeFromEvicted(Value locationValue, DuSequenceWeb value) {
+        // remove all triples in the evicted set that have the location and the value from the
+        // arguments
+        evicted.removeIf(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(locationValue)) //
+                        && triple.value.equals(value));
+    }
+
     public void propagateValue(AllocatableValue result, AllocatableValue input, LIRInstruction instruction) {
         // for every triple in the location set that consists of the location "input", a new triple
         // is added to the set, where the location is the argument
@@ -207,7 +176,7 @@ public class DefAnalysisSets {
 
         // remove the triples from the locations and the stale set
         location.removeAll(destroyedTriples);
-        stale.removeAll(stale.stream().filter(triple -> locationValues.contains(triple.location)).collect(Collectors.toList()));
+        stale.removeIf(triple -> locationValues.contains(triple.location));
 
         // add the locations from the found triples to the evicted set
         destroyedTriples.stream().forEach(triple -> evicted.add(new Triple(triple.location, triple.value, instruction)));

@@ -17,16 +17,20 @@ import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
+import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.saraverify.DefAnalysisSets.Triple;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
 
 import jdk.vm.ci.code.RegisterArray;
+import jdk.vm.ci.code.ValueUtil;
+import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.Value;
 import jdk.vm.ci.meta.ValueKind;
 
 public class DefAnalysis {
 
-    public static DefAnalysisResult analyse(LIR lir, Map<Node, DuSequenceWeb> mapping, RegisterArray callerSaveRegisters) {
+    public static DefAnalysisResult analyse(LIR lir, Map<Node, DuSequenceWeb> mapping, RegisterArray callerSaveRegisters, Map<Constant, DummyConstDef> dummyConstDefs) {
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
         // the map stores the sets after the analysis of the particular block/instruction
@@ -51,7 +55,7 @@ public class DefAnalysis {
             visited.add(block);
 
             DefAnalysisSets mergedDefAnalysisSets = mergeDefAnalysisSets(blockSets, block.getPredecessors());
-            computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisSets, mapping, callerSaveRegisterValues);
+            computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisSets, mapping, callerSaveRegisterValues, dummyConstDefs);
             DefAnalysisSets previousDefAnalysisSets = blockSets.get(block);
 
             if (!mergedDefAnalysisSets.equals(previousDefAnalysisSets)) {
@@ -69,16 +73,16 @@ public class DefAnalysis {
     }
 
     private static void computeLocalFlow(ArrayList<LIRInstruction> instructions, DefAnalysisSets defAnalysisSets,
-                    Map<Node, DuSequenceWeb> mapping, List<Value> callerSaveRegisterValues) {
+                    Map<Node, DuSequenceWeb> mapping, List<Value> callerSaveRegisterValues, Map<Constant, DummyConstDef> dummyConstDefs) {
 
         List<Value> tempValues = new ArrayList<>();
 
-        DefAnalysisCopyValueConsumer copyValueConsumer = new DefAnalysisCopyValueConsumer(defAnalysisSets, mapping);
         DefAnalysisNonCopyValueConsumer nonCopyValueConsumer = new DefAnalysisNonCopyValueConsumer(defAnalysisSets, mapping);
         DefAnalysisTempValueConsumer tempValueConsumer = new DefAnalysisTempValueConsumer(tempValues);
 
         for (LIRInstruction instruction : instructions) {
             tempValues.clear();
+            nonCopyValueConsumer.defOperandPosition = 0;
 
             if (instruction.destroysCallerSavedRegisters()) {
                 defAnalysisSets.destroyValuesAtLocations(callerSaveRegisterValues, instruction);
@@ -89,10 +93,25 @@ public class DefAnalysis {
             defAnalysisSets.destroyValuesAtLocations(tempValues, instruction);
 
             if (instruction.isValueMoveOp()) {
-                // Copy instruction
+                // copy instruction
                 ValueMoveOp valueMoveOp = (ValueMoveOp) instruction;
 
                 defAnalysisSets.propagateValue(valueMoveOp.getResult(), valueMoveOp.getInput(), instruction);
+            } else if (instruction.isLoadConstantOp()) {
+                // load constant into variable
+                LoadConstantOp loadConstantOp = (LoadConstantOp) instruction;
+                Constant constant = loadConstantOp.getConstant();
+
+                DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
+                assert dummyConstDef != null : "No dummy definition for constant: " + loadConstantOp.getConstant() + ".";
+
+                DefNode defNode = new DefNode(SARAVerifyUtil.asConstantValue(constant), dummyConstDef, 0);
+                DuSequenceWeb mappedWeb = mapping.get(defNode);
+                assert mappedWeb != null : "No mapping found for defined value.";
+
+                analyzeDefinition(loadConstantOp.getResult(), instruction, mappedWeb, defAnalysisSets);
+            } else {
+                instruction.visitEachOutput(nonCopyValueConsumer);
             }
         }
     }
@@ -122,38 +141,39 @@ public class DefAnalysis {
         return new DefAnalysisSets(locationIntersection, stale, evicted);
     }
 
-    private static class DefAnalysisCopyValueConsumer implements InstructionValueConsumer {
-
-        private DefAnalysisSets defAnalysisSets;
-        private Map<Node, DuSequenceWeb> mapping;
-
-        public DefAnalysisCopyValueConsumer(DefAnalysisSets defAnalysisSets, Map<Node, DuSequenceWeb> mapping) {
-            this.defAnalysisSets = defAnalysisSets;
-            this.mapping = mapping;
-        }
-
-        @Override
-        public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            // TODO Auto-generated method stub
-
-        }
-
+    private static void analyzeDefinition(Value value, LIRInstruction instruction, DuSequenceWeb mappedWeb, DefAnalysisSets defAnalysisSets) {
+        defAnalysisSets.destroyValuesAtLocations(Arrays.asList(value), instruction);
+        defAnalysisSets.addLocation(value, mappedWeb, instruction);
+        defAnalysisSets.removeFromEvicted(value, mappedWeb);
     }
 
     private static class DefAnalysisNonCopyValueConsumer implements InstructionValueConsumer {
 
+        private int defOperandPosition;
         private DefAnalysisSets defAnalysisSets;
         private Map<Node, DuSequenceWeb> mapping;
 
         public DefAnalysisNonCopyValueConsumer(DefAnalysisSets defAnalysisSets, Map<Node, DuSequenceWeb> mapping) {
+            defOperandPosition = 0;
             this.defAnalysisSets = defAnalysisSets;
             this.mapping = mapping;
         }
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            // TODO Auto-generated method stub
+            if (ValueUtil.isIllegal(value)) {
+                // value is part of a composite value
+                defOperandPosition++;
+                return;
+            }
 
+            DefNode defNode = new DefNode(value, instruction, defOperandPosition);
+
+            DuSequenceWeb mappedWeb = mapping.get(defNode);
+            assert mappedWeb != null : "No mapping found for defined value.";
+
+            analyzeDefinition(value, instruction, mappedWeb, defAnalysisSets);
+            defOperandPosition++;
         }
 
     }
