@@ -195,7 +195,7 @@ public class DuSequenceAnalysis {
 
                 // load constant
                 LoadConstantOp loadConstantOp = (LoadConstantOp) inst;
-                insertMoveNode(unfinishedDuSequences, loadConstantOp.getResult(), new ConstantValue(ValueKind.Illegal, loadConstantOp.getConstant()), inst);
+                insertMoveNode(unfinishedDuSequences, loadConstantOp.getResult(), SARAVerifyUtil.asConstantValue(loadConstantOp.getConstant()), inst);
             } else if (block == startBlock || !(inst instanceof LabelOp)) {
                 SARAVerifyUtil.visitValues(inst, defConsumer, useConsumer);
 
