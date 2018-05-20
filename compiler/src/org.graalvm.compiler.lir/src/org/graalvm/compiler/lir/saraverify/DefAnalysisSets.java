@@ -15,9 +15,9 @@ import jdk.vm.ci.meta.Value;
 public class DefAnalysisSets {
 
     class Triple {
-        Value location;
-        DuSequenceWeb value;
-        ArrayList<LIRInstruction> instructionSequence;
+        private Value location;
+        private DuSequenceWeb value;
+        private ArrayList<LIRInstruction> instructionSequence;
 
         public Triple(Value location, DuSequenceWeb value, LIRInstruction instruction) {
             this.location = SARAVerifyUtil.getValueIllegalValueKind(location);
@@ -30,16 +30,6 @@ public class DefAnalysisSets {
             this.location = SARAVerifyUtil.getValueIllegalValueKind(location);
             this.value = value;
             this.instructionSequence = instructionSequence;
-        }
-
-        /**
-         * Clears the instruction sequence and adds the argument instruction to the list.
-         *
-         * @param instruction
-         */
-        public void setInstructionSequence(LIRInstruction instruction) {
-            instructionSequence.clear();
-            instructionSequence.add(instruction);
         }
 
         @Override
@@ -193,18 +183,15 @@ public class DefAnalysisSets {
         // makes values with illegal value kind for comparison
         List<Value> locationValuesIllegal = locationValues.stream().map(value -> SARAVerifyUtil.getValueIllegalValueKind(value)).collect(Collectors.toList());
 
-        // triples that have a location where the value gets destroyed
+        // triples that have a location where the value gets evicted
         List<Triple> evictedTriples = location.stream().filter(triple -> locationValuesIllegal.contains(triple.location)).collect(Collectors.toList());
 
         // remove the triples from the locations and the stale set
         location.removeAll(evictedTriples);
         stale.removeIf(triple -> locationValuesIllegal.contains(triple.location));
 
-        // clear the instruction sequence for the evicted triples and add this instruction to the
-        // sequence, because at this instruction the value is evicted
-        evictedTriples.stream().forEach(triple -> triple.setInstructionSequence(instruction));
-        // add the evicted triples to the evicted set
-        evicted.addAll(evictedTriples);
+        // add a new triple to the evicted set for each evicted triple
+        evictedTriples.stream().forEach(triple -> evicted.add(new Triple(triple.location, triple.value, instruction)));
     }
 
     @Override

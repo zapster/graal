@@ -120,7 +120,9 @@ public class DefAnalysis {
         List<DefAnalysisSets> defAnalysisSets = new ArrayList<>();
 
         for (T key : mergeKeys) {
-            defAnalysisSets.add(map.get(key));
+            if (map.containsKey(key)) {
+                defAnalysisSets.add(map.get(key));
+            }
         }
 
         Set<Triple> locationIntersection = DefAnalysisSets.locationIntersection(defAnalysisSets);
