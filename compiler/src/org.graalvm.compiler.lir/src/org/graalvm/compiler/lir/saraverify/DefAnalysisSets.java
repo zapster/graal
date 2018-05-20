@@ -32,6 +32,16 @@ public class DefAnalysisSets {
             this.instructionSequence = instructionSequence;
         }
 
+        /**
+         * Clears the instruction sequence and adds the argument instruction to the list.
+         *
+         * @param instruction
+         */
+        public void setInstructionSequence(LIRInstruction instruction) {
+            instructionSequence.clear();
+            instructionSequence.add(instruction);
+        }
+
         @Override
         public int hashCode() {
             final int prime = 31;
@@ -62,7 +72,7 @@ public class DefAnalysisSets {
         }
 
         /**
-         * Indicates whether some other tripe is equal to this one regarding the location and the
+         * Indicates whether some other triple is equal to this one regarding the location and the
          * value.
          *
          * @param triple
@@ -76,6 +86,15 @@ public class DefAnalysisSets {
         @Override
         protected Object clone() throws CloneNotSupportedException {
             return new Triple(location, value, new ArrayList<>(instructionSequence));
+        }
+
+        @Override
+        public String toString() {
+            String s = "( " + location + ", " + value.hashCode() + ", <";
+
+            s = s + instructionSequence.stream().map(instruction -> instruction.name()).collect(Collectors.joining(", "));
+
+            return s + "> )";
         }
     }
 
@@ -151,35 +170,41 @@ public class DefAnalysisSets {
         // for every triple in the location set that consists of the location "input", a new triple
         // is added to the set, where the location is the argument
         // "result" and the copy instruction is added to the instruction sequence
-        location.stream().filter(triple -> triple.location.equals(input))  //
-                        .forEach(triple -> {
-                            ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
-                            instructions.add(instruction);
-                            location.add(new Triple(result, triple.value, instructions));
-                        });
+        List<Triple> triples = location.stream().filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input))).collect(Collectors.toList());
+        triples.forEach(triple -> {
+            ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
+            instructions.add(instruction);
+            location.add(new Triple(result, triple.value, instructions));
+        });
 
         // for every triple in the stale set that consists of the location "input", a new triple is
         // added to the set, where the location is the argument
         // "result" and the copy instruction is added to the instruction sequence
-        stale.stream().filter(triple -> triple.location.equals(input))  //
-                        .forEach(triple -> {
-                            ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
-                            instructions.add(instruction);
-                            stale.add(new Triple(result, triple.value, instructions));
-                        });
+        triples = stale.stream().filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input))).collect(Collectors.toList());
+        triples.forEach(triple -> {
+            ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
+            instructions.add(instruction);
+            stale.add(new Triple(result, triple.value, instructions));
+        });
 
     }
 
     public void destroyValuesAtLocations(List<Value> locationValues, LIRInstruction instruction) {
+        // makes values with illegal value kind for comparison
+        List<Value> locationValuesIllegal = locationValues.stream().map(value -> SARAVerifyUtil.getValueIllegalValueKind(value)).collect(Collectors.toList());
+
         // triples that have a location where the value gets destroyed
-        List<Triple> destroyedTriples = location.stream().filter(triple -> locationValues.contains(triple.location)).collect(Collectors.toList());
+        List<Triple> evictedTriples = location.stream().filter(triple -> locationValuesIllegal.contains(triple.location)).collect(Collectors.toList());
 
         // remove the triples from the locations and the stale set
-        location.removeAll(destroyedTriples);
-        stale.removeIf(triple -> locationValues.contains(triple.location));
+        location.removeAll(evictedTriples);
+        stale.removeIf(triple -> locationValuesIllegal.contains(triple.location));
 
-        // add the locations from the found triples to the evicted set
-        destroyedTriples.stream().forEach(triple -> evicted.add(new Triple(triple.location, triple.value, instruction)));
+        // clear the instruction sequence for the evicted triples and add this instruction to the
+        // sequence, because at this instruction the value is evicted
+        evictedTriples.stream().forEach(triple -> triple.setInstructionSequence(instruction));
+        // add the evicted triples to the evicted set
+        evicted.addAll(evictedTriples);
     }
 
     @Override
