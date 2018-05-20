@@ -98,18 +98,18 @@ public class DefAnalysis {
 
                 defAnalysisSets.propagateValue(valueMoveOp.getResult(), valueMoveOp.getInput(), instruction);
             } else if (instruction.isLoadConstantOp()) {
-                // load constant into variable
                 LoadConstantOp loadConstantOp = (LoadConstantOp) instruction;
                 Constant constant = loadConstantOp.getConstant();
+                Value result = loadConstantOp.getResult();
 
                 DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
                 assert dummyConstDef != null : "No dummy definition for constant: " + loadConstantOp.getConstant() + ".";
 
+                // get mapping
                 DefNode defNode = new DefNode(SARAVerifyUtil.asConstantValue(constant), dummyConstDef, 0);
                 DuSequenceWeb mappedWeb = mapping.get(defNode);
-                assert mappedWeb != null : "No mapping found for defined value.";
 
-                analyzeDefinition(loadConstantOp.getResult(), instruction, mappedWeb, defAnalysisSets);
+                analyzeDefinition(result, instruction, mappedWeb, defAnalysisSets);
             } else {
                 instruction.visitEachOutput(nonCopyValueConsumer);
             }
@@ -145,6 +145,11 @@ public class DefAnalysis {
 
     private static void analyzeDefinition(Value value, LIRInstruction instruction, DuSequenceWeb mappedWeb, DefAnalysisSets defAnalysisSets) {
         defAnalysisSets.destroyValuesAtLocations(Arrays.asList(value), instruction);
+
+        if (mappedWeb == null) {
+            return;
+        }
+
         defAnalysisSets.addLocation(value, mappedWeb, instruction);
         defAnalysisSets.removeFromEvicted(value, mappedWeb);
     }
@@ -170,10 +175,7 @@ public class DefAnalysis {
             }
 
             DefNode defNode = new DefNode(value, instruction, defOperandPosition);
-
             DuSequenceWeb mappedWeb = mapping.get(defNode);
-            assert mappedWeb != null : "No mapping found for defined value.";
-
             analyzeDefinition(value, instruction, mappedWeb, defAnalysisSets);
             defOperandPosition++;
         }
