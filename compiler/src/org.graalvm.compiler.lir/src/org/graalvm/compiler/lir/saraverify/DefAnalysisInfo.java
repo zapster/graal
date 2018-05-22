@@ -157,8 +157,17 @@ public class DefAnalysisInfo {
     }
 
     public void addLocation(Value locationValue, DuSequenceWeb value, LIRInstruction instruction) {
+        // find triples in the location set that hold the value in a different location than the
+        // location from the argument
+        List<Triple> staleTriples = locationSet.stream()     //
+                        .filter(triple -> triple.value.equals(value) && !triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(locationValue))) //
+                        .collect(Collectors.toList());
+
+        // add triples to the stale set for each stale value
+        staleTriples.forEach(triple -> staleSet.add(new Triple(triple.location, triple.value, instruction)));
+
+        // add a triple to the location set for the defined value
         locationSet.add(new Triple(locationValue, value, instruction));
-        // TODO: identify and add triples to the stale set
     }
 
     public void removeFromEvicted(Value locationValue, DuSequenceWeb value) {

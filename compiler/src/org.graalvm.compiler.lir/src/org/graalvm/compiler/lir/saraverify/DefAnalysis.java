@@ -20,6 +20,7 @@ import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
+import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.saraverify.DefAnalysisInfo.Triple;
@@ -99,6 +100,13 @@ public class DefAnalysis {
         for (LIRInstruction instruction : instructions) {
             tempValues.clear();
             nonCopyValueConsumer.defOperandPosition = 0;
+
+            // TODO: set id of instruction
+
+            if (instruction instanceof JumpOp) {
+                // phi values from the input code are replaced by move operations in the output code
+                assert ((JumpOp) instruction).getPhiSize() == 0 : "phi in output code";
+            }
 
             if (instruction.destroysCallerSavedRegisters()) {
                 defAnalysisSets.destroyValuesAtLocations(callerSaveRegisterValues, instruction);
