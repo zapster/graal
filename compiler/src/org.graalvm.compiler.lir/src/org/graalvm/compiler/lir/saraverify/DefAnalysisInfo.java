@@ -12,12 +12,12 @@ import org.graalvm.compiler.lir.LIRInstruction;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Value;
 
-public class DefAnalysisSets {
+public class DefAnalysisInfo {
 
     class Triple {
-        private Value location;
-        private DuSequenceWeb value;
-        private ArrayList<LIRInstruction> instructionSequence;
+        private final Value location;
+        private final DuSequenceWeb value;
+        private final ArrayList<LIRInstruction> instructionSequence;
 
         public Triple(Value location, DuSequenceWeb value, LIRInstruction instruction) {
             this.location = SARAVerifyUtil.getValueIllegalValueKind(location);
@@ -92,32 +92,40 @@ public class DefAnalysisSets {
      * The location set records that location holds a value. The instruction sequence of a triple
      * denotes the copy operations of the du-sequence.
      */
-    private Set<Triple> location;
+    private final Set<Triple> locationSet;
 
     /**
      * The stale set records that location holds a stale value. The instruction sequence of a triple
      * denotes the non-copy instruction that made value in location become stale and the copy
      * instructions that propagate the stale value.
      */
-    private Set<Triple> stale;
+    private final Set<Triple> staleSet;
 
     /**
      * The eviction set records that the value is evicted from the location. The instruction
      * sequence consists of exactly one instruction, namely the instruction that kills the value
      * from the location.
      */
-    private Set<Triple> evicted;
+    private final Set<Triple> evictedSet;
 
-    public DefAnalysisSets() {
-        this.location = new HashSet<>();
-        this.stale = new HashSet<>();
-        this.evicted = new HashSet<>();
+    public DefAnalysisInfo() {
+        this.locationSet = new HashSet<>();
+        this.staleSet = new HashSet<>();
+        this.evictedSet = new HashSet<>();
     }
 
-    public DefAnalysisSets(Set<Triple> location, Set<Triple> stale, Set<Triple> evicted) {
-        this.location = location;
-        this.stale = stale;
-        this.evicted = evicted;
+    public DefAnalysisInfo(Set<Triple> location, Set<Triple> stale, Set<Triple> evicted) {
+        this.locationSet = location;
+        this.staleSet = stale;
+        this.evictedSet = evicted;
+    }
+
+    public void printSetSizes() {
+        // TODO: remove debug
+        // use log for debugging
+        System.out.println("Location: " + locationSet.size());
+        System.out.println("Stale: " + staleSet.size());
+        System.out.println("Evicted: " + evictedSet.size());
     }
 
     // TODO: rename or add method equalsLocationAndValue(Triple) to Triple
@@ -125,56 +133,59 @@ public class DefAnalysisSets {
         return set.stream().anyMatch(t -> t.equalsLocationAndValue(triple));
     }
 
-    public static Stream<Triple> locationUnionStream(List<DefAnalysisSets> defAnalysisSets) {
-        return defAnalysisSets.stream().flatMap(sets -> sets.location.stream());
+    public static Stream<Triple> locationSetUnionStream(List<DefAnalysisInfo> defAnalysisSets) {
+        return defAnalysisSets.stream().flatMap(sets -> sets.locationSet.stream());
     }
 
-    public static Set<Triple> locationIntersection(List<DefAnalysisSets> defAnalysisSets) {
-        Stream<Triple> locationUnionStream = defAnalysisSets.stream().flatMap(sets -> sets.location.stream());
-        Stream<Triple> locationIntersectedStream = locationUnionStream.filter(triple -> defAnalysisSets.stream().allMatch(sets -> containsTriple(triple, sets.location)));
+    public static Set<Triple> locationSetIntersection(List<DefAnalysisInfo> defAnalysisSets) {
+        Stream<Triple> locationUnionStream = defAnalysisSets.stream().flatMap(sets -> sets.locationSet.stream());
+        Stream<Triple> locationIntersectedStream = locationUnionStream.filter(triple -> defAnalysisSets.stream().allMatch(sets -> containsTriple(triple, sets.locationSet)));
         return locationIntersectedStream.collect(Collectors.toSet());
     }
 
-    public static Set<Triple> staleUnion(List<DefAnalysisSets> defAnalysisSets) {
-        Stream<Triple> staleUnionStream = defAnalysisSets.stream().flatMap(sets -> sets.stale.stream());
+    public static Set<Triple> staleSetUnion(List<DefAnalysisInfo> defAnalysisSets) {
+        Stream<Triple> staleUnionStream = defAnalysisSets.stream().flatMap(sets -> sets.staleSet.stream());
         return staleUnionStream.collect(Collectors.toSet());
     }
 
-    public static Set<Triple> evictedUnion(List<DefAnalysisSets> defAnalysisSets) {
-        Stream<Triple> evictedUnionStream = defAnalysisSets.stream().flatMap(sets -> sets.evicted.stream());
+    public static Set<Triple> evictedSetUnion(List<DefAnalysisInfo> defAnalysisSets) {
+        Stream<Triple> evictedUnionStream = defAnalysisSets.stream().flatMap(sets -> sets.evictedSet.stream());
         return evictedUnionStream.collect(Collectors.toSet());
     }
 
     public void addLocation(Value locationValue, DuSequenceWeb value, LIRInstruction instruction) {
-        location.add(new Triple(locationValue, value, instruction));
+        locationSet.add(new Triple(locationValue, value, instruction));
+        // TODO: identify and add triples to the stale set
     }
 
     public void removeFromEvicted(Value locationValue, DuSequenceWeb value) {
         // remove all triples in the evicted set that have the location and the value from the
         // arguments
-        evicted.removeIf(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(locationValue)) //
+        evictedSet.removeIf(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(locationValue)) //
                         && triple.value.equals(value));
     }
 
+    // TODO: change streams (first filter into new list, then add to set)
+    // maybe separate method for this?
     public void propagateValue(AllocatableValue result, AllocatableValue input, LIRInstruction instruction) {
         // for every triple in the location set that consists of the location "input", a new triple
         // is added to the set, where the location is the argument
         // "result" and the copy instruction is added to the instruction sequence
-        List<Triple> triples = location.stream().filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input))).collect(Collectors.toList());
+        List<Triple> triples = locationSet.stream().filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input))).collect(Collectors.toList());
         triples.forEach(triple -> {
             ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
             instructions.add(instruction);
-            location.add(new Triple(result, triple.value, instructions));
+            locationSet.add(new Triple(result, triple.value, instructions));
         });
 
         // for every triple in the stale set that consists of the location "input", a new triple is
         // added to the set, where the location is the argument
         // "result" and the copy instruction is added to the instruction sequence
-        triples = stale.stream().filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input))).collect(Collectors.toList());
+        triples = staleSet.stream().filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input))).collect(Collectors.toList());
         triples.forEach(triple -> {
             ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
             instructions.add(instruction);
-            stale.add(new Triple(result, triple.value, instructions));
+            staleSet.add(new Triple(result, triple.value, instructions));
         });
 
     }
@@ -184,39 +195,39 @@ public class DefAnalysisSets {
         List<Value> locationValuesIllegal = locationValues.stream().map(value -> SARAVerifyUtil.getValueIllegalValueKind(value)).collect(Collectors.toList());
 
         // triples that have a location where the value gets evicted
-        List<Triple> evictedTriples = location.stream().filter(triple -> locationValuesIllegal.contains(triple.location)).collect(Collectors.toList());
+        List<Triple> evictedTriples = locationSet.stream().filter(triple -> locationValuesIllegal.contains(triple.location)).collect(Collectors.toList());
 
         // remove the triples from the locations and the stale set
-        location.removeAll(evictedTriples);
-        stale.removeIf(triple -> locationValuesIllegal.contains(triple.location));
+        locationSet.removeAll(evictedTriples);
+        staleSet.removeIf(triple -> locationValuesIllegal.contains(triple.location));
 
         // add a new triple to the evicted set for each evicted triple
-        evictedTriples.stream().forEach(triple -> evicted.add(new Triple(triple.location, triple.value, instruction)));
+        evictedTriples.stream().forEach(triple -> evictedSet.add(new Triple(triple.location, triple.value, instruction)));
     }
 
     @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + evicted.hashCode();
-        result = prime * result + location.hashCode();
-        result = prime * result + stale.hashCode();
+        result = prime * result + evictedSet.hashCode();
+        result = prime * result + locationSet.hashCode();
+        result = prime * result + staleSet.hashCode();
         return result;
     }
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof DefAnalysisSets)) {
+        if (!(obj instanceof DefAnalysisInfo)) {
             return false;
         }
 
-        DefAnalysisSets defAnalysisSets = (DefAnalysisSets) obj;
-        return defAnalysisSets.location.equals(location) && defAnalysisSets.stale.equals(stale) && defAnalysisSets.evicted.equals(evicted);
+        DefAnalysisInfo defAnalysisSets = (DefAnalysisInfo) obj;
+        return defAnalysisSets.locationSet.equals(locationSet) && defAnalysisSets.staleSet.equals(staleSet) && defAnalysisSets.evictedSet.equals(evictedSet);
     }
 
     @Override
     protected Object clone() throws CloneNotSupportedException {
-        return new DefAnalysisSets(cloneSet(location), cloneSet(stale), cloneSet(evicted));
+        return new DefAnalysisInfo(cloneSet(locationSet), cloneSet(staleSet), cloneSet(evictedSet));
     }
 
     private static Set<Triple> cloneSet(Set<Triple> set) throws CloneNotSupportedException {

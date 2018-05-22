@@ -19,7 +19,7 @@ import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
-import org.graalvm.compiler.lir.saraverify.DefAnalysisSets.Triple;
+import org.graalvm.compiler.lir.saraverify.DefAnalysisInfo.Triple;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
 
 import jdk.vm.ci.code.RegisterArray;
@@ -34,7 +34,7 @@ public class DefAnalysis {
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
         // the map stores the sets after the analysis of the particular block/instruction
-        Map<AbstractBlockBase<?>, DefAnalysisSets> blockSets = new HashMap<>();
+        Map<AbstractBlockBase<?>, DefAnalysisInfo> blockSets = new HashMap<>();
 
         // create a list of register values with value kind illegal of caller saved registers
         List<Value> callerSaveRegisterValues = callerSaveRegisters.asList() //
@@ -53,10 +53,10 @@ public class DefAnalysis {
             blockQueue.clear(blockIndex);
             AbstractBlockBase<?> block = blocks[blockIndex];
             visited.add(block);
-
-            DefAnalysisSets mergedDefAnalysisSets = mergeDefAnalysisSets(blockSets, block.getPredecessors());
+            System.out.println("Visit Block: " + blockIndex);
+            DefAnalysisInfo mergedDefAnalysisSets = mergeDefAnalysisSets(blockSets, block.getPredecessors());
             computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisSets, mapping, callerSaveRegisterValues, dummyConstDefs);
-            DefAnalysisSets previousDefAnalysisSets = blockSets.get(block);
+            DefAnalysisInfo previousDefAnalysisSets = blockSets.get(block);
 
             if (!mergedDefAnalysisSets.equals(previousDefAnalysisSets)) {
                 blockSets.put(block, mergedDefAnalysisSets);
@@ -65,14 +65,16 @@ public class DefAnalysis {
                     blockQueue.set(successor.getId());
                 }
             }
+            mergedDefAnalysisSets.printSetSizes();
         }
 
         assert Arrays.stream(blocks).allMatch(block -> visited.contains(block)) : "Not all blocks were visited during the defAnalysis.";
 
+        System.out.println("Analysis done!");
         return new DefAnalysisResult();
     }
 
-    private static void computeLocalFlow(ArrayList<LIRInstruction> instructions, DefAnalysisSets defAnalysisSets,
+    private static void computeLocalFlow(ArrayList<LIRInstruction> instructions, DefAnalysisInfo defAnalysisSets,
                     Map<Node, DuSequenceWeb> mapping, List<Value> callerSaveRegisterValues, Map<Constant, DummyConstDef> dummyConstDefs) {
 
         List<Value> tempValues = new ArrayList<>();
@@ -116,8 +118,8 @@ public class DefAnalysis {
         }
     }
 
-    private static <T> DefAnalysisSets mergeDefAnalysisSets(Map<T, DefAnalysisSets> map, T[] mergeKeys) {
-        List<DefAnalysisSets> defAnalysisSets = new ArrayList<>();
+    private static <T> DefAnalysisInfo mergeDefAnalysisSets(Map<T, DefAnalysisInfo> map, T[] mergeKeys) {
+        List<DefAnalysisInfo> defAnalysisSets = new ArrayList<>();
 
         for (T key : mergeKeys) {
             if (map.containsKey(key)) {
@@ -125,25 +127,25 @@ public class DefAnalysis {
             }
         }
 
-        Set<Triple> locationIntersection = DefAnalysisSets.locationIntersection(defAnalysisSets);
-        Set<Triple> staleUnion = DefAnalysisSets.staleUnion(defAnalysisSets);
-        Set<Triple> evicted = DefAnalysisSets.evictedUnion(defAnalysisSets);
+        Set<Triple> locationIntersection = DefAnalysisInfo.locationSetIntersection(defAnalysisSets);
+        Set<Triple> staleUnion = DefAnalysisInfo.staleSetUnion(defAnalysisSets);
+        Set<Triple> evicted = DefAnalysisInfo.evictedSetUnion(defAnalysisSets);
 
-        Set<Triple> locationInconsistent = DefAnalysisSets  //
-                        .locationUnionStream(defAnalysisSets)   //
-                        .filter(triple -> !DefAnalysisSets.containsTriple(triple, locationIntersection))    //
+        Set<Triple> locationInconsistent = DefAnalysisInfo  //
+                        .locationSetUnionStream(defAnalysisSets)   //
+                        .filter(triple -> !DefAnalysisInfo.containsTriple(triple, locationIntersection))    //
                         .collect(Collectors.toSet());
 
         Set<Triple> stale = staleUnion.stream() //
-                        .filter(triple -> !DefAnalysisSets.containsTriple(triple, locationInconsistent))    //
+                        .filter(triple -> !DefAnalysisInfo.containsTriple(triple, locationInconsistent))    //
                         .collect(Collectors.toSet());
 
         evicted.addAll(locationInconsistent);
 
-        return new DefAnalysisSets(locationIntersection, stale, evicted);
+        return new DefAnalysisInfo(locationIntersection, stale, evicted);
     }
 
-    private static void analyzeDefinition(Value value, LIRInstruction instruction, DuSequenceWeb mappedWeb, DefAnalysisSets defAnalysisSets) {
+    private static void analyzeDefinition(Value value, LIRInstruction instruction, DuSequenceWeb mappedWeb, DefAnalysisInfo defAnalysisSets) {
         defAnalysisSets.destroyValuesAtLocations(Arrays.asList(value), instruction);
 
         if (mappedWeb == null) {
@@ -157,10 +159,10 @@ public class DefAnalysis {
     private static class DefAnalysisNonCopyValueConsumer implements InstructionValueConsumer {
 
         private int defOperandPosition;
-        private DefAnalysisSets defAnalysisSets;
+        private DefAnalysisInfo defAnalysisSets;
         private Map<Node, DuSequenceWeb> mapping;
 
-        public DefAnalysisNonCopyValueConsumer(DefAnalysisSets defAnalysisSets, Map<Node, DuSequenceWeb> mapping) {
+        public DefAnalysisNonCopyValueConsumer(DefAnalysisInfo defAnalysisSets, Map<Node, DuSequenceWeb> mapping) {
             defOperandPosition = 0;
             this.defAnalysisSets = defAnalysisSets;
             this.mapping = mapping;
