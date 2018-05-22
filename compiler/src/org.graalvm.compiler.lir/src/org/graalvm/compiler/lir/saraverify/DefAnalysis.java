@@ -12,6 +12,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.DebugContext.Scope;
+import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -30,7 +33,10 @@ import jdk.vm.ci.meta.ValueKind;
 
 public class DefAnalysis {
 
+    protected final static String DEBUG_SCOPE = "SARAVerifyDefAnalysis";
+
     public static DefAnalysisResult analyse(LIR lir, Map<Node, DuSequenceWeb> mapping, RegisterArray callerSaveRegisters, Map<Constant, DummyConstDef> dummyConstDefs) {
+        DebugContext debugContext = lir.getDebug();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
         // the map stores the sets after the analysis of the particular block/instruction
@@ -53,7 +59,11 @@ public class DefAnalysis {
             blockQueue.clear(blockIndex);
             AbstractBlockBase<?> block = blocks[blockIndex];
             visited.add(block);
-            System.out.println("Visit Block: " + blockIndex);
+
+            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+                System.out.println("Visit Block: " + blockIndex);
+            }
+
             DefAnalysisInfo mergedDefAnalysisSets = mergeDefAnalysisSets(blockSets, block.getPredecessors());
             computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisSets, mapping, callerSaveRegisterValues, dummyConstDefs);
             DefAnalysisInfo previousDefAnalysisSets = blockSets.get(block);
@@ -65,12 +75,16 @@ public class DefAnalysis {
                     blockQueue.set(successor.getId());
                 }
             }
-            mergedDefAnalysisSets.printSetSizes();
+
+            mergedDefAnalysisSets.logSetSizes(debugContext);
         }
 
         assert Arrays.stream(blocks).allMatch(block -> visited.contains(block)) : "Not all blocks were visited during the defAnalysis.";
 
-        System.out.println("Analysis done!");
+        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            System.out.println("Analysis done!");
+        }
+
         return new DefAnalysisResult();
     }
 

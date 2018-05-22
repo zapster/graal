@@ -7,6 +7,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.DebugContext.Scope;
+import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.LIRInstruction;
 
 import jdk.vm.ci.meta.AllocatableValue;
@@ -120,12 +123,12 @@ public class DefAnalysisInfo {
         this.evictedSet = evicted;
     }
 
-    public void printSetSizes() {
-        // TODO: remove debug
-        // use log for debugging
-        System.out.println("Location: " + locationSet.size());
-        System.out.println("Stale: " + staleSet.size());
-        System.out.println("Evicted: " + evictedSet.size());
+    public void logSetSizes(DebugContext debugContext) {
+        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DefAnalysis.DEBUG_SCOPE)) {
+            debugContext.log(3, "%s", "Location: " + locationSet.size());
+            debugContext.log(3, "%s", "Stale: " + staleSet.size());
+            debugContext.log(3, "%s", "Evicted: " + evictedSet.size());
+        }
     }
 
     // TODO: rename or add method equalsLocationAndValue(Triple) to Triple
@@ -165,8 +168,6 @@ public class DefAnalysisInfo {
                         && triple.value.equals(value));
     }
 
-    // TODO: change streams (first filter into new list, then add to set)
-    // maybe separate method for this?
     public void propagateValue(AllocatableValue result, AllocatableValue input, LIRInstruction instruction) {
         // for every triple in the location set that consists of the location "input", a new triple
         // is added to the set, where the location is the argument
