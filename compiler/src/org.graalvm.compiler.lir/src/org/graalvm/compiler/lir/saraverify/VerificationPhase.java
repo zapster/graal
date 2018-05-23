@@ -48,8 +48,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         Map<Node, DuSequenceWeb> mapping = generateMapping(lir, inputDuSequenceWebs, inputResult.getDummyRegDefs(), dummyConstDefs);
 
-        DefAnalysis defAnalysis = new DefAnalysis();
-        DefAnalysisResult defAnalysisResult = defAnalysis.analyse(lir, mapping, lirGenRes.getRegisterConfig().getCallerSaveRegisters(), dummyConstDefs);
+        DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping, lirGenRes.getRegisterConfig().getCallerSaveRegisters(), dummyConstDefs);
     }
 
     private static Map<Node, DuSequenceWeb> generateMapping(LIR lir, List<DuSequenceWeb> webs, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
