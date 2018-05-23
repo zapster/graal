@@ -85,7 +85,7 @@ public class DefAnalysisInfo {
         public String toString() {
             String s = "( " + location + ", " + value.hashCode() + ", <";
 
-            s = s + instructionSequence.stream().map(instruction -> instruction.name()).collect(Collectors.joining(", "));
+            s = s + instructionSequence.stream().map(instruction -> instruction.id() + ":" + instruction.name()).collect(Collectors.joining(", "));
 
             return s + "> )";
         }

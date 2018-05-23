@@ -47,7 +47,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         Map<Constant, DummyConstDef> dummyConstDefs = inputResult.getDummyConstDefs();
 
         Map<Node, DuSequenceWeb> mapping = generateMapping(lir, inputDuSequenceWebs, inputResult.getDummyRegDefs(), dummyConstDefs);
-        DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping, lirGenRes.getRegisterConfig().getCallerSaveRegisters(), dummyConstDefs);
+
+        DefAnalysis defAnalysis = new DefAnalysis();
+        DefAnalysisResult defAnalysisResult = defAnalysis.analyse(lir, mapping, lirGenRes.getRegisterConfig().getCallerSaveRegisters(), dummyConstDefs);
     }
 
     private static Map<Node, DuSequenceWeb> generateMapping(LIR lir, List<DuSequenceWeb> webs, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
@@ -56,10 +58,18 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         MappingDefInstructionValueConsumer defConsumer = new MappingDefInstructionValueConsumer(map, webs);
         MappingUseInstructionValueConsumer useConsumer = new MappingUseInstructionValueConsumer(map, webs);
 
+        int negativeInstructionID = -1;
+
         for (AbstractBlockBase<?> block : lir.getControlFlowGraph().getBlocks()) {
             for (LIRInstruction instruction : lir.getLIRforBlock(block)) {
                 defConsumer.defOperandPosition = 0;
                 useConsumer.useOperandPosition = 0;
+
+                // replaces id of instructions that have the id -1 with a decrementing negative id
+                if (instruction.id() == -1) {
+                    instruction.setId(negativeInstructionID);
+                    negativeInstructionID--;
+                }
 
                 if (instruction.isLoadConstantOp()) {
                     LoadConstantOp loadConstantOp = (LoadConstantOp) instruction;

@@ -101,8 +101,6 @@ public class DefAnalysis {
             tempValues.clear();
             nonCopyValueConsumer.defOperandPosition = 0;
 
-            // TODO: set id of instruction
-
             if (instruction instanceof JumpOp) {
                 // phi values from the input code are replaced by move operations in the output code
                 assert ((JumpOp) instruction).getPhiSize() == 0 : "phi in output code";
