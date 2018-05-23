@@ -8,6 +8,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.lir.ConstantValue;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
@@ -43,11 +44,15 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         }
 
         LIR lir = lirGenRes.getLIR();
+        DebugContext debugContext = lir.getDebug();
         List<DuSequenceWeb> inputDuSequenceWebs = DuSequenceAnalysis.createDuSequenceWebs(inputResult.getDuSequences());
         Map<Constant, DummyConstDef> dummyConstDefs = inputResult.getDummyConstDefs();
+        
+        if (GraphPrinter.Options.SARAVerifyGraph.getValue(debugContext.getOptions())) {
+            GraphPrinter.printGraphs(inputResult.getDuSequences(), inputDuSequenceWebs, debugContext);
+        }
 
         Map<Node, DuSequenceWeb> mapping = generateMapping(lir, inputDuSequenceWebs, inputResult.getDummyRegDefs(), dummyConstDefs);
-
         DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping, lirGenRes.getRegisterConfig().getCallerSaveRegisters(), dummyConstDefs);
     }
 

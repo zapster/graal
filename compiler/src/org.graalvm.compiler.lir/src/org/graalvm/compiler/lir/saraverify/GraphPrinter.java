@@ -14,6 +14,7 @@ import java.util.Set;
 
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.GraalError;
+import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.VirtualStackSlot;
@@ -37,20 +38,23 @@ public class GraphPrinter {
 
     public static void printGraphs(Map<Value, Set<DefNode>> inputDuSequences, List<DuSequenceWeb> inputDuSequenceWebs,
                     Map<Value, Set<DefNode>> outputDuSequences, List<DuSequenceWeb> outputDuSequenceWebs, DebugContext debugContext) {
-
         Path dir = debugContext.getDumpPath("_SARAVerifyGraphs", true);
 
-        // print input graphs
-        Path inputDir = dir.resolve("input");
-        createDirectory(inputDir);
-        printDuSequences(inputDuSequences, inputDir);
-        printDuSequenceWebs(inputDuSequenceWebs, inputDir);
+        printGraphs(inputDuSequences, inputDuSequenceWebs, dir, "input");
+        printGraphs(outputDuSequences, outputDuSequenceWebs, dir, "output");
+    }
 
-        // print output graphs
-        Path outputDir = dir.resolve("output");
-        createDirectory(outputDir);
-        printDuSequences(outputDuSequences, outputDir);
-        printDuSequenceWebs(outputDuSequenceWebs, outputDir);
+    public static void printGraphs(Map<Value, Set<DefNode>> inputDuSequences, List<DuSequenceWeb> inputDuSequenceWebs, DebugContext debugContext) {
+        Path dir = debugContext.getDumpPath("_SARAVerifyGraphs", true);
+        printGraphs(inputDuSequences, inputDuSequenceWebs, dir, "input");
+    }
+
+    private static void printGraphs(Map<Value, Set<DefNode>> duSequences, List<DuSequenceWeb> duSequenceWebs, Path dir, String folderName) {
+        // print graphs
+        Path subDir = dir.resolve(folderName);
+        createDirectory(subDir);
+        printDuSequences(duSequences, subDir);
+        printDuSequenceWebs(duSequenceWebs, subDir);
     }
 
     private static void printDuSequences(Map<Value, Set<DefNode>> duSequences, Path dir) {
@@ -121,7 +125,8 @@ public class GraphPrinter {
                             + getValueLabel(moveNode.getResult()) + " = " + getValueLabel(moveNode.getInput());
         }
 
-        return nodeLabel + "\\n" + node.getInstruction().name() + " (" + System.identityHashCode(node.getInstruction()) + ")";
+        LIRInstruction instruction = node.getInstruction();
+        return nodeLabel + "\\n  " + instruction.id() + ": " + instruction.name() + " (" + System.identityHashCode(instruction) + ")";
     }
 
     private static String getValueLabel(Value value) {
