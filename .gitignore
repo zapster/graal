@@ -5,6 +5,8 @@
 *.class
 *.csv
 *.dot
+*.gv
+*.gv.svg
 *.hprof
 *.iml
 *.jar
