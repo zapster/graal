@@ -257,6 +257,11 @@ public class ValueHashMap<T> implements Map<Value, T> {
         return result;
     }
 
+    @Override
+    public String toString() {
+        return entrySet().stream().map(entry -> entry.toString()).collect(Collectors.joining(","));
+    }
+
     private static Value getRegisterValue(Value value) {
         if (value.getValueKind().equals(ValueKind.Illegal)) {
             return value;
@@ -328,5 +333,9 @@ public class ValueHashMap<T> implements Map<Value, T> {
             throw GraalError.unimplemented("ValueHashMapEntry.setValue(V value) is not implemented.");
         }
 
+        @Override
+        public String toString() {
+            return key.toString() + "=" + value.toString();
+        }
     }
 }
