@@ -1,5 +1,5 @@
-# com.oracle.truffle.sl.test.SLFactorialTest
-com.oracle.truffle.*
-org.graalvm.compiler.jtt.bytecode.BC_multianewarray03
-
-
+org.graalvm.compiler.jtt.lang.Math_log
+org.graalvm.compiler.jtt.lang.Math_pow
+org.graalvm.compiler.jtt.lang.Math_exp
+org.graalvm.compiler.lir.jtt.saraverify.faultinjection.*
+org.graalvm.compiler.lir.jtt.saraverify.VerificationTest
