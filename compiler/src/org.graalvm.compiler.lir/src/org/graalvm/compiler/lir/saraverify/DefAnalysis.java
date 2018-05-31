@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -65,8 +66,23 @@ public class DefAnalysis {
                 System.out.println("Visit Block: " + blockIndex);
             }
 
-            DefAnalysisInfo mergedDefAnalysisSets = mergeDefAnalysisSets(blockSets, block.getPredecessors());
-            computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisSets, mapping, callerSaveRegisterValues, dummyConstDefs);
+            DefAnalysisInfo mergedDefAnalysisSets;
+            if (blockIndex == 0) {
+                mergedDefAnalysisSets = new DefAnalysisInfo();
+
+                // add locations of constants
+                for (Entry<Constant, DummyConstDef> entry : dummyConstDefs.entrySet()) {
+                    Value constantValue = SARAVerifyUtil.asConstantValue(entry.getKey());
+                    LIRInstruction dummyConstDef = entry.getValue();
+
+                    DefNode defNode = new DefNode(constantValue, dummyConstDef, 0);
+                    DuSequenceWeb web = mapping.get(defNode);
+                    mergedDefAnalysisSets.addLocation(constantValue, web, dummyConstDef, false);
+                }
+            } else {
+                mergedDefAnalysisSets = mergeDefAnalysisSets(blockSets, block.getPredecessors());
+            }
+            computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisSets, mapping, callerSaveRegisterValues);
             DefAnalysisInfo previousDefAnalysisSets = blockSets.get(block);
 
             if (!mergedDefAnalysisSets.equals(previousDefAnalysisSets)) {
@@ -90,7 +106,7 @@ public class DefAnalysis {
     }
 
     private static void computeLocalFlow(ArrayList<LIRInstruction> instructions, DefAnalysisInfo defAnalysisSets,
-                    Map<Node, DuSequenceWeb> mapping, List<Value> callerSaveRegisterValues, Map<Constant, DummyConstDef> dummyConstDefs) {
+                    Map<Node, DuSequenceWeb> mapping, List<Value> callerSaveRegisterValues) {
 
         List<Value> tempValues = new ArrayList<>();
 
@@ -121,17 +137,8 @@ public class DefAnalysis {
                 defAnalysisSets.propagateValue(valueMoveOp.getResult(), valueMoveOp.getInput(), instruction);
             } else if (instruction.isLoadConstantOp()) {
                 LoadConstantOp loadConstantOp = (LoadConstantOp) instruction;
-                Constant constant = loadConstantOp.getConstant();
-                Value result = loadConstantOp.getResult();
 
-                DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
-                assert dummyConstDef != null : "No dummy definition for constant: " + loadConstantOp.getConstant() + ".";
-
-                // get mapping
-                DefNode defNode = new DefNode(SARAVerifyUtil.asConstantValue(constant), dummyConstDef, 0);
-                DuSequenceWeb mappedWeb = mapping.get(defNode);
-
-                analyzeDefinition(result, instruction, mappedWeb, defAnalysisSets);
+                defAnalysisSets.propagateValue(loadConstantOp.getResult(), SARAVerifyUtil.asConstantValue(loadConstantOp.getConstant()), instruction);
             } else {
                 instruction.visitEachOutput(nonCopyValueConsumer);
             }
@@ -172,7 +179,7 @@ public class DefAnalysis {
             return;
         }
 
-        defAnalysisSets.addLocation(value, mappedWeb, instruction);
+        defAnalysisSets.addLocation(value, mappedWeb, instruction, true);
         defAnalysisSets.removeFromEvicted(value, mappedWeb);
     }
 

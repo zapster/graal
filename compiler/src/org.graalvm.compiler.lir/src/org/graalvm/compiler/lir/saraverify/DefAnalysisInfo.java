@@ -156,18 +156,20 @@ public class DefAnalysisInfo {
         return evictedUnionStream.collect(Collectors.toSet());
     }
 
-    public void addLocation(Value locationValue, DuSequenceWeb value, LIRInstruction instruction) {
-        // find triples in the location set that hold the value in a different location than the
-        // location from the argument
-        List<Triple> staleTriples = locationSet.stream()     //
-                        .filter(triple -> triple.value.equals(value) && !triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(locationValue))) //
-                        .collect(Collectors.toList());
+    public void addLocation(Value location, DuSequenceWeb value, LIRInstruction instruction, boolean addStaleValues) {
+        if (addStaleValues) {
+            // find triples in the location set that hold the value in a different location than the
+            // location from the argument
+            List<Triple> staleTriples = locationSet.stream()     //
+                            .filter(triple -> triple.value.equals(value) && !triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(location))) //
+                            .collect(Collectors.toList());
 
-        // add triples to the stale set for each stale value
-        staleTriples.forEach(triple -> staleSet.add(new Triple(triple.location, triple.value, instruction)));
+            // add triples to the stale set for each stale value
+            staleTriples.forEach(triple -> staleSet.add(new Triple(triple.location, triple.value, instruction)));
+        }
 
         // add a triple to the location set for the defined value
-        locationSet.add(new Triple(locationValue, value, instruction));
+        locationSet.add(new Triple(location, value, instruction));
     }
 
     public void removeFromEvicted(Value locationValue, DuSequenceWeb value) {
@@ -177,7 +179,7 @@ public class DefAnalysisInfo {
                         && triple.value.equals(value));
     }
 
-    public void propagateValue(AllocatableValue result, AllocatableValue input, LIRInstruction instruction) {
+    public void propagateValue(AllocatableValue result, Value input, LIRInstruction instruction) {
         // for every triple in the location set that consists of the location "input", a new triple
         // is added to the set, where the location is the argument
         // "result" and the copy instruction is added to the instruction sequence
