@@ -126,7 +126,7 @@ public class GraphPrinter {
         }
 
         LIRInstruction instruction = node.getInstruction();
-        return nodeLabel + "\\n  " + instruction.id() + ": " + instruction.name() + " (" + System.identityHashCode(instruction) + ")";
+        return nodeLabel + "\\n  " + instruction.id() + ": " + instruction.name() + " (" + String.format("0x%h", System.identityHashCode(instruction)) + ")";
     }
 
     private static String getValueLabel(Value value) {

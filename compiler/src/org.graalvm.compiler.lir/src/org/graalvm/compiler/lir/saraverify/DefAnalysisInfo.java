@@ -83,7 +83,7 @@ public class DefAnalysisInfo {
 
         @Override
         public String toString() {
-            String s = "( " + location + ", " + value.hashCode() + ", <";
+            String s = "( " + location + ", " + String.format("0x%h", value.hashCode()) + ", <";
 
             s = s + instructionSequence.stream().map(instruction -> instruction.id() + ":" + instruction.name()).collect(Collectors.joining(", "));
 
