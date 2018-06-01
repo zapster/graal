@@ -24,6 +24,7 @@ import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 import org.graalvm.compiler.lir.phases.LIRPhase;
 
 import jdk.vm.ci.code.Register;
+import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.Constant;
@@ -47,13 +48,16 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         DebugContext debugContext = lir.getDebug();
         List<DuSequenceWeb> inputDuSequenceWebs = DuSequenceAnalysis.createDuSequenceWebs(inputResult.getDuSequences());
         Map<Constant, DummyConstDef> dummyConstDefs = inputResult.getDummyConstDefs();
-        
+
         if (GraphPrinter.Options.SARAVerifyGraph.getValue(debugContext.getOptions())) {
             GraphPrinter.printGraphs(inputResult.getDuSequences(), inputDuSequenceWebs, debugContext);
         }
 
+        RegisterArray callerSaveRegisters = lirGenRes.getRegisterConfig().getCallerSaveRegisters();
+
         Map<Node, DuSequenceWeb> mapping = generateMapping(lir, inputDuSequenceWebs, inputResult.getDummyRegDefs(), dummyConstDefs);
-        DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping, lirGenRes.getRegisterConfig().getCallerSaveRegisters(), dummyConstDefs);
+        DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping, callerSaveRegisters, dummyConstDefs);
+        ErrorAnalysis.analyse(lir, defAnalysisResult, mapping, dummyConstDefs, callerSaveRegisters);
     }
 
     private static Map<Node, DuSequenceWeb> generateMapping(LIR lir, List<DuSequenceWeb> webs, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {

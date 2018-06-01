@@ -119,35 +119,41 @@ public class DefAnalysis {
         DefAnalysisTempValueConsumer tempValueConsumer = new DefAnalysisTempValueConsumer(tempValues);
 
         for (LIRInstruction instruction : instructions) {
-            tempValues.clear();
-            nonCopyValueConsumer.defOperandPosition = 0;
+            computeLocalFlowInstruction(defAnalysisInfo, callerSaveRegisterValues, tempValues, nonCopyValueConsumer, tempValueConsumer, instruction);
+        }
+    }
 
-            if (instruction instanceof JumpOp) {
-                // phi values from the input code are replaced by move operations in the output code
-                assert ((JumpOp) instruction).getPhiSize() == 0 : "phi in output code";
-            }
+    protected static void computeLocalFlowInstruction(DefAnalysisInfo defAnalysisInfo, List<Value> callerSaveRegisterValues, List<Value> tempValues,
+                    DefAnalysisNonCopyValueConsumer nonCopyValueConsumer,
+                    DefAnalysisTempValueConsumer tempValueConsumer, LIRInstruction instruction) {
+        tempValues.clear();
+        nonCopyValueConsumer.defOperandPosition = 0;
 
-            if (instruction.destroysCallerSavedRegisters()) {
-                defAnalysisInfo.destroyValuesAtLocations(callerSaveRegisterValues, instruction);
-            }
+        if (instruction instanceof JumpOp) {
+            // phi values from the input code are replaced by move operations in the output code
+            assert ((JumpOp) instruction).getPhiSize() == 0 : "phi in output code";
+        }
 
-            // temp values are treated like caller saved registers
-            instruction.visitEachTemp(tempValueConsumer);
-            defAnalysisInfo.destroyValuesAtLocations(tempValues, instruction);
+        if (instruction.destroysCallerSavedRegisters()) {
+            defAnalysisInfo.destroyValuesAtLocations(callerSaveRegisterValues, instruction);
+        }
 
-            if (instruction.isValueMoveOp()) {
-                // copy instruction
-                ValueMoveOp valueMoveOp = (ValueMoveOp) instruction;
+        // temp values are treated like caller saved registers
+        instruction.visitEachTemp(tempValueConsumer);
+        defAnalysisInfo.destroyValuesAtLocations(tempValues, instruction);
 
-                defAnalysisInfo.propagateValue(valueMoveOp.getResult(), valueMoveOp.getInput(), instruction);
-            } else if (instruction.isLoadConstantOp()) {
-                LoadConstantOp loadConstantOp = (LoadConstantOp) instruction;
+        if (instruction.isValueMoveOp()) {
+            // copy instruction
+            ValueMoveOp valueMoveOp = (ValueMoveOp) instruction;
 
-                defAnalysisInfo.propagateValue(loadConstantOp.getResult(), SARAVerifyUtil.asConstantValue(loadConstantOp.getConstant()), instruction);
-            } else {
-                // non copy instruction
-                instruction.visitEachOutput(nonCopyValueConsumer);
-            }
+            defAnalysisInfo.propagateValue(valueMoveOp.getResult(), valueMoveOp.getInput(), instruction);
+        } else if (instruction.isLoadConstantOp()) {
+            LoadConstantOp loadConstantOp = (LoadConstantOp) instruction;
+
+            defAnalysisInfo.propagateValue(loadConstantOp.getResult(), SARAVerifyUtil.asConstantValue(loadConstantOp.getConstant()), instruction);
+        } else {
+            // non copy instruction
+            instruction.visitEachOutput(nonCopyValueConsumer);
         }
     }
 
@@ -195,7 +201,7 @@ public class DefAnalysis {
         defAnalysisInfo.removeFromEvicted(result, mappedWeb);
     }
 
-    private static class DefAnalysisNonCopyValueConsumer implements InstructionValueConsumer {
+    protected static class DefAnalysisNonCopyValueConsumer implements InstructionValueConsumer {
 
         private int defOperandPosition;
         private DefAnalysisInfo defAnalysisSets;
@@ -223,7 +229,7 @@ public class DefAnalysis {
 
     }
 
-    private static class DefAnalysisTempValueConsumer implements InstructionValueConsumer {
+    protected static class DefAnalysisTempValueConsumer implements InstructionValueConsumer {
 
         private List<Value> tempValues;
 
