@@ -35,6 +35,18 @@ public class DefAnalysisInfo {
             this.instructionSequence = instructionSequence;
         }
 
+        public Value getLocation() {
+            return location;
+        }
+
+        public DuSequenceWeb getValue() {
+            return value;
+        }
+
+        public ArrayList<LIRInstruction> getInstructionSequence() {
+            return new ArrayList<>(instructionSequence);
+        }
+
         @Override
         public int hashCode() {
             final int prime = 31;
@@ -154,6 +166,18 @@ public class DefAnalysisInfo {
     public static Set<Triple> evictedSetUnion(List<DefAnalysisInfo> defAnalysisSets) {
         Stream<Triple> evictedUnionStream = defAnalysisSets.stream().flatMap(sets -> sets.evictedSet.stream());
         return evictedUnionStream.collect(Collectors.toSet());
+    }
+
+    public List<Triple> getLocationTriples(DuSequenceWeb value) {
+        return locationSet.stream().filter(triple -> triple.value.equals(value)).collect(Collectors.toList());
+    }
+
+    public List<Triple> getEvictedTriples(DuSequenceWeb value) {
+        return evictedSet.stream().filter(triple -> triple.value.equals(value)).collect(Collectors.toList());
+    }
+
+    public Triple getStaleTriple(Value location, DuSequenceWeb value) {
+        return staleSet.stream().filter(triple -> triple.location.equals(location) && triple.value.equals(value)).findFirst().orElse(null);
     }
 
     public void addLocation(Value location, DuSequenceWeb value, LIRInstruction instruction, boolean addStaleValues) {
