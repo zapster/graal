@@ -43,7 +43,7 @@ public class DefAnalysis {
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
         // the map stores the sets after the analysis of the particular block/instruction
-        Map<AbstractBlockBase<?>, DefAnalysisInfo> blockSets = new HashMap<>();
+        Map<AbstractBlockBase<?>, DefAnalysisInfo> blockInfos = new HashMap<>();
 
         // create a list of register values with value kind illegal of caller saved registers
         List<Value> callerSaveRegisterValues = callerSaveRegisters.asList() //
@@ -70,24 +70,16 @@ public class DefAnalysis {
             DefAnalysisInfo mergedDefAnalysisInfo;
             if (blockIndex == 0) {
                 mergedDefAnalysisInfo = new DefAnalysisInfo();
-
-                // add locations of constants
-                for (Entry<Constant, DummyConstDef> entry : dummyConstDefs.entrySet()) {
-                    Value constantValue = SARAVerifyUtil.asConstantValue(entry.getKey());
-                    LIRInstruction dummyConstDef = entry.getValue();
-
-                    DefNode defNode = new DefNode(constantValue, dummyConstDef, 0);
-                    DuSequenceWeb web = mapping.get(defNode);
-                    mergedDefAnalysisInfo.addLocation(constantValue, web, dummyConstDef, false);
-                }
+                initializeDefAnalysisInfoWithConstants(mapping, dummyConstDefs, mergedDefAnalysisInfo);
             } else {
-                mergedDefAnalysisInfo = mergeDefAnalysisInfo(blockSets, block.getPredecessors());
+                mergedDefAnalysisInfo = mergeDefAnalysisInfo(blockInfos, block.getPredecessors());
             }
+
             computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisInfo, mapping, callerSaveRegisterValues);
-            DefAnalysisInfo previousDefAnalysisSets = blockSets.get(block);
+            DefAnalysisInfo previousDefAnalysisSets = blockInfos.get(block);
 
             if (!mergedDefAnalysisInfo.equals(previousDefAnalysisSets)) {
-                blockSets.put(block, mergedDefAnalysisInfo);
+                blockInfos.put(block, mergedDefAnalysisInfo);
 
                 for (AbstractBlockBase<?> successor : block.getSuccessors()) {
                     blockQueue.set(successor.getId());
@@ -103,7 +95,19 @@ public class DefAnalysis {
             System.out.println("Analysis done!");
         }
 
-        return new DefAnalysisResult(blockSets);
+        return new DefAnalysisResult(blockInfos);
+    }
+
+    protected static void initializeDefAnalysisInfoWithConstants(Map<Node, DuSequenceWeb> mapping, Map<Constant, DummyConstDef> dummyConstDefs, DefAnalysisInfo defAnalysisInfo) {
+        // add locations of constants
+        for (Entry<Constant, DummyConstDef> entry : dummyConstDefs.entrySet()) {
+            Value constantValue = SARAVerifyUtil.asConstantValue(entry.getKey());
+            LIRInstruction dummyConstDef = entry.getValue();
+
+            DefNode defNode = new DefNode(constantValue, dummyConstDef, 0);
+            DuSequenceWeb web = mapping.get(defNode);
+            defAnalysisInfo.addLocation(constantValue, web, dummyConstDef, false);
+        }
     }
 
     private static void computeLocalFlow(ArrayList<LIRInstruction> instructions, DefAnalysisInfo defAnalysisInfo,
@@ -147,7 +151,7 @@ public class DefAnalysis {
         }
     }
 
-    private static <T> DefAnalysisInfo mergeDefAnalysisInfo(Map<T, DefAnalysisInfo> map, T[] mergeKeys) {
+    protected static <T> DefAnalysisInfo mergeDefAnalysisInfo(Map<T, DefAnalysisInfo> map, T[] mergeKeys) {
         List<DefAnalysisInfo> defAnalysisInfo = new ArrayList<>();
 
         for (T key : mergeKeys) {

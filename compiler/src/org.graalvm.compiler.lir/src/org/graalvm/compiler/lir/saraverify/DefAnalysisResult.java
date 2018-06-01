@@ -6,14 +6,14 @@ import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 
 public class DefAnalysisResult {
 
-    private Map<AbstractBlockBase<?>, DefAnalysisInfo> blockSets;
+    private Map<AbstractBlockBase<?>, DefAnalysisInfo> blockInfos;
 
-    public DefAnalysisResult(Map<AbstractBlockBase<?>, DefAnalysisInfo> blockSets) {
-        this.blockSets = blockSets;
+    public DefAnalysisResult(Map<AbstractBlockBase<?>, DefAnalysisInfo> blockInfos) {
+        this.blockInfos = blockInfos;
     }
 
     public Map<AbstractBlockBase<?>, DefAnalysisInfo> getBlockSets() {
-        return blockSets;
+        return blockInfos;
     }
 
 }

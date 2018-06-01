@@ -13,18 +13,28 @@ import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.saraverify.DefAnalysisInfo.Triple;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
 
+import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.Value;
 
 public class ErrorAnalysis {
 
-    public static void analyse(LIR lir, DefAnalysisResult defAnalysisResult, Map<Node, DuSequenceWeb> mapping) {
+    public static void analyse(LIR lir, DefAnalysisResult defAnalysisResult, Map<Node, DuSequenceWeb> mapping, Map<Constant, DummyConstDef> dummyConstDefs) {
+
+        Map<AbstractBlockBase<?>, DefAnalysisInfo> blockInfos = defAnalysisResult.getBlockSets();
 
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
         for (AbstractBlockBase<?> block : blocks) {
 
-            // TODO: merge of DefAnalysisInfo
-            DefAnalysisInfo defAnalysisInfo = new DefAnalysisInfo();
+            DefAnalysisInfo defAnalysisInfo;
+            if (block.getId() == 0) {
+                defAnalysisInfo = new DefAnalysisInfo();
+                DefAnalysis.initializeDefAnalysisInfoWithConstants(mapping, dummyConstDefs, defAnalysisInfo);
+            } else {
+                defAnalysisInfo = DefAnalysis.mergeDefAnalysisInfo(blockInfos, block.getPredecessors());
+            }
+
             ErrorAnalysisValueConsumer errorAnalysisValueConsumer = new ErrorAnalysisValueConsumer(mapping, defAnalysisInfo);
 
             ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
