@@ -28,7 +28,10 @@ public class SARAVerifyUtil {
 
         instruction.visitEachAlive(useConsumer);
         instruction.visitEachState(useConsumer);
-        instruction.visitEachOutput(defConsumer);
+
+        if (defConsumer != null) {
+            instruction.visitEachOutput(defConsumer);
+        }
 
 // // caller saved registers are handled like temp values
 // if (instruction.destroysCallerSavedRegisters()) {

@@ -11,6 +11,7 @@ import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.LIRInstruction;
+import org.graalvm.compiler.lir.LIRValueUtil;
 
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Value;
@@ -169,7 +170,7 @@ public class DefAnalysisInfo {
     }
 
     public List<Triple> getLocationTriples(DuSequenceWeb value) {
-        return locationSet.stream().filter(triple -> triple.value.equals(value)).collect(Collectors.toList());
+        return locationSet.stream().filter(triple -> !LIRValueUtil.isConstantValue(triple.location) && triple.value.equals(value)).collect(Collectors.toList());
     }
 
     public List<Triple> getEvictedTriples(DuSequenceWeb value) {

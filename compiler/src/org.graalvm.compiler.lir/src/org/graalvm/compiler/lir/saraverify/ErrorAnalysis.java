@@ -60,7 +60,7 @@ public class ErrorAnalysis {
                 if (!instruction.isMoveOp()) {
                     // non copy instruction
                     // error analysis
-                    instruction.visitEachInput(errorAnalysisValueConsumer);
+                    SARAVerifyUtil.visitValues(instruction, null, errorAnalysisValueConsumer);
                 }
 
                 // compute local flow
