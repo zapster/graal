@@ -14,6 +14,8 @@ import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.DebugContext.Scope;
+import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -83,6 +85,10 @@ public class DefAnalysis {
                 }
             }
 
+            // log information
+            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+                debugContext.log(3, "Visited Block: %d", blockIndex);
+            }
             mergedDefAnalysisInfo.logSetSizes(debugContext);
         }
 

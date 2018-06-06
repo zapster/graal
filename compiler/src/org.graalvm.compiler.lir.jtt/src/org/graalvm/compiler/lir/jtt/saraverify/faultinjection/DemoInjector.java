@@ -1,5 +1,7 @@
 package org.graalvm.compiler.lir.jtt.saraverify.faultinjection;
 
+import java.util.ArrayList;
+
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -12,24 +14,65 @@ import jdk.vm.ci.meta.Value;
 
 class DemoInjector extends AllocationPhase {
 
+    public DemoWrongOperandInjector getDemoWrongOperandInjector() {
+        return new DemoWrongOperandInjector();
+    }
+
+    public DemoEvictedInjector geDemoEvictedInjector() {
+        return new DemoEvictedInjector();
+    }
+
+    private class DemoWrongOperandInjector extends DemoInjector {
+        @Override
+        protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+            LIR lir = lirGenRes.getLIR();
+
+            if (lir.getControlFlowGraph().getBlocks().length == 1) {
+                return;
+            }
+
+            // get start block
+            AbstractBlockBase<?> block0 = lir.getControlFlowGraph().getStartBlock();
+            // get Block 1 (else branch)
+            AbstractBlockBase<?> block1 = lir.getControlFlowGraph().getBlocks()[1];
+
+            LabelOp labelOp = (LabelOp) lir.getLIRforBlock(block0).get(0);
+            Value n = labelOp.getIncomingValue(0);
+
+            LIRInstruction move = lir.getLIRforBlock(block1).get(1);
+
+            move.forEachOutput((operand, mode, flags) -> n);
+
+            lirGenRes.setComment(move, "injected");
+        }
+    }
+
+    private class DemoEvictedInjector extends DemoInjector {
+        @Override
+        protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+            LIR lir = lirGenRes.getLIR();
+
+            if (lir.getControlFlowGraph().getBlocks().length == 1) {
+                return;
+            }
+
+            // get start block
+            AbstractBlockBase<?> block0 = lir.getControlFlowGraph().getStartBlock();
+
+            ArrayList<LIRInstruction> instructionsB0 = lir.getLIRforBlock(block0);
+            LabelOp labelOp = (LabelOp) instructionsB0.get(0);
+            Value n = labelOp.getIncomingValue(0);
+
+            LIRInstruction cmp = instructionsB0.get(instructionsB0.size() - 2);
+
+            cmp.forEachInput((operand, mode, flags) -> n);
+
+            lirGenRes.setComment(cmp, "injected");
+        }
+    }
+
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
-        LIR lir = lirGenRes.getLIR();
-
-        if (lir.getControlFlowGraph().getBlocks().length == 1) {
-            return;
-        }
-
-        // get start block
-        AbstractBlockBase<?> block0 = lir.getControlFlowGraph().getStartBlock();
-        // get Block 1 (else branch)
-        AbstractBlockBase<?> block1 = lir.getControlFlowGraph().getBlocks()[1];
-
-        LabelOp labelOp = (LabelOp) lir.getLIRforBlock(block0).get(0);
-        Value n = labelOp.getIncomingValue(0);
-
-        LIRInstruction move = lir.getLIRforBlock(block1).get(1);
-
-        move.forEachOutput((operand, mode, flags) -> n);
+        return;
     }
 }

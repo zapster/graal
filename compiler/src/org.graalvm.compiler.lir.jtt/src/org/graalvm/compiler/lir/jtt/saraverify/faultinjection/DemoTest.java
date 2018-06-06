@@ -3,26 +3,28 @@ package org.graalvm.compiler.lir.jtt.saraverify.faultinjection;
 import java.util.ListIterator;
 
 import org.graalvm.compiler.api.directives.GraalDirectives;
-import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.jtt.JTTTest;
 import org.graalvm.compiler.lir.alloc.RegisterAllocationPhase;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
 import org.graalvm.compiler.lir.phases.LIRSuites;
+import org.graalvm.compiler.lir.saraverify.SARAVerifyError;
 import org.graalvm.compiler.options.OptionValues;
-import org.junit.Rule;
+import org.junit.Assert;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
 public class DemoTest extends JTTTest {
 
-    @Rule public ExpectedException thrown = ExpectedException.none();
+    public static final String BOLD_RED = "\u001b[31;1m";
+    public static final String RESET = "\u001b[0m";
+    public static final DemoInjector demoInjector = new DemoInjector();
 
-    public static int test(int n) {
+    public static int test(int n, int x) {
+        GraalDirectives.spillRegisters();
         int m;
         if (n > 0) {
             GraalDirectives.controlFlowAnchor();
-            m = 5;
+            m = x;
         } else {
             m = 42;
         }
@@ -32,10 +34,29 @@ public class DemoTest extends JTTTest {
 
     @Test
     public void run0() throws Throwable {
-        thrown.expect(GraalError.class);
-        thrown.expectMessage("Used register rax is not defined.");
-        runTest("test", 1);
+        try {
+            runTest("test", 1, 5);
+        } catch (SARAVerifyError error) {
+            System.err.println(BOLD_RED);
+            System.err.println(error.getMessage());
+            System.err.println(RESET);
+            Assert.assertTrue(false);
+        }
+
+        // TODO: catch own exception; assert.fail("...");
     }
+
+// @Override
+// protected LIRSuites createLIRSuites(OptionValues opts) {
+// LIRSuites lirSuites = super.createLIRSuites(opts);
+//
+// ListIterator<LIRPhase<AllocationContext>> phase =
+// lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
+// assert phase != null;
+// phase.add(demoInjector.getDemoWrongOperandInjector());
+//
+// return lirSuites;
+// }
 
     @Override
     protected LIRSuites createLIRSuites(OptionValues opts) {
@@ -43,7 +64,7 @@ public class DemoTest extends JTTTest {
 
         ListIterator<LIRPhase<AllocationContext>> phase = lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
         assert phase != null;
-        phase.add(new DemoInjector());
+        phase.add(demoInjector.geDemoEvictedInjector());
 
         return lirSuites;
     }
