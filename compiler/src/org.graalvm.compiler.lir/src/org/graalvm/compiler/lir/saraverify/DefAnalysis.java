@@ -14,8 +14,6 @@ import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.debug.DebugContext;
-import org.graalvm.compiler.debug.DebugContext.Scope;
-import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -63,10 +61,6 @@ public class DefAnalysis {
             AbstractBlockBase<?> block = blocks[blockIndex];
             visited.add(block);
 
-            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                System.out.println("Visit Block: " + blockIndex);
-            }
-
             DefAnalysisInfo mergedDefAnalysisInfo;
             if (blockIndex == 0) {
                 mergedDefAnalysisInfo = new DefAnalysisInfo();
@@ -90,10 +84,6 @@ public class DefAnalysis {
         }
 
         assert Arrays.stream(blocks).allMatch(block -> visited.contains(block)) : "Not all blocks were visited during the defAnalysis.";
-
-        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-            System.out.println("Analysis done!");
-        }
 
         return new DefAnalysisResult(blockInfos);
     }
