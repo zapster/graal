@@ -17,7 +17,9 @@ import org.graalvm.compiler.lir.saraverify.DefAnalysis.DefAnalysisNonCopyValueCo
 import org.graalvm.compiler.lir.saraverify.DefAnalysis.DefAnalysisTempValueConsumer;
 import org.graalvm.compiler.lir.saraverify.DefAnalysisInfo.Triple;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 
+import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.Constant;
@@ -26,7 +28,8 @@ import jdk.vm.ci.meta.ValueKind;
 
 public class ErrorAnalysis {
 
-    public static void analyse(LIR lir, DefAnalysisResult defAnalysisResult, Map<Node, DuSequenceWeb> mapping, Map<Constant, DummyConstDef> dummyConstDefs, RegisterArray callerSaveRegisters) {
+    public static void analyse(LIR lir, DefAnalysisResult defAnalysisResult, Map<Node, DuSequenceWeb> mapping, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs,
+                    RegisterArray callerSaveRegisters) {
 
         Map<AbstractBlockBase<?>, DefAnalysisInfo> blockInfos = defAnalysisResult.getBlockSets();
 
@@ -42,7 +45,7 @@ public class ErrorAnalysis {
             DefAnalysisInfo defAnalysisInfo;
             if (block.getId() == 0) {
                 defAnalysisInfo = new DefAnalysisInfo();
-                DefAnalysis.initializeDefAnalysisInfoWithConstants(mapping, dummyConstDefs, defAnalysisInfo);
+                DefAnalysis.initializeDefAnalysisInfo(mapping, dummyRegDefs, dummyConstDefs, defAnalysisInfo);
             } else {
                 defAnalysisInfo = DefAnalysis.mergeDefAnalysisInfo(blockInfos, block.getPredecessors());
             }

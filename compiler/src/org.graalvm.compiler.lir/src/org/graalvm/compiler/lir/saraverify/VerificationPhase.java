@@ -48,6 +48,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         DebugContext debugContext = lir.getDebug();
         List<DuSequenceWeb> inputDuSequenceWebs = DuSequenceAnalysis.createDuSequenceWebs(inputResult.getDuSequences());
         Map<Constant, DummyConstDef> dummyConstDefs = inputResult.getDummyConstDefs();
+        Map<Register, DummyRegDef> dummyRegDefs = inputResult.getDummyRegDefs();
 
         if (GraphPrinter.Options.SARAVerifyGraph.getValue(debugContext.getOptions())) {
             GraphPrinter.printGraphs(inputResult.getDuSequences(), inputDuSequenceWebs, debugContext);
@@ -55,9 +56,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         RegisterArray callerSaveRegisters = lirGenRes.getRegisterConfig().getCallerSaveRegisters();
 
-        Map<Node, DuSequenceWeb> mapping = generateMapping(lir, inputDuSequenceWebs, inputResult.getDummyRegDefs(), dummyConstDefs);
-        DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping, callerSaveRegisters, dummyConstDefs);
-        ErrorAnalysis.analyse(lir, defAnalysisResult, mapping, dummyConstDefs, callerSaveRegisters);
+        Map<Node, DuSequenceWeb> mapping = generateMapping(lir, inputDuSequenceWebs, dummyRegDefs, dummyConstDefs);
+        DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping, callerSaveRegisters, dummyRegDefs, dummyConstDefs);
+        ErrorAnalysis.analyse(lir, defAnalysisResult, mapping, dummyRegDefs, dummyConstDefs, callerSaveRegisters);
     }
 
     private static Map<Node, DuSequenceWeb> generateMapping(LIR lir, List<DuSequenceWeb> webs, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {

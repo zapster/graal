@@ -24,7 +24,9 @@ import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.saraverify.DefAnalysisInfo.Triple;
 import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyConstDef;
+import org.graalvm.compiler.lir.saraverify.DuSequenceAnalysis.DummyRegDef;
 
+import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.RegisterArray;
 import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
@@ -36,7 +38,8 @@ public class DefAnalysis {
 
     protected final static String DEBUG_SCOPE = "SARAVerifyDefAnalysis";
 
-    public static DefAnalysisResult analyse(LIR lir, Map<Node, DuSequenceWeb> mapping, RegisterArray callerSaveRegisters, Map<Constant, DummyConstDef> dummyConstDefs) {
+    public static DefAnalysisResult analyse(LIR lir, Map<Node, DuSequenceWeb> mapping, RegisterArray callerSaveRegisters, Map<Register, DummyRegDef> dummyRegDefs,
+                    Map<Constant, DummyConstDef> dummyConstDefs) {
         DebugContext debugContext = lir.getDebug();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
@@ -64,7 +67,7 @@ public class DefAnalysis {
             DefAnalysisInfo mergedDefAnalysisInfo;
             if (blockIndex == 0) {
                 mergedDefAnalysisInfo = new DefAnalysisInfo();
-                initializeDefAnalysisInfoWithConstants(mapping, dummyConstDefs, mergedDefAnalysisInfo);
+                initializeDefAnalysisInfo(mapping, dummyRegDefs, dummyConstDefs, mergedDefAnalysisInfo);
             } else {
                 mergedDefAnalysisInfo = mergeDefAnalysisInfo(blockInfos, block.getPredecessors());
             }
@@ -88,7 +91,8 @@ public class DefAnalysis {
         return new DefAnalysisResult(blockInfos);
     }
 
-    protected static void initializeDefAnalysisInfoWithConstants(Map<Node, DuSequenceWeb> mapping, Map<Constant, DummyConstDef> dummyConstDefs, DefAnalysisInfo defAnalysisInfo) {
+    protected static void initializeDefAnalysisInfo(Map<Node, DuSequenceWeb> mapping, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs,
+                    DefAnalysisInfo defAnalysisInfo) {
         // add locations of constants
         for (Entry<Constant, DummyConstDef> entry : dummyConstDefs.entrySet()) {
             Value constantValue = SARAVerifyUtil.asConstantValue(entry.getKey());
@@ -97,6 +101,16 @@ public class DefAnalysis {
             DefNode defNode = new DefNode(constantValue, dummyConstDef, 0);
             DuSequenceWeb web = mapping.get(defNode);
             defAnalysisInfo.addLocation(constantValue, web, dummyConstDef, false);
+        }
+
+        // add location of non allocatable registers
+        for (Entry<Register, DummyRegDef> entry : dummyRegDefs.entrySet()) {
+            DummyRegDef dummyRegDef = entry.getValue();
+            AllocatableValue value = dummyRegDef.value;
+            DefNode defNode = new DefNode(value, dummyRegDef, 0);
+            DuSequenceWeb mappedWeb = mapping.get(defNode);
+
+            defAnalysisInfo.addLocation(value, mappedWeb, dummyRegDef, false);
         }
     }
 
