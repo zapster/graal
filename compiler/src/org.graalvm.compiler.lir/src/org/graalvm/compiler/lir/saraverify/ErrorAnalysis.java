@@ -7,13 +7,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
-import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
-import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
+import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.saraverify.DefAnalysis.DefAnalysisNonCopyValueConsumer;
 import org.graalvm.compiler.lir.saraverify.DefAnalysis.DefAnalysisTempValueConsumer;
 import org.graalvm.compiler.lir.saraverify.DefAnalysisInfo.Triple;
@@ -77,8 +76,9 @@ public class ErrorAnalysis {
         assert mappedWeb != null : "no mapping found for usage";
 
         List<Triple> locationTriples = defAnalysisInfo.getLocationTriples(mappedWeb);
-
         Value location = SARAVerifyUtil.getValueIllegalValueKind(value);
+
+        StringBuilder stringBuilder = new StringBuilder();
 
         if (locationTriples.stream().anyMatch(triple -> triple.getLocation().equals(location))) {
             // mapped value is in assumed location
@@ -86,33 +86,78 @@ public class ErrorAnalysis {
             Triple staleTriple = defAnalysisInfo.getStaleTriple(location, mappedWeb);
             if (staleTriple != null) {
                 // value is stale
-                throw GraalError.shouldNotReachHere(
-                                "instruction " + instruction + " uses stale value, " + staleTriple.getInstructionSequence()     //
-                                                + " made " + mappedWeb + " in " + location + "become stale");
+                appendStaleErrorMessage(value, instruction, stringBuilder, staleTriple);
             }
             // mapped value is in assumed location and not stale ==> correct usage
         } else {
             // mapped value is not in assumed location
-            Triple otherLocationTriple = locationTriples.stream()       //
+            List<Triple> otherLocationTriples = locationTriples.stream()       //
                             .filter(triple -> defAnalysisInfo.getStaleTriple(triple.getLocation(), triple.getValue()) == null)  //
-                            .findFirst().orElse(null);
+                            .collect(Collectors.toList());
 
-            if (otherLocationTriple == null) {
+            if (otherLocationTriples.size() == 0) {
                 // mapped value is evicted
                 List<Triple> evictedTriples = defAnalysisInfo.getEvictedTriples(mappedWeb);
 
-                for (Triple triple : evictedTriples) {
-                    throw GraalError.shouldNotReachHere("instruction " + instruction + " uses evicted value, "  //
-                                    + triple.getInstructionSequence() + " evicted " + mappedWeb + " from "      //
-                                    + triple.getLocation());
-                }
-
+                appendEvictedErrorMessage(value, instruction, stringBuilder, evictedTriples);
             } else {
                 // mapped value is in other location
-                throw GraalError.shouldNotReachHere("instruction " + instruction + " uses wrong operand, but "  //
-                                + otherLocationTriple.getInstructionSequence() + " defined " + mappedWeb + " in "   //
-                                + otherLocationTriple.getLocation());
+                appendWrongOperandErrorMessage(value, instruction, stringBuilder, otherLocationTriples);
             }
+
+            if (stringBuilder.length() > 0) {
+                throw SARAVerifyError.shouldNotReachHere(stringBuilder.toString());
+            }
+        }
+    }
+
+    private static void appendWrongOperandErrorMessage(Value value, LIRInstruction instruction, StringBuilder stringBuilder, List<Triple> otherLocationTriples) {
+        stringBuilder.append("instruction ");
+        stringBuilder.append(instruction.id());
+        stringBuilder.append(" ");
+        stringBuilder.append(instruction);
+        stringBuilder.append(" uses wrong operand value ");
+        stringBuilder.append(value);
+        stringBuilder.append("\n");
+
+        for (Triple triple : otherLocationTriples) {
+            stringBuilder.append("Location ");
+            stringBuilder.append(triple.getLocation());
+            stringBuilder.append("\n");
+        }
+    }
+
+    private static void appendStaleErrorMessage(Value value, LIRInstruction instruction, StringBuilder stringBuilder, Triple staleTriple) {
+        stringBuilder.append("instruction ");
+        stringBuilder.append(instruction.id());
+        stringBuilder.append(" ");
+        stringBuilder.append(instruction);
+        stringBuilder.append(" uses stale value ");
+        stringBuilder.append(value);
+        stringBuilder.append("\n");
+        stringBuilder.append("The value become stale along the following sequence:\n");
+        for (LIRInstruction inst : staleTriple.getInstructionSequence()) {
+            stringBuilder.append(inst.id());
+            stringBuilder.append("; ");
+            stringBuilder.append(inst);
+            stringBuilder.append("\n");
+        }
+    }
+
+    private static void appendEvictedErrorMessage(Value value, LIRInstruction instruction, StringBuilder stringBuilder, List<Triple> evictedTriples) {
+        stringBuilder.append("instruction ");
+        stringBuilder.append(instruction.id());
+        stringBuilder.append(" ");
+        stringBuilder.append(instruction);
+        stringBuilder.append(" uses evicted value ");
+        stringBuilder.append(value);
+        stringBuilder.append("\n");
+
+        for (Triple triple : evictedTriples) {
+            stringBuilder.append(triple.getInstructionSequence());
+            stringBuilder.append(" Location: ");
+            stringBuilder.append(triple.getLocation());
+            stringBuilder.append("\n");
         }
     }
 
