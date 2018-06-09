@@ -26,7 +26,7 @@ public class DemoTest extends JTTTest {
             GraalDirectives.controlFlowAnchor();
             m = x;
         } else {
-            m = 42;
+            m = 42 + x;
         }
         GraalDirectives.controlFlowAnchor();
         return n - m;
@@ -44,17 +44,18 @@ public class DemoTest extends JTTTest {
         }
     }
 
-    @Override
-    protected LIRSuites createLIRSuites(OptionValues opts) {
-        LIRSuites lirSuites = super.createLIRSuites(opts);
-
-        ListIterator<LIRPhase<AllocationContext>> phase = lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
-        assert phase != null;
-        phase.add(demoInjector.getDemoWrongOperandInjector());
-
-        return lirSuites;
-    }
-
+// @Override
+// protected LIRSuites createLIRSuites(OptionValues opts) {
+// LIRSuites lirSuites = super.createLIRSuites(opts);
+//
+// ListIterator<LIRPhase<AllocationContext>> phase =
+// lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
+// assert phase != null;
+// phase.add(demoInjector.getDemoWrongOperandInjector());
+//
+// return lirSuites;
+// }
+//
 // @Override
 // protected LIRSuites createLIRSuites(OptionValues opts) {
 // LIRSuites lirSuites = super.createLIRSuites(opts);
@@ -66,16 +67,15 @@ public class DemoTest extends JTTTest {
 //
 // return lirSuites;
 // }
+//
+    @Override
+    protected LIRSuites createLIRSuites(OptionValues opts) {
+        LIRSuites lirSuites = super.createLIRSuites(opts);
 
-// @Override
-// protected LIRSuites createLIRSuites(OptionValues opts) {
-// LIRSuites lirSuites = super.createLIRSuites(opts);
-//
-// ListIterator<LIRPhase<AllocationContext>> phase =
-// lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
-// assert phase != null;
-// phase.add(demoInjector.geDemoEvictedInjector());
-//
-// return lirSuites;
-// }
+        ListIterator<LIRPhase<AllocationContext>> phase = lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
+        assert phase != null;
+        phase.add(demoInjector.geDemoEvictedInjector());
+
+        return lirSuites;
+    }
 }
