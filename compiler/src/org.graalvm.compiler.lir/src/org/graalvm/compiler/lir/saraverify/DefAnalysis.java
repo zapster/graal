@@ -205,12 +205,6 @@ public class DefAnalysis {
         defAnalysisInfo.removeFromEvicted(value, mappedWeb);
     }
 
-    private static void analyzeCopy(AllocatableValue result, Value input, LIRInstruction instruction, DuSequenceWeb mappedWeb, DefAnalysisInfo defAnalysisInfo) {
-        defAnalysisInfo.destroyValuesAtLocations(Arrays.asList(result), instruction);
-        defAnalysisInfo.propagateValue(result, input, instruction);
-        defAnalysisInfo.removeFromEvicted(result, mappedWeb);
-    }
-
     protected static class DefAnalysisNonCopyValueConsumer implements InstructionValueConsumer {
 
         private int defOperandPosition;
