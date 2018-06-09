@@ -6,6 +6,7 @@ import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
+import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase;
 
@@ -56,18 +57,17 @@ class DemoInjector extends AllocationPhase {
                 return;
             }
 
-            // get start block
-            AbstractBlockBase<?> block0 = lir.getControlFlowGraph().getStartBlock();
+            AbstractBlockBase<?> block3 = lir.getControlFlowGraph().getBlocks()[3];
+            ArrayList<LIRInstruction> instructionsB3 = lir.getLIRforBlock(block3);
 
-            ArrayList<LIRInstruction> instructionsB0 = lir.getLIRforBlock(block0);
-            LabelOp labelOp = (LabelOp) instructionsB0.get(0);
-            Value n = labelOp.getIncomingValue(0);
+            LIRInstruction moveInst = instructionsB3.get(2);
+            ValueMoveOp move = (ValueMoveOp) moveInst;
 
-            LIRInstruction cmp = instructionsB0.get(instructionsB0.size() - 2);
+            Value originalResult = move.getResult();
+            moveInst.forEachOutput((operand, mode, flags) -> move.getInput());
+            moveInst.forEachInput((operand, mode, flags) -> originalResult);
 
-            cmp.forEachInput((operand, mode, flags) -> n);
-
-            lirGenRes.setComment(cmp, "injected");
+            lirGenRes.setComment(moveInst, "injected");
         }
     }
 
