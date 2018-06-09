@@ -107,10 +107,10 @@ public class ErrorAnalysis {
                 // mapped value is in other location
                 appendWrongOperandErrorMessage(value, instruction, stringBuilder, otherLocationTriples);
             }
+        }
 
-            if (stringBuilder.length() > 0) {
-                throw SARAVerifyError.shouldNotReachHere(stringBuilder.toString());
-            }
+        if (stringBuilder.length() > 0) {
+            throw SARAVerifyError.shouldNotReachHere(stringBuilder.toString());
         }
     }
 
@@ -124,7 +124,7 @@ public class ErrorAnalysis {
         stringBuilder.append("\n");
 
         for (Triple triple : otherLocationTriples) {
-            stringBuilder.append("Location ");
+            stringBuilder.append("value is in location ");
             stringBuilder.append(triple.getLocation());
             stringBuilder.append("\n");
         }
@@ -157,9 +157,10 @@ public class ErrorAnalysis {
         stringBuilder.append("\n");
 
         for (Triple triple : evictedTriples) {
-            stringBuilder.append(triple.getInstructionSequence());
-            stringBuilder.append(" Location: ");
+            stringBuilder.append("value evicted from location ");
             stringBuilder.append(triple.getLocation());
+            stringBuilder.append(" in ");
+            stringBuilder.append(triple.getInstructionSequence());
             stringBuilder.append("\n");
         }
     }
