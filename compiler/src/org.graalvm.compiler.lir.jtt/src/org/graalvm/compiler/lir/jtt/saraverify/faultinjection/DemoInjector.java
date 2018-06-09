@@ -19,6 +19,10 @@ class DemoInjector extends AllocationPhase {
         return new DemoWrongOperandInjector();
     }
 
+    public DemoStaleInjector getDemoStaleInjector() {
+        return new DemoStaleInjector();
+    }
+
     public DemoEvictedInjector geDemoEvictedInjector() {
         return new DemoEvictedInjector();
     }
@@ -43,6 +47,31 @@ class DemoInjector extends AllocationPhase {
             LIRInstruction move = lir.getLIRforBlock(block1).get(1);
 
             move.forEachOutput((operand, mode, flags) -> n);
+
+            lirGenRes.setComment(move, "injected");
+        }
+    }
+
+    private class DemoStaleInjector extends DemoInjector {
+        @Override
+        protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+            LIR lir = lirGenRes.getLIR();
+
+            if (lir.getControlFlowGraph().getBlocks().length == 1) {
+                return;
+            }
+
+            AbstractBlockBase<?> block0 = lir.getControlFlowGraph().getBlocks()[0];
+            ArrayList<LIRInstruction> instructionsB0 = lir.getLIRforBlock(block0);
+
+            ValueMoveOp valueMoveOp = (ValueMoveOp) instructionsB0.get(3);
+
+            AbstractBlockBase<?> block1 = lir.getControlFlowGraph().getBlocks()[1];
+            ArrayList<LIRInstruction> instructionsB1 = lir.getLIRforBlock(block1);
+
+            LIRInstruction move = instructionsB1.get(3);
+            move.forEachOutput((operand, mode, flags) -> valueMoveOp.getInput());
+            move.forEachInput((operand, mode, flags) -> valueMoveOp.getResult());
 
             lirGenRes.setComment(move, "injected");
         }

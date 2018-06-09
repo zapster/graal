@@ -42,8 +42,17 @@ public class DemoTest extends JTTTest {
             System.err.println(RESET);
             Assert.assertTrue(false);
         }
+    }
 
-        // TODO: catch own exception; assert.fail("...");
+    @Override
+    protected LIRSuites createLIRSuites(OptionValues opts) {
+        LIRSuites lirSuites = super.createLIRSuites(opts);
+
+        ListIterator<LIRPhase<AllocationContext>> phase = lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
+        assert phase != null;
+        phase.add(demoInjector.getDemoWrongOperandInjector());
+
+        return lirSuites;
     }
 
 // @Override
@@ -53,19 +62,20 @@ public class DemoTest extends JTTTest {
 // ListIterator<LIRPhase<AllocationContext>> phase =
 // lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
 // assert phase != null;
-// phase.add(demoInjector.getDemoWrongOperandInjector());
+// phase.add(demoInjector.getDemoStaleInjector());
 //
 // return lirSuites;
 // }
 
-    @Override
-    protected LIRSuites createLIRSuites(OptionValues opts) {
-        LIRSuites lirSuites = super.createLIRSuites(opts);
-
-        ListIterator<LIRPhase<AllocationContext>> phase = lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
-        assert phase != null;
-        phase.add(demoInjector.geDemoEvictedInjector());
-
-        return lirSuites;
-    }
+// @Override
+// protected LIRSuites createLIRSuites(OptionValues opts) {
+// LIRSuites lirSuites = super.createLIRSuites(opts);
+//
+// ListIterator<LIRPhase<AllocationContext>> phase =
+// lirSuites.getAllocationStage().findPhase(RegisterAllocationPhase.class);
+// assert phase != null;
+// phase.add(demoInjector.geDemoEvictedInjector());
+//
+// return lirSuites;
+// }
 }
