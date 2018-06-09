@@ -185,9 +185,10 @@ public class DefAnalysisInfo {
     public void addLocation(Value location, DuSequenceWeb value, LIRInstruction instruction, boolean addStaleValues) {
         if (addStaleValues) {
             // find triples in the location set that hold the value in a different location than the
-            // location from the argument
+            // location from the argument (except constant values, which can't be stale)
             List<Triple> staleTriples = locationSet.stream()     //
-                            .filter(triple -> triple.value.equals(value) && !triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(location))) //
+                            .filter(triple -> !LIRValueUtil.isConstantValue(triple.location) && triple.value.equals(value) &&
+                                            !triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(location))) //
                             .collect(Collectors.toList());
 
             // add triples to the stale set for each stale value
