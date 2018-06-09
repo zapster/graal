@@ -1,6 +1,7 @@
 package org.graalvm.compiler.lir.saraverify;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -205,6 +206,11 @@ public class DefAnalysisInfo {
     }
 
     public void propagateValue(AllocatableValue result, Value input, LIRInstruction instruction) {
+        assert SARAVerifyUtil.getValueIllegalValueKind(result) != SARAVerifyUtil.getValueIllegalValueKind(input);
+
+        // destroys the values from the locations of the result
+        destroyValuesAtLocations(Arrays.asList(result), instruction);
+
         // for every triple in the location set that consists of the location "input", a new triple
         // is added to the set, where the location is the argument
         // "result" and the copy instruction is added to the instruction sequence
@@ -213,6 +219,8 @@ public class DefAnalysisInfo {
             ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
             instructions.add(instruction);
             locationSet.add(new Triple(result, triple.value, instructions));
+
+            removeFromEvicted(result, triple.value);
         });
 
         // for every triple in the stale set that consists of the location "input", a new triple is
@@ -224,7 +232,6 @@ public class DefAnalysisInfo {
             instructions.add(instruction);
             staleSet.add(new Triple(result, triple.value, instructions));
         });
-
     }
 
     public void destroyValuesAtLocations(List<Value> locationValues, LIRInstruction instruction) {
