@@ -22,16 +22,8 @@
  */
 package org.graalvm.compiler.lir.alloc.trace.lsra;
 
-import static jdk.vm.ci.code.CodeUtil.isOdd;
-import static jdk.vm.ci.code.ValueUtil.asRegister;
-import static jdk.vm.ci.code.ValueUtil.isRegister;
-import static org.graalvm.compiler.lir.LIRValueUtil.isStackSlotValue;
-import static org.graalvm.compiler.lir.LIRValueUtil.isVariable;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.BitSet;
-
+import jdk.vm.ci.code.Register;
+import jdk.vm.ci.meta.Value;
 import org.graalvm.compiler.core.common.alloc.RegisterAllocationConfig.AllocatableRegisters;
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.core.common.util.Util;
@@ -50,12 +42,20 @@ import org.graalvm.compiler.lir.alloc.trace.lsra.TraceInterval.State;
 import org.graalvm.compiler.lir.alloc.trace.lsra.TraceLinearScanPhase.TraceLinearScan;
 import org.graalvm.compiler.lir.ssa.SSAUtil;
 
-import jdk.vm.ci.code.Register;
-import jdk.vm.ci.meta.Value;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.stream.Collectors;
+
+import static jdk.vm.ci.code.CodeUtil.isOdd;
+import static jdk.vm.ci.code.ValueUtil.asRegister;
+import static jdk.vm.ci.code.ValueUtil.isRegister;
+import static org.graalvm.compiler.lir.LIRValueUtil.isStackSlotValue;
+import static org.graalvm.compiler.lir.LIRValueUtil.isVariable;
 
 /**
  */
-final class TraceLinearScanWalker {
+public final class TraceLinearScanWalker {
 
     /**
      * Adds an interval to a list sorted by {@linkplain FixedInterval#currentFrom() current from}
@@ -199,6 +199,8 @@ final class TraceLinearScanWalker {
      */
     private int currentPosition;
 
+    private final AbstractBlockBase<?>[][] lookupTable;
+
     /**
      * Only 10% of the lists in {@link #spillIntervals} are actually used. But when they are used,
      * they can grow quite long. The maximum length observed was 45 (all numbers taken from a
@@ -241,6 +243,8 @@ final class TraceLinearScanWalker {
         usePos = new int[numRegs];
         blockPos = new int[numRegs];
         isInMemory = new BitSet(numRegs);
+
+        lookupTable = new AbstractBlockBase[allocator.blockCount()][];
     }
 
     private void initUseLists(boolean onlyProcessUsePos) {
@@ -437,6 +441,7 @@ final class TraceLinearScanWalker {
     private int findOptimalSplitPos(AbstractBlockBase<?> minBlock, AbstractBlockBase<?> maxBlock, int maxSplitPos) {
         int fromBlockNr = minBlock.getLinearScanNumber();
         int toBlockNr = maxBlock.getLinearScanNumber();
+        assert blockAt(toBlockNr).equals(maxBlock);
 
         assert 0 <= fromBlockNr && fromBlockNr < blockCount() : "out of range";
         assert 0 <= toBlockNr && toBlockNr < blockCount() : "out of range";
@@ -449,20 +454,64 @@ final class TraceLinearScanWalker {
             optimalSplitPos = allocator.getFirstLirInstructionId(maxBlock);
         }
 
-        // minimal block probability
-        double minProbability = maxBlock.probability();
-        for (int i = toBlockNr - 1; i >= fromBlockNr; i--) {
-            AbstractBlockBase<?> cur = blockAt(i);
+        AbstractBlockBase<?>[] sortedBlocks = allocator.sortedBlocks();
+        try (DebugContext.Scope s = debug.scope("TraceIntervalWalker")) {
+            debug.log(1,"Trace: from: %d, to: %d", fromBlockNr, toBlockNr);
+        }
+        AbstractBlockBase<?> optBlock = findBestBlockBetween(fromBlockNr, toBlockNr, sortedBlocks);
+        AbstractBlockBase<?> optBlock2 = lookupBestBlockBetween(fromBlockNr, toBlockNr, sortedBlocks, lookupTable);
 
-            if (cur.probability() < minProbability) {
-                // Block with lower probability found. Split at the end of this block.
-                minProbability = cur.probability();
-                optimalSplitPos = allocator.getLastLirInstructionId(cur) + 2;
-            }
+        if (optBlock != null) {
+            optimalSplitPos = allocator.getLastLirInstructionId(optBlock) + 2;
+            assert optBlock.equals(optBlock2) : "Does not match " + optBlock + " vs. " + optBlock2;
         }
         assert optimalSplitPos > allocator.maxOpId() || allocator.isBlockBegin(optimalSplitPos) : "algorithm must move split pos to block boundary";
 
         return optimalSplitPos;
+    }
+
+    public static AbstractBlockBase<?> findBestBlockBetween(int fromBlockNr, int toBlockNr, AbstractBlockBase<?>[] sortedBlocks) {
+        // minimal block probability
+        double minProbability = sortedBlocks[toBlockNr].probability();
+        AbstractBlockBase<?> optBlock = null;
+        for (int i = toBlockNr - 1; i >= fromBlockNr; i--) {
+            AbstractBlockBase<?> cur = sortedBlocks[i];
+
+            if (cur.probability() < minProbability) {
+                // Block with lower probability found. Split at the end of this block.
+                minProbability = cur.probability();
+                optBlock = cur;
+            }
+        }
+        return optBlock;
+    }
+
+
+    public static AbstractBlockBase<?> lookupBestBlockBetween(int fromBlockNr, int toBlockNr, AbstractBlockBase<?>[] sortedBlocks, AbstractBlockBase<?>[][] lookupTable) {
+        AbstractBlockBase<?>[] row = lookupTable[fromBlockNr];
+        if (row == null) {
+            row = new AbstractBlockBase[sortedBlocks.length];
+            lookupTable[fromBlockNr] = row;
+        }
+        return lookupBestInRow(fromBlockNr, toBlockNr, row, sortedBlocks);
+    }
+
+    private static AbstractBlockBase<?> lookupBestInRow(int fromBlockNr, int toBlockNr, AbstractBlockBase<?>[] row, AbstractBlockBase<?>[] sortedBlocks) {
+        final AbstractBlockBase<?> entry = row[toBlockNr];
+        if (entry != null) {
+            return entry;
+        }
+        final AbstractBlockBase<?> lastBlock = sortedBlocks[toBlockNr];
+        final AbstractBlockBase<?> bestBlock;
+        if (toBlockNr == fromBlockNr) {
+            bestBlock = lastBlock;
+        } else {
+            AbstractBlockBase<?> bestOtherBlock = lookupBestInRow(fromBlockNr, toBlockNr - 1, row, sortedBlocks);
+            bestBlock = lastBlock.probability() < bestOtherBlock.probability() ? lastBlock : bestOtherBlock;
+        }
+        row[toBlockNr] = bestBlock;
+        assert bestBlock != null;
+        return bestBlock;
     }
 
     @SuppressWarnings({"unused"})
@@ -1329,6 +1378,13 @@ final class TraceLinearScanWalker {
     }
 
     void walk() {
+        try (DebugContext.Scope s = debug.scope("TraceIntervalWalker")) {
+            debug.log(1, "Trace: %s",
+                    Arrays.stream(allocator.sortedBlocks())
+                            .mapToDouble(b -> b.probability())
+                            .mapToObj(d -> Double.toString(d))
+                            .collect(Collectors.joining(", ")));
+        }
         walkTo(Integer.MAX_VALUE);
     }
 
