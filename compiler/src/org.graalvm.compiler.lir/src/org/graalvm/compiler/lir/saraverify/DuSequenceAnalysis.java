@@ -19,6 +19,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.core.common.cfg.AbstractControlFlowGraph;
+import org.graalvm.compiler.core.common.cfg.BlockMap;
 import org.graalvm.compiler.debug.CounterKey;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.GraalError;
@@ -31,7 +33,6 @@ import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.LIRInstructionClass;
 import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.StandardOp.JumpOp;
-import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
@@ -101,14 +102,18 @@ public class DuSequenceAnalysis {
     public AnalysisResult determineDuSequences(LIRGenerationResult lirGenRes, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
                     Map<Constant, DummyConstDef> dummyConstDefs) {
         LIR lir = lirGenRes.getLIR();
-        AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-        AbstractBlockBase<?> startBlock = lir.getControlFlowGraph().getStartBlock();
+        AbstractControlFlowGraph<?> controlFlowGraph = lir.getControlFlowGraph();
+        AbstractBlockBase<?>[] blocks = controlFlowGraph.getBlocks();
+        AbstractBlockBase<?> startBlock = controlFlowGraph.getStartBlock();
 
         int blockCount = blocks.length;
         BitSet blockQueue = new BitSet(blockCount);
 
         Map<Value, Set<DefNode>> duSequences = new ValueHashMap<>();
         Map<AbstractBlockBase<?>, Map<Value, Set<Node>>> blockUnfinishedDuSequences = new HashMap<>();
+
+        BlockMap<List<Value>> blockPhiOutValue = new BlockMap<>(controlFlowGraph);
+        BlockMap<List<Value>> blockPhiInValue = new BlockMap<>(controlFlowGraph);
 
         initializeCollections();
 
@@ -123,7 +128,7 @@ public class DuSequenceAnalysis {
             visited.add(block);
 
             Map<Value, Set<Node>> mergedUnfinishedDuSequences = SARAVerifyUtil.mergeMaps(blockUnfinishedDuSequences, block.getSuccessors());
-            determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, startBlock);
+            determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, blockPhiOutValue, blockPhiInValue);
 
             Map<Value, Set<Node>> previousUnfinishedDuSequences = blockUnfinishedDuSequences.get(block);
 
@@ -141,7 +146,7 @@ public class DuSequenceAnalysis {
         Map<Value, Set<Node>> startBlockUnfinishedDuSequences = blockUnfinishedDuSequences.get(startBlock);
         analyseUndefinedValues(duSequences, startBlockUnfinishedDuSequences, registerAttributes, dummyRegDefs, dummyConstDefs);
 
-        return new AnalysisResult(duSequences, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
+        return new AnalysisResult(duSequences, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs, blockPhiOutValue, blockPhiInValue);
     }
 
     public AnalysisResult determineDuSequences(List<LIRInstruction> instructions, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
@@ -151,17 +156,18 @@ public class DuSequenceAnalysis {
         // analysis of given instructions
         Map<Value, Set<DefNode>> duSequences = new ValueHashMap<>();
         Map<Value, Set<Node>> unfinishedDuSequences = new ValueHashMap<>();
-        determineDuSequences(null, null, instructions, duSequences, unfinishedDuSequences, null);
+        determineDuSequences(null, null, instructions, duSequences, unfinishedDuSequences, null, null);
 
         // analysis of dummy instructions
         analyseUndefinedValues(duSequences, unfinishedDuSequences, registerAttributes,
                         dummyRegDefs, dummyConstDefs);
 
-        return new AnalysisResult(duSequences, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs);
+        return new AnalysisResult(duSequences, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs, null, null);
     }
 
     private void determineDuSequences(LIR lir, AbstractBlockBase<?> block, List<LIRInstruction> instructions, Map<Value, Set<DefNode>> duSequences,
-                    Map<Value, Set<Node>> unfinishedDuSequences, AbstractBlockBase<?> startBlock) {
+                    Map<Value, Set<Node>> unfinishedDuSequences,
+                    BlockMap<List<Value>> blockPhiOutValue, BlockMap<List<Value>> blockPhiInValue) {
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(duSequences, unfinishedDuSequences);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(unfinishedDuSequences);
 
@@ -173,17 +179,31 @@ public class DuSequenceAnalysis {
             useOperandPosition = 0;
 
             if (inst instanceof JumpOp) {
-                assert !inst.destroysCallerSavedRegisters() : "caller saved registers are not handled";
-
                 // jump
                 JumpOp jumpInst = (JumpOp) inst;
 
-                if (jumpInst.getPhiSize() > 0) {
+                if (jumpInst.getPhiSize() > 0 && blockPhiOutValue.get(block) == null) {
+                    List<Value> phiOutValues = new ArrayList<>();
+                    blockPhiOutValue.put(block, phiOutValues);
+
+                    assert block.getSuccessorCount() == 1 : "There are more than one successor block.";
+                    AbstractBlockBase<?> successorBlock = block.getSuccessors()[0];
+                    List<Value> phiInValues = blockPhiInValue.get(successorBlock);
+                    if (phiInValues == null) {
+                        phiInValues = new ArrayList<>();
+                        blockPhiInValue.put(successorBlock, phiInValues);
+                    }
+
                     // phi
-                    PhiValueVisitor visitor = new SARAVerifyPhiValueVisitor(unfinishedDuSequences, inst);
-                    SSAUtil.forEachPhiValuePair(lir, block.getSuccessors()[0], block, visitor);
+                    PhiValueVisitor visitor = new SARAVerifyPhiOutValueVisitor(phiOutValues, phiInValues);
+                    SSAUtil.forEachPhiValuePair(lir, successorBlock, block, visitor);
+
+                    assert phiOutValues.size() == phiInValues.size() : "The number of phi values do not match.";
                 }
-            } else if (inst.isValueMoveOp()) {
+            }
+
+            // inserting move, definition and use nodes
+            if (inst.isValueMoveOp()) {
                 assert !inst.destroysCallerSavedRegisters() : "caller saved registers are not handled";
 
                 // value move
@@ -195,7 +215,7 @@ public class DuSequenceAnalysis {
                 // load constant
                 LoadConstantOp loadConstantOp = (LoadConstantOp) inst;
                 insertMoveNode(unfinishedDuSequences, loadConstantOp.getResult(), SARAVerifyUtil.asConstantValue(loadConstantOp.getConstant()), inst);
-            } else if (block == startBlock || !(inst instanceof LabelOp)) {
+            } else {
                 SARAVerifyUtil.visitValues(inst, defConsumer, useConsumer);
 
                 instructionDefOperandCount.put(inst, defOperandPosition);
@@ -356,8 +376,8 @@ public class DuSequenceAnalysis {
 
     class DefInstructionValueConsumer implements InstructionValueConsumer {
 
-        Map<Value, Set<DefNode>> duSequences;
-        Map<Value, Set<Node>> unfinishedDuSequences;
+        private final Map<Value, Set<DefNode>> duSequences;
+        private final Map<Value, Set<Node>> unfinishedDuSequences;
 
         public DefInstructionValueConsumer(Map<Value, Set<DefNode>> duSequences, Map<Value, Set<Node>> unfinishedDuSequences) {
             this.duSequences = duSequences;
@@ -373,7 +393,7 @@ public class DuSequenceAnalysis {
 
     class UseInstructionValueConsumer implements InstructionValueConsumer {
 
-        private Map<Value, Set<Node>> unfinishedDuSequences;
+        private final Map<Value, Set<Node>> unfinishedDuSequences;
 
         public UseInstructionValueConsumer(Map<Value, Set<Node>> unfinishedDuSequences) {
             this.unfinishedDuSequences = unfinishedDuSequences;
@@ -390,21 +410,28 @@ public class DuSequenceAnalysis {
 
     }
 
-    class SARAVerifyPhiValueVisitor implements PhiValueVisitor {
+    class SARAVerifyPhiOutValueVisitor implements PhiValueVisitor {
 
-        private Map<Value, Set<Node>> unfinishedDuSequences;
-        private LIRInstruction instruction;
+        private int operandPos;
+        private final List<Value> phiOutValues;
+        private final List<Value> phiInValues;
 
-        public SARAVerifyPhiValueVisitor(Map<Value, Set<Node>> unfinishedDuSequences, LIRInstruction instruction) {
-            this.unfinishedDuSequences = unfinishedDuSequences;
-            this.instruction = instruction;
+        public SARAVerifyPhiOutValueVisitor(List<Value> phiOutValues, List<Value> phiInValues) {
+            operandPos = 0;
+            this.phiOutValues = phiOutValues;
+            this.phiInValues = phiInValues;
         }
 
         @Override
         public void visit(Value phiIn, Value phiOut) {
-            insertMoveNode(unfinishedDuSequences, phiIn, phiOut, instruction);
-        }
+            phiOutValues.add(phiOut);
 
+            if (phiInValues.size() <= operandPos) {
+                phiInValues.add(phiIn);
+            }
+
+            operandPos++;
+        }
     }
 
     public static List<DuSequenceWeb> createDuSequenceWebs(Map<Value, Set<DefNode>> nodes) {
