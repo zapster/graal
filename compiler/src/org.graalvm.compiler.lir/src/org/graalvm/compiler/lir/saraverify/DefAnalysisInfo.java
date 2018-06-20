@@ -207,7 +207,7 @@ public class DefAnalysisInfo {
     }
 
     public void propagateValue(AllocatableValue result, Value input, LIRInstruction instruction) {
-        assert SARAVerifyUtil.getValueIllegalValueKind(result) != SARAVerifyUtil.getValueIllegalValueKind(input);
+        assert !SARAVerifyUtil.getValueIllegalValueKind(result).equals(SARAVerifyUtil.getValueIllegalValueKind(input));
 
         // destroys the values from the locations of the result
         destroyValuesAtLocations(Arrays.asList(result), instruction);
