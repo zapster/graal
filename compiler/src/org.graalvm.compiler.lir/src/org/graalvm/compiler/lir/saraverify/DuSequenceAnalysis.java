@@ -112,8 +112,8 @@ public class DuSequenceAnalysis {
         Map<Value, Set<DefNode>> duSequences = new ValueHashMap<>();
         Map<AbstractBlockBase<?>, Map<Value, Set<Node>>> blockUnfinishedDuSequences = new HashMap<>();
 
-        BlockMap<List<Value>> blockPhiOutValue = new BlockMap<>(controlFlowGraph);
-        BlockMap<List<Value>> blockPhiInValue = new BlockMap<>(controlFlowGraph);
+        BlockMap<List<Value>> blockPhiOutValues = new BlockMap<>(controlFlowGraph);
+        BlockMap<List<Value>> blockPhiInValues = new BlockMap<>(controlFlowGraph);
 
         initializeCollections();
 
@@ -128,7 +128,7 @@ public class DuSequenceAnalysis {
             visited.add(block);
 
             Map<Value, Set<Node>> mergedUnfinishedDuSequences = SARAVerifyUtil.mergeMaps(blockUnfinishedDuSequences, block.getSuccessors());
-            determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, blockPhiOutValue, blockPhiInValue);
+            determineDuSequences(lir, block, lir.getLIRforBlock(block), duSequences, mergedUnfinishedDuSequences, blockPhiOutValues, blockPhiInValues);
 
             Map<Value, Set<Node>> previousUnfinishedDuSequences = blockUnfinishedDuSequences.get(block);
 
@@ -146,7 +146,7 @@ public class DuSequenceAnalysis {
         Map<Value, Set<Node>> startBlockUnfinishedDuSequences = blockUnfinishedDuSequences.get(startBlock);
         analyseUndefinedValues(duSequences, startBlockUnfinishedDuSequences, registerAttributes, dummyRegDefs, dummyConstDefs);
 
-        return new AnalysisResult(duSequences, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs, blockPhiOutValue, blockPhiInValue);
+        return new AnalysisResult(duSequences, instructionDefOperandCount, instructionUseOperandCount, dummyRegDefs, dummyConstDefs, blockPhiOutValues, blockPhiInValues);
     }
 
     public AnalysisResult determineDuSequences(List<LIRInstruction> instructions, RegisterAttributes[] registerAttributes, Map<Register, DummyRegDef> dummyRegDefs,
@@ -167,7 +167,7 @@ public class DuSequenceAnalysis {
 
     private void determineDuSequences(LIR lir, AbstractBlockBase<?> block, List<LIRInstruction> instructions, Map<Value, Set<DefNode>> duSequences,
                     Map<Value, Set<Node>> unfinishedDuSequences,
-                    BlockMap<List<Value>> blockPhiOutValue, BlockMap<List<Value>> blockPhiInValue) {
+                    BlockMap<List<Value>> blockPhiOutValues, BlockMap<List<Value>> blockPhiInValues) {
         DefInstructionValueConsumer defConsumer = new DefInstructionValueConsumer(duSequences, unfinishedDuSequences);
         UseInstructionValueConsumer useConsumer = new UseInstructionValueConsumer(unfinishedDuSequences);
 
@@ -182,16 +182,16 @@ public class DuSequenceAnalysis {
                 // jump
                 JumpOp jumpInst = (JumpOp) inst;
 
-                if (jumpInst.getPhiSize() > 0 && blockPhiOutValue.get(block) == null) {
+                if (jumpInst.getPhiSize() > 0 && blockPhiOutValues.get(block) == null) {
                     List<Value> phiOutValues = new ArrayList<>();
-                    blockPhiOutValue.put(block, phiOutValues);
+                    blockPhiOutValues.put(block, phiOutValues);
 
                     assert block.getSuccessorCount() == 1 : "There are more than one successor block.";
                     AbstractBlockBase<?> successorBlock = block.getSuccessors()[0];
-                    List<Value> phiInValues = blockPhiInValue.get(successorBlock);
+                    List<Value> phiInValues = blockPhiInValues.get(successorBlock);
                     if (phiInValues == null) {
                         phiInValues = new ArrayList<>();
-                        blockPhiInValue.put(successorBlock, phiInValues);
+                        blockPhiInValues.put(successorBlock, phiInValues);
                     }
 
                     // phi

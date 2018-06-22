@@ -23,19 +23,19 @@ public class AnalysisResult {
     private final Map<Register, DummyRegDef> dummyRegDefs;
     private final Map<Constant, DummyConstDef> dummyConstDefs;
 
-    private final BlockMap<List<Value>> blockPhiOutValue;
-    private final BlockMap<List<Value>> blockPhiInValue;
+    private final BlockMap<List<Value>> blockPhiOutValues;
+    private final BlockMap<List<Value>> blockPhiInValues;
 
     public AnalysisResult(Map<Value, Set<DefNode>> duSequences, Map<LIRInstruction, Integer> instructionDefOperandCount,
                     Map<LIRInstruction, Integer> instructionUseOperandCount, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs,
-                    BlockMap<List<Value>> blockPhiOutValue, BlockMap<List<Value>> blockPhiInValue) {
+                    BlockMap<List<Value>> blockPhiOutValues, BlockMap<List<Value>> blockPhiInValues) {
         this.duSequences = duSequences;
         this.instructionDefOperandCount = instructionDefOperandCount;
         this.instructionUseOperandCount = instructionUseOperandCount;
         this.dummyRegDefs = dummyRegDefs;
         this.dummyConstDefs = dummyConstDefs;
-        this.blockPhiOutValue = blockPhiOutValue;
-        this.blockPhiInValue = blockPhiInValue;
+        this.blockPhiOutValues = blockPhiOutValues;
+        this.blockPhiInValues = blockPhiInValues;
     }
 
     public Map<Value, Set<DefNode>> getDuSequences() {
@@ -58,11 +58,11 @@ public class AnalysisResult {
         return dummyConstDefs;
     }
 
-    public BlockMap<List<Value>> getBlockPhiOutValue() {
-        return blockPhiOutValue;
+    public BlockMap<List<Value>> getBlockPhiOutValues() {
+        return blockPhiOutValues;
     }
 
-    public BlockMap<List<Value>> getBlockPhiInValue() {
-        return blockPhiInValue;
+    public BlockMap<List<Value>> getBlockPhiInValues() {
+        return blockPhiInValues;
     }
 }
