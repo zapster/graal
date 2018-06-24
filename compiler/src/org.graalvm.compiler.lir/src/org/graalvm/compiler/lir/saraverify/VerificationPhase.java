@@ -117,8 +117,6 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     private static boolean assertMappings(List<DuSequenceWeb> webs, Map<Node, DuSequenceWeb> map, LIRInstruction startLabelInstruction) {
         assert webs.stream()        //
                         .flatMap(web -> web.getDefNodes().stream())     //
-                        .filter(node -> node.getInstruction().equals(startLabelInstruction) ||
-                                        !(node.getInstruction() instanceof LabelOp)) //
                         .allMatch(node -> map.keySet().stream()     //
                                         .anyMatch(keyNode -> {
                                             if (!keyNode.isDefNode()) {
@@ -130,7 +128,6 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         assert webs.stream()        //
                         .flatMap(web -> web.getUseNodes().stream())     //
-                        .filter(node -> !(node.getInstruction() instanceof JumpOp)) //
                         .allMatch(node -> map.keySet().stream()     //
                                         .anyMatch(keyNode -> {
                                             if (!keyNode.isUseNode()) {
