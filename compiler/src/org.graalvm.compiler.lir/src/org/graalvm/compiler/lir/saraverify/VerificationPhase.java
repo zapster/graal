@@ -1,5 +1,6 @@
 package org.graalvm.compiler.lir.saraverify;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -8,6 +9,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.core.common.cfg.BlockMap;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.lir.ConstantValue;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
@@ -51,6 +53,8 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         List<DuSequenceWeb> inputDuSequenceWebs = DuSequenceAnalysis.createDuSequenceWebs(inputResult.getDuSequences());
         Map<Constant, DummyConstDef> dummyConstDefs = inputResult.getDummyConstDefs();
         Map<Register, DummyRegDef> dummyRegDefs = inputResult.getDummyRegDefs();
+        BlockMap<List<Value>> blockPhiInValues = inputResult.getBlockPhiInValues();
+        BlockMap<List<Value>> blockPhiOutValues = inputResult.getBlockPhiOutValues();
 
         if (GraphPrinter.Options.SARAVerifyGraph.getValue(debugContext.getOptions())) {
             GraphPrinter.printGraphs(inputResult.getDuSequences(), inputDuSequenceWebs, debugContext);
@@ -58,12 +62,15 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         RegisterArray callerSaveRegisters = lirGenRes.getRegisterConfig().getCallerSaveRegisters();
 
-        Map<Node, DuSequenceWeb> mapping = generateMapping(lir, inputDuSequenceWebs, dummyRegDefs, dummyConstDefs);
-        DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping, callerSaveRegisters, dummyRegDefs, dummyConstDefs);
-        ErrorAnalysis.analyse(lir, defAnalysisResult, mapping, dummyRegDefs, dummyConstDefs, callerSaveRegisters);
+        Map<Node, DuSequenceWeb> mapping = generateMapping(lir, inputDuSequenceWebs, dummyRegDefs, dummyConstDefs, blockPhiInValues, blockPhiOutValues);
+        DefAnalysisResult defAnalysisResult = DefAnalysis.analyse(lir, mapping,
+                        callerSaveRegisters, dummyRegDefs, dummyConstDefs, blockPhiInValues, blockPhiOutValues);
+        ErrorAnalysis.analyse(lir, defAnalysisResult, mapping, dummyRegDefs, dummyConstDefs,
+                        callerSaveRegisters);
     }
 
-    private static Map<Node, DuSequenceWeb> generateMapping(LIR lir, List<DuSequenceWeb> webs, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs) {
+    private static Map<Node, DuSequenceWeb> generateMapping(LIR lir, List<DuSequenceWeb> webs, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs,
+                    BlockMap<List<Value>> blockPhiInValues, BlockMap<List<Value>> blockPhiOutValues) {
         Map<Node, DuSequenceWeb> map = new HashMap<>();
 
         MappingDefInstructionValueConsumer defConsumer = new MappingDefInstructionValueConsumer(map, webs);
@@ -99,6 +106,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             insertDefMapping(dummyRegDef.getKey().asValue(), dummyRegDef.getValue(), 0, webs, map);
         }
 
+        // phi mappings (def nodes in map have value from input)
+        generatePhiMapping(lir, webs, map, blockPhiInValues, blockPhiOutValues);
+
         assert assertMappings(webs, map, lir.getLIRforBlock(lir.getControlFlowGraph().getStartBlock()).get(0));
 
         return map;
@@ -107,7 +117,8 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
     private static boolean assertMappings(List<DuSequenceWeb> webs, Map<Node, DuSequenceWeb> map, LIRInstruction startLabelInstruction) {
         assert webs.stream()        //
                         .flatMap(web -> web.getDefNodes().stream())     //
-                        .filter(node -> node.getInstruction().equals(startLabelInstruction) || !(node.getInstruction() instanceof LabelOp)) //
+                        .filter(node -> node.getInstruction().equals(startLabelInstruction) ||
+                                        !(node.getInstruction() instanceof LabelOp)) //
                         .allMatch(node -> map.keySet().stream()     //
                                         .anyMatch(keyNode -> {
                                             if (!keyNode.isDefNode()) {
@@ -132,6 +143,40 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         return true;
     }
 
+    private static void generatePhiMapping(LIR lir, List<DuSequenceWeb> webs, Map<Node, DuSequenceWeb> map, BlockMap<List<Value>> blockPhiInValues, BlockMap<List<Value>> blockPhiOutValues) {
+        for (AbstractBlockBase<?> block : lir.getControlFlowGraph().getBlocks()) {
+            ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+
+            List<Value> phiInValues = blockPhiInValues.get(block);
+
+            int operandPosition = 0;
+            if (phiInValues != null) {
+                assert instructions.get(0) instanceof LabelOp : "First instruction is no label instruction.";
+                assert ((LabelOp) instructions.get(0)).getPhiSize() == phiInValues.size()    //
+                : "Number of phi values differs from phi size for label instruction.";
+
+                for (Value phiInValue : phiInValues) {
+                    // def mapping for phi in values
+                    insertDefMapping(phiInValue, instructions.get(0), operandPosition, webs, map);
+                    operandPosition++;
+                }
+            }
+
+            List<Value> phiOutValues = blockPhiOutValues.get(block);
+
+            operandPosition = 0;
+            if (phiOutValues != null) {
+                assert instructions.get(instructions.size() - 1) instanceof JumpOp : "Last instruction is no jump instruction.";
+
+                for (Value phiOutValue : phiOutValues) {
+                    // use mapping for phi out values
+                    insertUseMapping(phiOutValue, instructions.get(instructions.size() - 1), operandPosition, webs, map);
+                    operandPosition++;
+                }
+            }
+        }
+    }
+
     private static void insertDefMapping(Value value, LIRInstruction instruction, int defOperandPosition, List<DuSequenceWeb> webs, Map<Node, DuSequenceWeb> map) {
         DefNode defNode = new DefNode(value, instruction, defOperandPosition);
 
@@ -141,6 +186,18 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         if (webOptional.isPresent()) {
             map.put(defNode, webOptional.get());
+        }
+    }
+
+    private static void insertUseMapping(Value value, LIRInstruction instruction, int useOperandPosition, List<DuSequenceWeb> webs, Map<Node, DuSequenceWeb> map) {
+        UseNode useNode = new UseNode(value, instruction, useOperandPosition);
+
+        Optional<DuSequenceWeb> webOptional = webs.stream()     //
+                        .filter(web -> web.getUseNodes().stream().anyMatch(node -> node.equalsInstructionAndPosition(useNode)))      //
+                        .findAny();
+
+        if (webOptional.isPresent()) {
+            map.put(useNode, webOptional.get());
         }
     }
 
@@ -189,17 +246,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                 return;
             }
 
-            UseNode useNode = new UseNode(value, instruction, useOperandPosition);
-            Optional<DuSequenceWeb> webOptional = webs.stream()     //
-                            .filter(web -> web.getUseNodes().stream().anyMatch(node -> node.equalsInstructionAndPosition(useNode)))      //
-                            .findAny();
-
-            if (webOptional.isPresent()) {
-                map.put(useNode, webOptional.get());
-            }
+            insertUseMapping(value, instruction, useOperandPosition, webs, map);
 
             useOperandPosition++;
         }
-
     }
 }
