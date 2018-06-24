@@ -109,12 +109,12 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         // phi mappings (def nodes in map have value from input)
         generatePhiMapping(lir, webs, map, blockPhiInValues, blockPhiOutValues);
 
-        assert assertMappings(webs, map, lir.getLIRforBlock(lir.getControlFlowGraph().getStartBlock()).get(0));
+        assert assertMappings(webs, map);
 
         return map;
     }
 
-    private static boolean assertMappings(List<DuSequenceWeb> webs, Map<Node, DuSequenceWeb> map, LIRInstruction startLabelInstruction) {
+    private static boolean assertMappings(List<DuSequenceWeb> webs, Map<Node, DuSequenceWeb> map) {
         assert webs.stream()        //
                         .flatMap(web -> web.getDefNodes().stream())     //
                         .allMatch(node -> map.keySet().stream()     //
