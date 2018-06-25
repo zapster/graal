@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.core.common.cfg.BlockMap;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.debug.Indent;
@@ -22,6 +23,7 @@ import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.StandardOp.JumpOp;
+import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.saraverify.DefAnalysisInfo.Triple;
@@ -41,7 +43,7 @@ public class DefAnalysis {
     protected final static String DEBUG_SCOPE = "SARAVerifyDefAnalysis";
 
     public static DefAnalysisResult analyse(LIR lir, Map<Node, DuSequenceWeb> mapping, RegisterArray callerSaveRegisters, Map<Register, DummyRegDef> dummyRegDefs,
-                    Map<Constant, DummyConstDef> dummyConstDefs) {
+                    Map<Constant, DummyConstDef> dummyConstDefs, BlockMap<List<Value>> blockPhiInValues, BlockMap<List<Value>> blockPhiOutValues) {
         DebugContext debugContext = lir.getDebug();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
@@ -71,7 +73,7 @@ public class DefAnalysis {
                 mergedDefAnalysisInfo = new DefAnalysisInfo();
                 initializeDefAnalysisInfo(mapping, dummyRegDefs, dummyConstDefs, mergedDefAnalysisInfo);
             } else {
-                mergedDefAnalysisInfo = mergeDefAnalysisInfo(blockInfos, block.getPredecessors());
+                mergedDefAnalysisInfo = mergeDefAnalysisInfo(lir, blockInfos, block, mapping, blockPhiInValues, blockPhiOutValues);
             }
 
             computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisInfo, mapping, callerSaveRegisterValues);
@@ -167,21 +169,68 @@ public class DefAnalysis {
         }
     }
 
-    protected static <T> DefAnalysisInfo mergeDefAnalysisInfo(Map<T, DefAnalysisInfo> map, T[] mergeKeys) {
-        List<DefAnalysisInfo> defAnalysisInfo = new ArrayList<>();
+    protected static DefAnalysisInfo mergeDefAnalysisInfo(LIR lir, Map<AbstractBlockBase<?>, DefAnalysisInfo> blockDefAnalysisInfos, AbstractBlockBase<?> mergeBlock,
+                    Map<Node, DuSequenceWeb> mapping, BlockMap<List<Value>> blockPhiInValues, BlockMap<List<Value>> blockPhiOutValues) {
+        AbstractBlockBase<?>[] predecessors = mergeBlock.getPredecessors();
+        LabelOp labelInstruction = (LabelOp) lir.getLIRforBlock(mergeBlock).get(0);
 
-        for (T key : mergeKeys) {
-            if (map.containsKey(key)) {
-                defAnalysisInfo.add(map.get(key));
+        // get all DefAnalysisInfos from the predecessor blocks, which are already visited
+        List<DefAnalysisInfo> defAnalysisInfos = Arrays.stream(predecessors)     //
+                        .map(block -> blockDefAnalysisInfos.get(block)).filter(defAnalysisInfo -> defAnalysisInfo != null)    //
+                        .collect(Collectors.toList());
+
+        // merge of phi
+        Map<Value, List<Value>> phiInLocations = new HashMap<>();
+
+        List<Value> phiInValues = blockPhiInValues.get(mergeBlock);
+
+        // check if label instruction is phi and if all predecessors are visited
+        if (labelInstruction.isPhiIn() && Arrays.stream(predecessors).allMatch(key -> blockDefAnalysisInfos.containsKey(key))) {
+
+            // get jump instructions for predecessor blocks
+            BlockMap<LIRInstruction> blockJumpInstructions = new BlockMap<>(lir.getControlFlowGraph());
+            for (AbstractBlockBase<?> predecessor : predecessors) {
+                ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(predecessor);
+                LIRInstruction jumpInst = instructions.get(instructions.size() - 1);
+                assert jumpInst instanceof JumpOp : "Instruction is no jump instruction.";
+                blockJumpInstructions.put(predecessor, jumpInst);
+            }
+
+            for (int i = 0; i < phiInValues.size(); i++) {
+                BlockMap<List<Triple>> phiOutLocationTriplesMap = new BlockMap<>(lir.getControlFlowGraph());
+
+                // get all locations from the predecessors that hold a value
+                List<Value> locations = DefAnalysisInfo.distinctLocations(defAnalysisInfos);
+
+                for (AbstractBlockBase<?> predecessor : predecessors) {
+                    // mapping for phi out
+                    Value phiOutValue = blockPhiOutValues.get(predecessor).get(i);
+                    LIRInstruction jumpInstruction = blockJumpInstructions.get(predecessor);
+                    UseNode useNode = new UseNode(phiOutValue, jumpInstruction, i);
+                    DuSequenceWeb mappedWeb = mapping.get(useNode);
+
+                    // search for triples (locations) that hold the phi out value
+                    List<Triple> phiOutLocationTriples = blockDefAnalysisInfos.get(predecessor).getLocationTriples(mappedWeb);
+                    phiOutLocationTriplesMap.put(predecessor, phiOutLocationTriples);
+
+                    // remove all locations, that hold no phi out value
+                    locations.removeIf(location -> !phiOutLocationTriples.stream().anyMatch(triple -> triple.getLocation().equals(location)));
+                }
+
+                // store locations for phi in value in map
+                phiInLocations.put(phiInValues.get(i), locations);
             }
         }
 
-        Set<Triple> locationIntersection = DefAnalysisInfo.locationSetIntersection(defAnalysisInfo);
-        Set<Triple> staleUnion = DefAnalysisInfo.staleSetUnion(defAnalysisInfo);
-        Set<Triple> evicted = DefAnalysisInfo.evictedSetUnion(defAnalysisInfo);
+        // TODO: remove triples of phi out
+
+        // merge of sets
+        Set<Triple> locationIntersection = DefAnalysisInfo.locationSetIntersection(defAnalysisInfos);
+        Set<Triple> staleUnion = DefAnalysisInfo.staleSetUnion(defAnalysisInfos);
+        Set<Triple> evicted = DefAnalysisInfo.evictedSetUnion(defAnalysisInfos);
 
         Set<Triple> locationInconsistent = DefAnalysisInfo  //
-                        .locationSetUnionStream(defAnalysisInfo)   //
+                        .locationSetUnionStream(defAnalysisInfos)   //
                         .filter(triple -> !DefAnalysisInfo.containsTriple(triple, locationIntersection))    //
                         .collect(Collectors.toSet());
 
@@ -191,10 +240,31 @@ public class DefAnalysis {
 
         evicted.addAll(locationInconsistent);
 
-        return new DefAnalysisInfo(locationIntersection, stale, evicted);
+        DefAnalysisInfo mergedDefAnalysisInfo = new DefAnalysisInfo(locationIntersection, stale, evicted);
+
+        if (phiInValues == null) {
+            return mergedDefAnalysisInfo;
+        }
+
+        // add new triples for phi in
+        int i = 0;
+        for (Value phiInValue : phiInValues) {
+            // get locations for phi in value
+            List<Value> locations = phiInLocations.get(phiInValue);
+
+            // get mapping for phi in value
+            DefNode defNode = new DefNode(phiInValue, labelInstruction, i);
+            DuSequenceWeb mappedWeb = mapping.get(defNode);
+
+            // add phi in triples to the merged def analysis info location set
+            locations.stream().forEach(location -> mergedDefAnalysisInfo.addLocation(location, mappedWeb, labelInstruction, true));
+            i++;
+        }
+
+        return mergedDefAnalysisInfo;
     }
 
-    private static void analyzeDefinition(Value value, LIRInstruction instruction, DuSequenceWeb mappedWeb, DefAnalysisInfo defAnalysisInfo) {
+    private static void analyseDefinition(Value value, LIRInstruction instruction, DuSequenceWeb mappedWeb, DefAnalysisInfo defAnalysisInfo) {
         defAnalysisInfo.destroyValuesAtLocations(Arrays.asList(value), instruction);
 
         if (mappedWeb == null) {
@@ -206,7 +276,6 @@ public class DefAnalysis {
     }
 
     protected static class DefAnalysisNonCopyValueConsumer implements InstructionValueConsumer {
-
         private int defOperandPosition;
         private DefAnalysisInfo defAnalysisSets;
         private Map<Node, DuSequenceWeb> mapping;
@@ -227,7 +296,7 @@ public class DefAnalysis {
 
             DefNode defNode = new DefNode(value, instruction, defOperandPosition);
             DuSequenceWeb mappedWeb = mapping.get(defNode);
-            analyzeDefinition(value, instruction, mappedWeb, defAnalysisSets);
+            analyseDefinition(value, instruction, mappedWeb, defAnalysisSets);
             defOperandPosition++;
         }
 

@@ -174,6 +174,21 @@ public class DefAnalysisInfo {
         return locationSet.stream().filter(triple -> !LIRValueUtil.isConstantValue(triple.location) && triple.value.equals(value)).collect(Collectors.toList());
     }
 
+    public static List<Value> distinctLocations(List<DefAnalysisInfo> defAnalysisInfos) {
+        return defAnalysisInfos.stream().flatMap(defAnalysisInfo -> defAnalysisInfo.locationSet.stream())      //
+                        .map(triple -> triple.getLocation()).distinct().collect(Collectors.toList());
+    }
+
+    /**
+     * Returns a list of locations for which there is at least one triple in the location set.
+     *
+     * @return list of locations from the location set
+     */
+    public List<Value> getOccupiedLocations() {
+        // TODO: remove method?
+        return locationSet.stream().map(triple -> triple.getLocation()).distinct().collect(Collectors.toList());
+    }
+
     public List<Triple> getEvictedTriples(DuSequenceWeb value) {
         return evictedSet.stream().filter(triple -> triple.value.equals(value)).collect(Collectors.toList());
     }

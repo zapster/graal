@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.core.common.cfg.BlockMap;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -29,7 +30,7 @@ import jdk.vm.ci.meta.ValueKind;
 public class ErrorAnalysis {
 
     public static void analyse(LIR lir, DefAnalysisResult defAnalysisResult, Map<Node, DuSequenceWeb> mapping, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs,
-                    RegisterArray callerSaveRegisters) {
+                    RegisterArray callerSaveRegisters, BlockMap<List<Value>> blockPhiInValues, BlockMap<List<Value>> blockPhiOutValues) {
 
         Map<AbstractBlockBase<?>, DefAnalysisInfo> blockInfos = defAnalysisResult.getBlockSets();
 
@@ -47,7 +48,7 @@ public class ErrorAnalysis {
                 defAnalysisInfo = new DefAnalysisInfo();
                 DefAnalysis.initializeDefAnalysisInfo(mapping, dummyRegDefs, dummyConstDefs, defAnalysisInfo);
             } else {
-                defAnalysisInfo = DefAnalysis.mergeDefAnalysisInfo(blockInfos, block.getPredecessors());
+                defAnalysisInfo = DefAnalysis.mergeDefAnalysisInfo(lir, blockInfos, block, mapping, blockPhiInValues, blockPhiOutValues);
             }
 
             ErrorAnalysisValueConsumer errorAnalysisValueConsumer = new ErrorAnalysisValueConsumer(mapping, defAnalysisInfo);
