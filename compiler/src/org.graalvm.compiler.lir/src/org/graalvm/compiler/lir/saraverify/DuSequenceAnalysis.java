@@ -353,8 +353,8 @@ public class DuSequenceAnalysis {
     }
 
     private void insertUseNode(LIRInstruction instruction, Value value, Map<Value, Set<Node>> unfinishedDuSequences) {
-        if (ValueUtil.isIllegal(value) || LIRValueUtil.isConstantValue(value)) {
-            // value is part of a composite value, uninitialized or a constant
+        if (ValueUtil.isIllegal(value)) {
+            // value is part of a composite value or uninitialized
             useOperandPosition++;
             return;
         }

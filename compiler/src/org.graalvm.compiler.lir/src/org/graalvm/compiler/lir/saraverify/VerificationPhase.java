@@ -17,10 +17,8 @@ import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
-import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
-import org.graalvm.compiler.lir.StandardOp.LoadConstantOp;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
@@ -89,16 +87,15 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
                     negativeInstructionID--;
                 }
 
-                if (instruction.isLoadConstantOp()) {
-                    LoadConstantOp loadConstantOp = (LoadConstantOp) instruction;
-                    Constant constant = loadConstantOp.getConstant();
-                    DummyConstDef dummyConstDef = dummyConstDefs.get(constant);
-
-                    insertDefMapping(new ConstantValue(ValueKind.Illegal, constant), dummyConstDef, 0, webs, map);
-                } else if (!instruction.isValueMoveOp()) {
+                if (!instruction.isValueMoveOp()) {
                     SARAVerifyUtil.visitValues(instruction, defConsumer, useConsumer);
                 }
             }
+        }
+
+        // TODO: generate mappings for dummy constant definitions
+        for (Entry<Constant, DummyConstDef> dummyConstDef : dummyConstDefs.entrySet()) {
+            insertDefMapping(new ConstantValue(ValueKind.Illegal, dummyConstDef.getKey()), dummyConstDef.getValue(), 0, webs, map);
         }
 
         // generate mappings for dummy register definitions
@@ -146,6 +143,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
             List<Value> phiInValues = blockPhiInValues.get(block);
 
+            // operand position assumes that label op incoming values are all phi values
             int operandPosition = 0;
             if (phiInValues != null) {
                 assert instructions.get(0) instanceof LabelOp : "First instruction is no label instruction.";
@@ -237,7 +235,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
 
         @Override
         public void visitValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
-            if (ValueUtil.isIllegal(value) || LIRValueUtil.isConstantValue(value) || flags.contains(OperandFlag.UNINITIALIZED)) {
+            if (ValueUtil.isIllegal(value) || flags.contains(OperandFlag.UNINITIALIZED)) {
                 // value is part of a composite value, uninitialized or a constant
                 useOperandPosition++;
                 return;
