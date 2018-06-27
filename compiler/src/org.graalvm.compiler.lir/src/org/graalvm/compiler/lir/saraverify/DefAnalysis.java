@@ -171,25 +171,28 @@ public class DefAnalysis {
 
     protected static DefAnalysisInfo mergeDefAnalysisInfo(LIR lir, Map<AbstractBlockBase<?>, DefAnalysisInfo> blockDefAnalysisInfos, AbstractBlockBase<?> mergeBlock,
                     Map<Node, DuSequenceWeb> mapping, BlockMap<List<Value>> blockPhiInValues, BlockMap<List<Value>> blockPhiOutValues) {
-        AbstractBlockBase<?>[] predecessors = mergeBlock.getPredecessors();
-        LabelOp labelInstruction = (LabelOp) lir.getLIRforBlock(mergeBlock).get(0);
+        // filter visited predecessors
+        List<AbstractBlockBase<?>> visitedPredecessors = Arrays.stream(mergeBlock.getPredecessors())    //
+                        .filter(block -> blockDefAnalysisInfos.get(block) != null)      //
+                        .collect(Collectors.toList());
 
-        // get all DefAnalysisInfos from the predecessor blocks, which are already visited
-        List<DefAnalysisInfo> defAnalysisInfos = Arrays.stream(predecessors)     //
-                        .map(block -> blockDefAnalysisInfos.get(block)).filter(defAnalysisInfo -> defAnalysisInfo != null)    //
+        // get all DefAnalysisInfos for visited predecessors
+        List<DefAnalysisInfo> defAnalysisInfos = visitedPredecessors.stream()           //
+                        .map(block -> blockDefAnalysisInfos.get(block)) //
                         .collect(Collectors.toList());
 
         // merge of phi
         Map<Value, List<Value>> phiInLocations = new HashMap<>();
 
         List<Value> phiInValues = blockPhiInValues.get(mergeBlock);
+        LabelOp labelInstruction = (LabelOp) lir.getLIRforBlock(mergeBlock).get(0);
 
         // check if label instruction is phi and if all predecessors are visited
-        if (labelInstruction.isPhiIn() && Arrays.stream(predecessors).allMatch(key -> blockDefAnalysisInfos.containsKey(key))) {
+        if (labelInstruction.isPhiIn()) {
 
             // get jump instructions for predecessor blocks
             BlockMap<LIRInstruction> blockJumpInstructions = new BlockMap<>(lir.getControlFlowGraph());
-            for (AbstractBlockBase<?> predecessor : predecessors) {
+            for (AbstractBlockBase<?> predecessor : visitedPredecessors) {
                 ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(predecessor);
                 LIRInstruction jumpInst = instructions.get(instructions.size() - 1);
                 assert jumpInst instanceof JumpOp : "Instruction is no jump instruction.";
@@ -202,7 +205,7 @@ public class DefAnalysis {
                 // get all locations from the predecessors that hold a value
                 List<Value> locations = DefAnalysisInfo.distinctLocations(defAnalysisInfos);
 
-                for (AbstractBlockBase<?> predecessor : predecessors) {
+                for (AbstractBlockBase<?> predecessor : visitedPredecessors) {
                     // mapping for phi out
                     Value phiOutValue = blockPhiOutValues.get(predecessor).get(i);
                     LIRInstruction jumpInstruction = blockJumpInstructions.get(predecessor);
@@ -221,8 +224,6 @@ public class DefAnalysis {
                 phiInLocations.put(phiInValues.get(i), locations);
             }
         }
-
-        // TODO: remove triples of phi out
 
         // merge of sets
         Set<Triple> locationIntersection = DefAnalysisInfo.locationSetIntersection(defAnalysisInfos);
