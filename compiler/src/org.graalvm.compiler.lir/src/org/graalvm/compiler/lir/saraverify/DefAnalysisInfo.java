@@ -222,10 +222,10 @@ public class DefAnalysisInfo {
     }
 
     public void propagateValue(AllocatableValue result, Value input, LIRInstruction instruction) {
-        assert !SARAVerifyUtil.getValueIllegalValueKind(result).equals(SARAVerifyUtil.getValueIllegalValueKind(input));
-
-        // destroys the values from the locations of the result
-        destroyValuesAtLocations(Arrays.asList(result), instruction);
+        if (!SARAVerifyUtil.getValueIllegalValueKind(result).equals(SARAVerifyUtil.getValueIllegalValueKind(input))) {
+            // destroys the values from the locations of the result
+            destroyValuesAtLocations(Arrays.asList(result), instruction);
+        }
 
         // for every triple in the location set that consists of the location "input", a new triple
         // is added to the set, where the location is the argument
