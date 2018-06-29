@@ -49,6 +49,10 @@ public class DefAnalysisInfo {
             return new ArrayList<>(instructionSequence);
         }
 
+        public boolean containsInstruction(LIRInstruction instruction) {
+            return instructionSequence.contains(instruction);
+        }
+
         @Override
         public int hashCode() {
             final int prime = 31;
@@ -230,7 +234,9 @@ public class DefAnalysisInfo {
         // for every triple in the location set that consists of the location "input", a new triple
         // is added to the set, where the location is the argument
         // "result" and the copy instruction is added to the instruction sequence
-        List<Triple> triples = locationSet.stream().filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input))).collect(Collectors.toList());
+        List<Triple> triples = locationSet.stream()         //
+                        .filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input)) && !triple.containsInstruction(instruction))   //
+                        .collect(Collectors.toList());
         triples.forEach(triple -> {
             ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
             instructions.add(instruction);
@@ -242,7 +248,9 @@ public class DefAnalysisInfo {
         // for every triple in the stale set that consists of the location "input", a new triple is
         // added to the set, where the location is the argument
         // "result" and the copy instruction is added to the instruction sequence
-        triples = staleSet.stream().filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input))).collect(Collectors.toList());
+        triples = staleSet.stream() //
+                        .filter(triple -> triple.location.equals(SARAVerifyUtil.getValueIllegalValueKind(input)) && !triple.containsInstruction(instruction))   //
+                        .collect(Collectors.toList());
         triples.forEach(triple -> {
             ArrayList<LIRInstruction> instructions = new ArrayList<>(triple.instructionSequence);
             instructions.add(instruction);
