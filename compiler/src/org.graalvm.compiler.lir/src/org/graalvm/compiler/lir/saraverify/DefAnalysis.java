@@ -45,6 +45,12 @@ public class DefAnalysis {
     public static DefAnalysisResult analyse(LIR lir, Map<Node, DuSequenceWeb> mapping, RegisterArray callerSaveRegisters, Map<Register, DummyRegDef> dummyRegDefs,
                     Map<Constant, DummyConstDef> dummyConstDefs, BlockMap<List<Value>> blockPhiInValues, BlockMap<List<Value>> blockPhiOutValues) {
         DebugContext debugContext = lir.getDebug();
+
+        // log information
+        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            debugContext.log(3, "starting def analysis ...");
+        }
+
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
 
         // the map stores the sets after the analysis of the particular block/instruction
@@ -68,6 +74,11 @@ public class DefAnalysis {
             AbstractBlockBase<?> block = blocks[blockIndex];
             visited.add(block);
 
+            // log information
+            try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+                debugContext.log(3, "Visit Block: %d", blockIndex);
+            }
+
             DefAnalysisInfo mergedDefAnalysisInfo;
             if (blockIndex == 0) {
                 mergedDefAnalysisInfo = new DefAnalysisInfo();
@@ -75,6 +86,9 @@ public class DefAnalysis {
             } else {
                 mergedDefAnalysisInfo = mergeDefAnalysisInfo(lir, blockInfos, block, mapping, blockPhiInValues, blockPhiOutValues);
             }
+
+            // TODO: remove debug
+            Map<Value, List<Triple>> debugGroupedLocationTriples = mergedDefAnalysisInfo.getGroupedTriples();
 
             computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisInfo, mapping, callerSaveRegisterValues);
             DefAnalysisInfo previousDefAnalysisSets = blockInfos.get(block);
@@ -95,6 +109,11 @@ public class DefAnalysis {
         }
 
         assert Arrays.stream(blocks).allMatch(block -> visited.contains(block)) : "Not all blocks were visited during the defAnalysis.";
+
+        // log information
+        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            debugContext.log(3, "def analysis done");
+        }
 
         return new DefAnalysisResult(blockInfos);
     }
@@ -171,97 +190,122 @@ public class DefAnalysis {
 
     protected static DefAnalysisInfo mergeDefAnalysisInfo(LIR lir, Map<AbstractBlockBase<?>, DefAnalysisInfo> blockDefAnalysisInfos, AbstractBlockBase<?> mergeBlock,
                     Map<Node, DuSequenceWeb> mapping, BlockMap<List<Value>> blockPhiInValues, BlockMap<List<Value>> blockPhiOutValues) {
-        // filter visited predecessors
-        List<AbstractBlockBase<?>> visitedPredecessors = Arrays.stream(mergeBlock.getPredecessors())    //
-                        .filter(block -> blockDefAnalysisInfos.get(block) != null)      //
-                        .collect(Collectors.toList());
+        DebugContext debugContext = lir.getDebug();
+        DefAnalysisInfo mergedDefAnalysisInfo;
 
-        // get all DefAnalysisInfos for visited predecessors
-        List<DefAnalysisInfo> defAnalysisInfos = visitedPredecessors.stream()           //
-                        .map(block -> blockDefAnalysisInfos.get(block)) //
-                        .collect(Collectors.toList());
+        // log information
+        try (Indent indent = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            debugContext.log(3, "started merging ...");
 
-        // merge of phi
-        Map<Value, List<Value>> phiInLocations = new HashMap<>();
+            // filter visited predecessors
+            List<AbstractBlockBase<?>> visitedPredecessors = Arrays.stream(mergeBlock.getPredecessors())    //
+                            .filter(block -> blockDefAnalysisInfos.get(block) != null)      //
+                            .collect(Collectors.toList());
 
-        List<Value> phiInValues = blockPhiInValues.get(mergeBlock);
-        LabelOp labelInstruction = (LabelOp) lir.getLIRforBlock(mergeBlock).get(0);
+            // get all DefAnalysisInfos for visited predecessors
+            List<DefAnalysisInfo> defAnalysisInfos = visitedPredecessors.stream()           //
+                            .map(block -> blockDefAnalysisInfos.get(block)) //
+                            .collect(Collectors.toList());
 
-        // check if label instruction is phi and if all predecessors are visited
-        if (labelInstruction.isPhiIn()) {
+            // merge of phi
 
-            // get jump instructions for predecessor blocks
-            BlockMap<LIRInstruction> blockJumpInstructions = new BlockMap<>(lir.getControlFlowGraph());
-            for (AbstractBlockBase<?> predecessor : visitedPredecessors) {
-                ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(predecessor);
-                LIRInstruction jumpInst = instructions.get(instructions.size() - 1);
-                assert jumpInst instanceof JumpOp : "Instruction is no jump instruction.";
-                blockJumpInstructions.put(predecessor, jumpInst);
-            }
+            // log information
+            debugContext.log(3, "merging of phis ...");
 
-            for (int i = 0; i < phiInValues.size(); i++) {
-                BlockMap<List<Triple>> phiOutLocationTriplesMap = new BlockMap<>(lir.getControlFlowGraph());
+            Map<Value, List<Value>> phiInLocations = new HashMap<>();
 
-                // get all locations from the predecessors that hold a value
-                List<Value> locations = DefAnalysisInfo.distinctLocations(defAnalysisInfos);
+            List<Value> phiInValues = blockPhiInValues.get(mergeBlock);
+            LabelOp labelInstruction = (LabelOp) lir.getLIRforBlock(mergeBlock).get(0);
 
+            // check if label instruction is phi and if all predecessors are visited
+            if (labelInstruction.isPhiIn()) {
+
+                // get jump instructions for predecessor blocks
+                BlockMap<LIRInstruction> blockJumpInstructions = new BlockMap<>(lir.getControlFlowGraph());
                 for (AbstractBlockBase<?> predecessor : visitedPredecessors) {
-                    // mapping for phi out
-                    Value phiOutValue = blockPhiOutValues.get(predecessor).get(i);
-                    LIRInstruction jumpInstruction = blockJumpInstructions.get(predecessor);
-                    UseNode useNode = new UseNode(phiOutValue, jumpInstruction, i);
-                    DuSequenceWeb mappedWeb = mapping.get(useNode);
-
-                    // search for triples (locations) that hold the phi out value
-                    List<Triple> phiOutLocationTriples = blockDefAnalysisInfos.get(predecessor).getLocationTriples(mappedWeb);
-                    phiOutLocationTriplesMap.put(predecessor, phiOutLocationTriples);
-
-                    // remove all locations, that hold no phi out value
-                    locations.removeIf(location -> !phiOutLocationTriples.stream().anyMatch(triple -> triple.getLocation().equals(location)));
+                    ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(predecessor);
+                    LIRInstruction jumpInst = instructions.get(instructions.size() - 1);
+                    assert jumpInst instanceof JumpOp : "Instruction is no jump instruction.";
+                    blockJumpInstructions.put(predecessor, jumpInst);
                 }
 
-                // store locations for phi in value in map
-                phiInLocations.put(phiInValues.get(i), locations);
+                for (int i = 0; i < phiInValues.size(); i++) {
+                    BlockMap<List<Triple>> phiOutLocationTriplesMap = new BlockMap<>(lir.getControlFlowGraph());
+
+                    // get all locations from the predecessors that hold a value
+                    List<Value> locations = DefAnalysisInfo.distinctLocations(defAnalysisInfos);
+
+                    for (AbstractBlockBase<?> predecessor : visitedPredecessors) {
+                        // mapping for phi out
+                        Value phiOutValue = blockPhiOutValues.get(predecessor).get(i);
+                        LIRInstruction jumpInstruction = blockJumpInstructions.get(predecessor);
+                        UseNode useNode = new UseNode(phiOutValue, jumpInstruction, i);
+                        DuSequenceWeb mappedWeb = mapping.get(useNode);
+
+                        // search for triples (locations) that hold the phi out value
+                        List<Triple> phiOutLocationTriples = blockDefAnalysisInfos.get(predecessor).getLocationTriples(mappedWeb);
+                        phiOutLocationTriplesMap.put(predecessor, phiOutLocationTriples);
+
+                        // remove all locations, that hold no phi out value
+                        locations.removeIf(location -> !phiOutLocationTriples.stream().anyMatch(triple -> triple.getLocation().equals(location)));
+                    }
+
+                    // store locations for phi in value in map
+                    phiInLocations.put(phiInValues.get(i), locations);
+                }
             }
+
+            // merge of sets
+
+            // log information
+            debugContext.log(3, "merging of sets ...");
+
+            debugContext.log(3, "location intersection");
+            Set<Triple> locationIntersection = DefAnalysisInfo.locationSetIntersection(defAnalysisInfos);
+            debugContext.log(3, "stale union");
+            Set<Triple> staleUnion = DefAnalysisInfo.staleSetUnion(defAnalysisInfos);
+            debugContext.log(3, "evicted union");
+            Set<Triple> evicted = DefAnalysisInfo.evictedSetUnion(defAnalysisInfos);
+
+            debugContext.log(3, "location inconsistent");
+            Set<Triple> locationInconsistent = DefAnalysisInfo  //
+                            .locationSetUnionStream(defAnalysisInfos)   //
+                            .filter(triple -> !DefAnalysisInfo.containsTriple(triple, locationIntersection))    //
+                            .collect(Collectors.toSet());
+
+            debugContext.log(3, "stale union");
+            Set<Triple> stale = staleUnion.stream() //
+                            .filter(triple -> !DefAnalysisInfo.containsTriple(triple, locationInconsistent))    //
+                            .collect(Collectors.toSet());
+
+            debugContext.log(3, "add inconsistent to evicted");
+            evicted.addAll(locationInconsistent);
+
+            mergedDefAnalysisInfo = new DefAnalysisInfo(locationIntersection, stale, evicted);
+
+            if (phiInValues == null) {
+                debugContext.log(3, "merging done");
+                return mergedDefAnalysisInfo;
+            }
+
+            // add new triples for phi in
+            debugContext.log(3, "add triples of phis");
+            int i = 0;
+            for (Value phiInValue : phiInValues) {
+                // get locations for phi in value
+                List<Value> locations = phiInLocations.get(phiInValue);
+
+                // get mapping for phi in value
+                DefNode defNode = new DefNode(phiInValue, labelInstruction, i);
+                DuSequenceWeb mappedWeb = mapping.get(defNode);
+
+                // add phi in triples to the merged def analysis info location set
+                locations.stream().forEach(location -> mergedDefAnalysisInfo.addLocation(location, mappedWeb, labelInstruction, false));
+                i++;
+            }
+
+            debugContext.log(3, "merging done");
         }
-
-        // merge of sets
-        Set<Triple> locationIntersection = DefAnalysisInfo.locationSetIntersection(defAnalysisInfos);
-        Set<Triple> staleUnion = DefAnalysisInfo.staleSetUnion(defAnalysisInfos);
-        Set<Triple> evicted = DefAnalysisInfo.evictedSetUnion(defAnalysisInfos);
-
-        Set<Triple> locationInconsistent = DefAnalysisInfo  //
-                        .locationSetUnionStream(defAnalysisInfos)   //
-                        .filter(triple -> !DefAnalysisInfo.containsTriple(triple, locationIntersection))    //
-                        .collect(Collectors.toSet());
-
-        Set<Triple> stale = staleUnion.stream() //
-                        .filter(triple -> !DefAnalysisInfo.containsTriple(triple, locationInconsistent))    //
-                        .collect(Collectors.toSet());
-
-        evicted.addAll(locationInconsistent);
-
-        DefAnalysisInfo mergedDefAnalysisInfo = new DefAnalysisInfo(locationIntersection, stale, evicted);
-
-        if (phiInValues == null) {
-            return mergedDefAnalysisInfo;
-        }
-
-        // add new triples for phi in
-        int i = 0;
-        for (Value phiInValue : phiInValues) {
-            // get locations for phi in value
-            List<Value> locations = phiInLocations.get(phiInValue);
-
-            // get mapping for phi in value
-            DefNode defNode = new DefNode(phiInValue, labelInstruction, i);
-            DuSequenceWeb mappedWeb = mapping.get(defNode);
-
-            // add phi in triples to the merged def analysis info location set
-            locations.stream().forEach(location -> mergedDefAnalysisInfo.addLocation(location, mappedWeb, labelInstruction, false));
-            i++;
-        }
-
         return mergedDefAnalysisInfo;
     }
 

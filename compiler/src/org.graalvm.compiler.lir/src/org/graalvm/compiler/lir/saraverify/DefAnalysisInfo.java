@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -176,6 +177,11 @@ public class DefAnalysisInfo {
 
     public List<Triple> getLocationTriples(DuSequenceWeb value) {
         return locationSet.stream().filter(triple -> !LIRValueUtil.isConstantValue(triple.location) && triple.value.equals(value)).collect(Collectors.toList());
+    }
+
+    // TODO: remove debug
+    public Map<Value, List<Triple>> getGroupedTriples() {
+        return locationSet.stream().collect(Collectors.groupingBy(Triple::getLocation));
     }
 
     public static List<Value> distinctLocations(List<DefAnalysisInfo> defAnalysisInfos) {

@@ -8,6 +8,9 @@ import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.core.common.cfg.BlockMap;
+import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.DebugContext.Scope;
+import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.InstructionValueConsumer;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
@@ -29,8 +32,15 @@ import jdk.vm.ci.meta.ValueKind;
 
 public class ErrorAnalysis {
 
+    protected final static String DEBUG_SCOPE = "SARAVerifyErrorAnalysis";
+
     public static void analyse(LIR lir, DefAnalysisResult defAnalysisResult, Map<Node, DuSequenceWeb> mapping, Map<Register, DummyRegDef> dummyRegDefs, Map<Constant, DummyConstDef> dummyConstDefs,
                     RegisterArray callerSaveRegisters, BlockMap<List<Value>> blockPhiInValues, BlockMap<List<Value>> blockPhiOutValues) {
+        DebugContext debugContext = lir.getDebug();
+        // log information
+        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            debugContext.log(3, "starting error analysis ...");
+        }
 
         Map<AbstractBlockBase<?>, DefAnalysisInfo> blockInfos = defAnalysisResult.getBlockSets();
 
@@ -69,6 +79,10 @@ public class ErrorAnalysis {
                 // compute local flow
                 DefAnalysis.computeLocalFlowInstruction(defAnalysisInfo, callerSaveRegisterValues, tempValues, nonCopyValueConsumer, tempValueConsumer, instruction);
             }
+        }
+
+        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            debugContext.log(3, "error analysis done");
         }
     }
 
