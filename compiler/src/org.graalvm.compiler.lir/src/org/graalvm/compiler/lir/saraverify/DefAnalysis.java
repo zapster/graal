@@ -66,8 +66,6 @@ public class DefAnalysis {
 
         Set<AbstractBlockBase<?>> visited = new HashSet<>();
 
-        // TODO: setInitialization?
-
         while (!blockQueue.isEmpty()) {
             int blockIndex = blockQueue.nextSetBit(0);
             blockQueue.clear(blockIndex);
@@ -286,6 +284,11 @@ public class DefAnalysis {
             if (phiInValues == null) {
                 debugContext.log(3, "merging done");
                 return mergedDefAnalysisInfo;
+            }
+
+            // remove values from locations where the phi in values are added
+            for (List<Value> locations : phiInLocations.values()) {
+                mergedDefAnalysisInfo.destroyValuesAtLocations(locations, labelInstruction);
             }
 
             // add new triples for phi in
