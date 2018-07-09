@@ -286,11 +286,6 @@ public class DefAnalysis {
                 return mergedDefAnalysisInfo;
             }
 
-            // remove values from locations where the phi in values are added
-            for (List<Value> locations : phiInLocations.values()) {
-                mergedDefAnalysisInfo.destroyValuesAtLocations(locations, labelInstruction);
-            }
-
             // add new triples for phi in
             debugContext.log(3, "add triples of phis");
             int i = 0;
