@@ -19,6 +19,7 @@ import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.LIRValueUtil;
+import org.graalvm.compiler.lir.StandardOp.BlockEndOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
@@ -41,6 +42,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
     private final static int ERROR_COUNT = 5;
 
     private static int wrongRegisterAssignmentCount;
+    private static int wrongRegisterUseCount;
 
     public static class Options {
         // @formatter:off
@@ -55,7 +57,8 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         DebugContext debugContext = lir.getDebug();
 
         // boolean injectedErrors = injectMissingSpillLoadErrors(lir);
-        boolean injectedErrors = injectWrongRegisterAssignmentErrors(lir, context);
+        // boolean injectedErrors = injectWrongRegisterAssignmentErrors(lir, context);
+        boolean injectedErrors = injectWrongRegisterUseErrors(lir, context);
 
         // log that no errors were injected
         if (!injectedErrors) {
@@ -148,6 +151,9 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
                         public Value doValue(LIRInstruction inst, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
                             if (ValueUtil.isRegister(value)) {
                                 RegisterValue register = ValueUtil.asRegisterValue(value);
+
+                                // get all allocatable registers, that have the same register
+                                // category as the correct register
                                 List<Register> filteredRegisters = allocatableRegisters.stream()        //
                                                 .filter(r -> !r.equals(register.getRegister()) && r.getRegisterCategory().equals(register.getRegister().getRegisterCategory()))         //
                                                 .collect(Collectors.toList());
@@ -157,9 +163,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
                                 }
 
                                 wrongRegisterAssignmentCount++;
-
                                 int index = random.nextInt(filteredRegisters.size());
-
                                 return filteredRegisters.get(index).asValue(register.getValueKind());
                             }
 
@@ -171,5 +175,57 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         }
 
         return wrongRegisterAssignmentCount != 0;
+    }
+
+    private static boolean injectWrongRegisterUseErrors(LIR lir, AllocationContext context) {
+        AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+        List<Register> allocatableRegisters = context.registerAllocationConfig.getAllocatableRegisters().asList();
+        Random random = new Random();
+        wrongRegisterUseCount = 0;
+
+        // get the label instruction from block 0
+        LabelOp functionLabel = (LabelOp) lir.getLIRforBlock(blocks[0]).get(0);
+
+        // get the last incoming value from the label instruction, which is the value for the base
+        // pointer
+        Value basePointer = functionLabel.getIncomingValue(functionLabel.getIncomingSize() - 1);
+
+        for (AbstractBlockBase<?> block : blocks) {
+            ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+
+            for (LIRInstruction instruction : instructions) {
+
+                if (!(instruction instanceof BlockEndOp) && wrongRegisterUseCount < ERROR_COUNT) {
+                    instruction.forEachInput(new InstructionValueProcedure() {
+
+                        @Override
+                        public Value doValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
+
+                            if (ValueUtil.isRegister(value) && !value.equals(basePointer)) {
+                                RegisterValue register = ValueUtil.asRegisterValue(value);
+
+                                // get all allocatable registers, that have the same register
+                                // category as the correct register
+                                List<Register> filteredRegisters = allocatableRegisters.stream()        //
+                                                .filter(r -> !r.equals(register.getRegister()) && r.getRegisterCategory().equals(register.getRegister().getRegisterCategory()))         //
+                                                .collect(Collectors.toList());
+
+                                if (filteredRegisters.size() == 0) {
+                                    return value;
+                                }
+
+                                wrongRegisterUseCount++;
+                                int index = random.nextInt(filteredRegisters.size());
+                                return filteredRegisters.get(index).asValue(register.getValueKind());
+                            }
+
+                            return value;
+                        }
+                    });
+                }
+            }
+        }
+
+        return wrongRegisterUseCount != 0;
     }
 }
