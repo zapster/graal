@@ -1,6 +1,10 @@
 package org.graalvm.compiler.lir.saraverify;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Random;
+import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
 import org.graalvm.compiler.core.common.cfg.AbstractControlFlowGraph;
@@ -9,8 +13,11 @@ import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.debug.Indent;
+import org.graalvm.compiler.lir.InstructionValueProcedure;
 import org.graalvm.compiler.lir.LIR;
 import org.graalvm.compiler.lir.LIRInstruction;
+import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
+import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.LIRValueUtil;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
@@ -21,13 +28,19 @@ import org.graalvm.compiler.options.Option;
 import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionType;
 
+import jdk.vm.ci.code.Register;
+import jdk.vm.ci.code.RegisterValue;
 import jdk.vm.ci.code.TargetDescription;
+import jdk.vm.ci.code.ValueUtil;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Value;
 
 public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
 
     private final static String DEBUG_SCOPE = "SARAVerifyInjectorVerification";
+    private final static int ERROR_COUNT = 5;
+
+    private static int wrongRegisterAssignmentCount;
 
     public static class Options {
         // @formatter:off
@@ -41,7 +54,8 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         LIR lir = lirGenRes.getLIR();
         DebugContext debugContext = lir.getDebug();
 
-        boolean injectedErrors = injectErrors(lir);
+        // boolean injectedErrors = injectMissingSpillLoadErrors(lir);
+        boolean injectedErrors = injectWrongRegisterAssignmentErrors(lir, context);
 
         // log that no errors were injected
         if (!injectedErrors) {
@@ -62,12 +76,12 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         }
     }
 
-    private static boolean injectErrors(LIR lir) {
+    private static boolean injectMissingSpillLoadErrors(LIR lir) {
         AbstractControlFlowGraph<?> controlFlowGraph = lir.getControlFlowGraph();
         AbstractBlockBase<?>[] blocks = controlFlowGraph.getBlocks();
 
-        int missingSpill = 0;
-        int missingLoad = 0;
+        int missingSpillCount = 0;
+        int missingLoadCount = 0;
 
         BlockMap<ArrayList<LIRInstruction>> missingSpillsLoadsMap = new BlockMap<>(controlFlowGraph);
 
@@ -89,14 +103,14 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
                     AllocatableValue result = valueMoveOp.getResult();
                     AllocatableValue input = valueMoveOp.getInput();
 
-                    if (LIRValueUtil.isStackSlotValue(result) && !input.equals(basePointer) && missingSpill < 5) {
+                    if (LIRValueUtil.isStackSlotValue(result) && !input.equals(basePointer) && missingSpillCount < ERROR_COUNT) {
                         // inject missing spill
                         missingSpillsLoads.add(instruction);
-                        missingSpill++;
-                    } else if (LIRValueUtil.isStackSlotValue(input) && !result.equals(basePointer) && missingLoad < 5) {
+                        missingSpillCount++;
+                    } else if (LIRValueUtil.isStackSlotValue(input) && !result.equals(basePointer) && missingLoadCount < ERROR_COUNT) {
                         // inject missing load
                         missingSpillsLoads.add(instruction);
-                        missingLoad++;
+                        missingLoadCount++;
                     }
                 }
             }
@@ -114,6 +128,48 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
             }
         }
 
-        return missingSpill != 0 || missingLoad != 0;
+        return missingSpillCount != 0 || missingLoadCount != 0;
+    }
+
+    private static boolean injectWrongRegisterAssignmentErrors(LIR lir, AllocationContext context) {
+        AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
+        List<Register> allocatableRegisters = context.registerAllocationConfig.getAllocatableRegisters().asList();
+        Random random = new Random();
+        wrongRegisterAssignmentCount = 0;
+
+        for (AbstractBlockBase<?> block : blocks) {
+            ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
+
+            for (LIRInstruction instruction : instructions) {
+                if (!(instruction instanceof LabelOp) && wrongRegisterAssignmentCount < ERROR_COUNT) {
+                    instruction.forEachOutput(new InstructionValueProcedure() {
+
+                        @Override
+                        public Value doValue(LIRInstruction inst, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
+                            if (ValueUtil.isRegister(value)) {
+                                RegisterValue register = ValueUtil.asRegisterValue(value);
+                                List<Register> filteredRegisters = allocatableRegisters.stream()        //
+                                                .filter(r -> !r.equals(register.getRegister()) && r.getRegisterCategory().equals(register.getRegister().getRegisterCategory()))         //
+                                                .collect(Collectors.toList());
+
+                                if (filteredRegisters.size() == 0) {
+                                    return value;
+                                }
+
+                                wrongRegisterAssignmentCount++;
+
+                                int index = random.nextInt(filteredRegisters.size());
+
+                                return filteredRegisters.get(index).asValue(register.getValueKind());
+                            }
+
+                            return value;
+                        }
+                    });
+                }
+            }
+        }
+
+        return wrongRegisterAssignmentCount != 0;
     }
 }
