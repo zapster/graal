@@ -60,8 +60,8 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         LIR lir = lirGenRes.getLIR();
         DebugContext debugContext = lir.getDebug();
 
-        // boolean injectedErrors = injectMissingSpillLoadErrors(lir);
-        boolean injectedErrors = injectWrongRegisterAssignmentErrors(lirGenRes, context);
+        boolean injectedErrors = injectMissingSpillLoadErrors(lir);
+        // boolean injectedErrors = injectWrongRegisterAssignmentErrors(lirGenRes, context);
         // boolean injectedErrors = injectWrongRegisterUseErrors(lirGenRes, context);
 
         // log that no errors were injected
@@ -148,7 +148,8 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
     private static boolean injectWrongRegisterAssignmentErrors(LIRGenerationResult lirGenRes, AllocationContext context) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-        List<Register> allocatableRegisters = context.registerAllocationConfig.getAllocatableRegisters().asList();
+        List<Register> allocatableRegisters = context.registerAllocationConfig.getAllocatableRegisters().asList()   //
+                        .stream().filter(register -> !register.name.equals("rax")).collect(Collectors.toList());
         Random random = new Random();
         wrongRegisterAssignmentCount = 0;
 
@@ -156,6 +157,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
             ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
 
             for (LIRInstruction instruction : instructions) {
+
                 if (!(instruction instanceof LabelOp) && wrongRegisterAssignmentCount < ERROR_COUNT) {
                     instruction.forEachOutput(new InstructionValueProcedure() {
 
