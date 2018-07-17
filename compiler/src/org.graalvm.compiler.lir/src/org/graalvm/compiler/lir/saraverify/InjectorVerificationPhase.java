@@ -20,7 +20,6 @@ import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LIRInstruction.OperandFlag;
 import org.graalvm.compiler.lir.LIRInstruction.OperandMode;
 import org.graalvm.compiler.lir.LIRValueUtil;
-import org.graalvm.compiler.lir.StandardOp.BlockEndOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.StandardOp.ValueMoveOp;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
@@ -45,7 +44,8 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
     private static int wrongRegisterAssignmentCount;
     private static int wrongRegisterUseCount;
 
-    public static final CounterKey detectedInjectedErrors = DebugContext.counter("SARAVerifyInjector[injected errors detected]");
+    public static final CounterKey testsInjectedErrors = DebugContext.counter("SARAVerifyInjector[tests with injected errors]");
+    public static final CounterKey testsDetectedInjectedErrors = DebugContext.counter("SARAVerifyInjector[tests where injected errors were detected]");
     public static final CounterKey executedTests = DebugContext.counter("SARAVerifyInjector[total number of executed tests]");
 
     public static class Options {
@@ -61,14 +61,16 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         DebugContext debugContext = lir.getDebug();
 
         // boolean injectedErrors = injectMissingSpillLoadErrors(lir);
-        // boolean injectedErrors = injectWrongRegisterAssignmentErrors(lirGenRes, context);
-        boolean injectedErrors = injectWrongRegisterUseErrors(lirGenRes, context);
+        boolean injectedErrors = injectWrongRegisterAssignmentErrors(lirGenRes, context);
+        // boolean injectedErrors = injectWrongRegisterUseErrors(lirGenRes, context);
 
         // log that no errors were injected
         if (!injectedErrors) {
             try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
                 debugContext.log(3, "%s", "No injected errors.");
             }
+        } else {
+            testsInjectedErrors.increment(debugContext);
         }
 
         try {
@@ -80,14 +82,12 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
             // sara verify error occured
             if (!injectedErrors) {
                 GraalError.shouldNotReachHere("SARAVerify error without having injected errors.");
+
             } else {
-                detectedInjectedErrors.increment(debugContext);
+                testsDetectedInjectedErrors.increment(debugContext);
             }
         }
         executedTests.increment(debugContext);
-
-        // throw error to avoid execution of injected code
-        throw new AssertionError("injector verification phase finished");
     }
 
     private static boolean injectMissingSpillLoadErrors(LIR lir) {
@@ -209,13 +209,13 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
 
             for (LIRInstruction instruction : instructions) {
 
-                if (!(instruction instanceof BlockEndOp) && wrongRegisterUseCount < ERROR_COUNT) {
+                if (wrongRegisterUseCount < ERROR_COUNT) {
                     instruction.forEachInput(new InstructionValueProcedure() {
 
                         @Override
                         public Value doValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
 
-                            if (ValueUtil.isRegister(value) && !value.equals(basePointer)) {
+                            if (ValueUtil.isRegister(value)) {
                                 RegisterValue register = ValueUtil.asRegisterValue(value);
 
                                 // get all allocatable registers, that have the same register
