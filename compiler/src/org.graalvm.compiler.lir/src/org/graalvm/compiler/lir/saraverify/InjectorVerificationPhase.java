@@ -60,9 +60,13 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         LIR lir = lirGenRes.getLIR();
         DebugContext debugContext = lir.getDebug();
 
-        boolean injectedErrors = injectMissingSpillLoadErrors(lir);
-        // boolean injectedErrors = injectWrongRegisterAssignmentErrors(lirGenRes, context);
-        // boolean injectedErrors = injectWrongRegisterUseErrors(lirGenRes, context);
+        boolean injectedMissingSpillLoadErrors = injectMissingSpillLoadErrors(lir);
+        boolean injectedWrongRegisterAssignmentErrors = injectWrongRegisterAssignmentErrors(lirGenRes, context);
+        boolean injectedWrongRegisterUseErrors = injectWrongRegisterUseErrors(lirGenRes, context);
+
+        boolean injectedErrors = injectedMissingSpillLoadErrors || injectedWrongRegisterAssignmentErrors || injectedWrongRegisterUseErrors;
+
+        executedTests.increment(debugContext);
 
         // log that no errors were injected
         if (!injectedErrors) {
@@ -82,29 +86,24 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
             // sara verify error occured
             if (!injectedErrors) {
                 GraalError.shouldNotReachHere("SARAVerify error without having injected errors.");
-
             } else {
                 testsDetectedInjectedErrors.increment(debugContext);
             }
         }
-        executedTests.increment(debugContext);
     }
 
     private static boolean injectMissingSpillLoadErrors(LIR lir) {
         AbstractControlFlowGraph<?> controlFlowGraph = lir.getControlFlowGraph();
         AbstractBlockBase<?>[] blocks = controlFlowGraph.getBlocks();
 
+        if (blocks.length == 1) {
+            return false;
+        }
+
         int missingSpillCount = 0;
         int missingLoadCount = 0;
 
         BlockMap<ArrayList<LIRInstruction>> missingSpillsLoadsMap = new BlockMap<>(controlFlowGraph);
-
-        // get the label instruction from block 0
-        LabelOp functionLabel = (LabelOp) lir.getLIRforBlock(blocks[0]).get(0);
-
-        // get the last incoming value from the label instruction, which is the value for the base
-        // pointer
-        Value basePointer = functionLabel.getIncomingValue(functionLabel.getIncomingSize() - 1);
 
         for (AbstractBlockBase<?> block : blocks) {
             ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
@@ -117,11 +116,11 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
                     AllocatableValue result = valueMoveOp.getResult();
                     AllocatableValue input = valueMoveOp.getInput();
 
-                    if (LIRValueUtil.isStackSlotValue(result) && !input.equals(basePointer) && missingSpillCount < ERROR_COUNT) {
+                    if (LIRValueUtil.isStackSlotValue(result) && missingSpillCount < ERROR_COUNT) {
                         // inject missing spill
                         missingSpillsLoads.add(instruction);
                         missingSpillCount++;
-                    } else if (LIRValueUtil.isStackSlotValue(input) && !result.equals(basePointer) && missingLoadCount < ERROR_COUNT) {
+                    } else if (LIRValueUtil.isStackSlotValue(input) && missingLoadCount < ERROR_COUNT) {
                         // inject missing load
                         missingSpillsLoads.add(instruction);
                         missingLoadCount++;
@@ -199,13 +198,6 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         Random random = new Random();
         wrongRegisterUseCount = 0;
 
-        // get the label instruction from block 0
-        LabelOp functionLabel = (LabelOp) lir.getLIRforBlock(blocks[0]).get(0);
-
-        // get the last incoming value from the label instruction, which is the value for the base
-        // pointer
-        Value basePointer = functionLabel.getIncomingValue(functionLabel.getIncomingSize() - 1);
-
         for (AbstractBlockBase<?> block : blocks) {
             ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
 
@@ -215,7 +207,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
                     instruction.forEachInput(new InstructionValueProcedure() {
 
                         @Override
-                        public Value doValue(LIRInstruction instruction, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
+                        public Value doValue(LIRInstruction inst, Value value, OperandMode mode, EnumSet<OperandFlag> flags) {
 
                             if (ValueUtil.isRegister(value)) {
                                 RegisterValue register = ValueUtil.asRegisterValue(value);
@@ -229,7 +221,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
                                 if (filteredRegisters.size() == 0) {
                                     return value;
                                 }
-                                instruction.setComment(lirGenRes, "injected wrong register use error");
+                                inst.setComment(lirGenRes, "injected wrong register use error");
 
                                 wrongRegisterUseCount++;
                                 int index = random.nextInt(filteredRegisters.size());
