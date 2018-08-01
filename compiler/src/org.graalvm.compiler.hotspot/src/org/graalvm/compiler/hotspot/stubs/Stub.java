@@ -60,10 +60,12 @@ import org.graalvm.compiler.hotspot.HotSpotForeignCallLinkage;
 import org.graalvm.compiler.hotspot.meta.HotSpotProviders;
 import org.graalvm.compiler.hotspot.nodes.StubStartNode;
 import org.graalvm.compiler.lir.asm.CompilationResultBuilderFactory;
+import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
 import org.graalvm.compiler.lir.phases.LIRSuites;
 import org.graalvm.compiler.lir.phases.PostAllocationOptimizationPhase.PostAllocationOptimizationContext;
 import org.graalvm.compiler.lir.profiling.MoveProfilingPhase;
+import org.graalvm.compiler.lir.saraverify.InjectorVerificationPhase;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.phases.OptimisticOptimizations;
@@ -303,6 +305,11 @@ public abstract class Stub {
         ListIterator<LIRPhase<PostAllocationOptimizationContext>> moveProfiling = lirSuites.getPostAllocationOptimizationStage().findPhase(MoveProfilingPhase.class);
         if (moveProfiling != null) {
             moveProfiling.remove();
+        }
+
+        ListIterator<LIRPhase<AllocationContext>> saraVerifyInjector = lirSuites.getAllocationStage().findPhase(InjectorVerificationPhase.class);
+        if (saraVerifyInjector != null) {
+            saraVerifyInjector.remove();
         }
         return lirSuites;
     }
