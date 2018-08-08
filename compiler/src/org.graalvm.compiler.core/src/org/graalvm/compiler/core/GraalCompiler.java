@@ -91,6 +91,8 @@ public class GraalCompiler {
     private static final TimerKey EmitCode = DebugContext.timer("EmitCode").doc("Time spent generating machine code from LIR.");
     private static final TimerKey BackEnd = DebugContext.timer("BackEnd").doc("Time spent in EmitLIR and EmitCode.");
 
+    private static final CounterKey compilationUnits = DebugContext.counter("compilationUnits");
+
     /**
      * Encapsulates all the inputs to a {@linkplain GraalCompiler#compile(Request) compilation}.
      */
@@ -168,6 +170,10 @@ public class GraalCompiler {
     @SuppressWarnings("try")
     public static <T extends CompilationResult> T compile(Request<T> r) {
         DebugContext debug = r.graph.getDebug();
+
+        // TODO: SARAVerify debug
+        compilationUnits.increment(debug);
+
         try (CompilationAlarm alarm = CompilationAlarm.trackCompilationPeriod(r.graph.getOptions())) {
             assert !r.graph.isFrozen();
             try (DebugContext.Scope s0 = debug.scope("GraalCompiler", r.graph, r.providers.getCodeCache()); DebugCloseable a = CompilerTimer.start(debug)) {

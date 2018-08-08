@@ -59,7 +59,10 @@ public final class CompilationPrinter {
      */
     public static CompilationPrinter begin(OptionValues options, CompilationIdentifier id, JavaMethod method, int entryBCI) {
         if (PrintCompilation.getValue(options) && !TTY.isSuppressed()) {
-            return new CompilationPrinter(id, method, entryBCI);
+            // TODO: SARAVerify Debug
+            CompilationPrinter printer = new CompilationPrinter(id, method, entryBCI);
+            TTY.println("Begin: " + printer.getMethodDescription());
+            return printer;
         }
         return DISABLED;
     }
