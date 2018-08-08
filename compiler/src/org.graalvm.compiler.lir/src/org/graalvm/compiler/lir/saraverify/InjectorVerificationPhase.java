@@ -1,6 +1,7 @@
 package org.graalvm.compiler.lir.saraverify;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Random;
@@ -147,8 +148,6 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
     private static boolean injectWrongRegisterAssignmentErrors(LIRGenerationResult lirGenRes, AllocationContext context) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-        List<Register> allocatableRegisters = context.registerAllocationConfig.getAllocatableRegisters().asList()   //
-                        .stream().filter(register -> !register.name.equals("rax")).collect(Collectors.toList());
         Random random = new Random();
         wrongRegisterAssignmentCount = 0;
 
@@ -167,9 +166,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
 
                                 // get all allocatable registers, that have the same register
                                 // category as the correct register
-                                List<Register> filteredRegisters = allocatableRegisters.stream()        //
-                                                .filter(r -> !r.equals(register.getRegister()) && r.getRegisterCategory().equals(register.getRegister().getRegisterCategory()))         //
-                                                .collect(Collectors.toList());
+                                List<Register> filteredRegisters = getFilteredAllocatableRegistersSamePlatformKind(context, value);
 
                                 if (filteredRegisters.size() == 0) {
                                     return value;
@@ -194,7 +191,6 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
     private static boolean injectWrongRegisterUseErrors(LIRGenerationResult lirGenRes, AllocationContext context) {
         LIR lir = lirGenRes.getLIR();
         AbstractBlockBase<?>[] blocks = lir.getControlFlowGraph().getBlocks();
-        List<Register> allocatableRegisters = context.registerAllocationConfig.getAllocatableRegisters().asList();
         Random random = new Random();
         wrongRegisterUseCount = 0;
 
@@ -214,12 +210,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
 
                                 // get all allocatable registers, that have the same register
                                 // category as the correct register
-                                List<Register> filteredRegisters = allocatableRegisters.stream()        //
-                                                .filter(r -> !r.equals(register.getRegister()) && r.getRegisterCategory().equals(register.getRegister().getRegisterCategory()))         //
-                                                .collect(Collectors.toList());
-
-                                // TODO
-                                Register[] registers = context.registerAllocationConfig.getAllocatableRegisters(value.getPlatformKind()).allocatableRegisters;
+                                List<Register> filteredRegisters = getFilteredAllocatableRegistersSamePlatformKind(context, value);
 
                                 if (filteredRegisters.size() == 0) {
                                     return value;
@@ -239,5 +230,12 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         }
 
         return wrongRegisterUseCount != 0;
+    }
+
+    private static List<Register> getFilteredAllocatableRegistersSamePlatformKind(AllocationContext context, Value value) {
+        Register[] registers = context.registerAllocationConfig.getAllocatableRegisters(value.getPlatformKind()).allocatableRegisters;
+
+        RegisterValue registerValue = ValueUtil.asRegisterValue(value);
+        return Arrays.stream(registers).filter(r -> !r.equals(registerValue.getRegister())).collect(Collectors.toList());
     }
 }
