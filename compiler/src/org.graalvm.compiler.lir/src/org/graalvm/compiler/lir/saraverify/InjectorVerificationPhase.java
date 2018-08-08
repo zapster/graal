@@ -44,9 +44,9 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
     private static int wrongRegisterAssignmentCount;
     private static int wrongRegisterUseCount;
 
-    public static final CounterKey testsInjectedErrors = DebugContext.counter("SARAVerifyInjector[tests with injected errors]");
-    public static final CounterKey testsDetectedInjectedErrors = DebugContext.counter("SARAVerifyInjector[tests where injected errors were detected]");
-    public static final CounterKey executedTests = DebugContext.counter("SARAVerifyInjector[total number of executed tests]");
+    private static final CounterKey testsInjectedErrors = DebugContext.counter("SARAVerifyInjector[tests with injected errors]");
+    private static final CounterKey testsDetectedInjectedErrors = DebugContext.counter("SARAVerifyInjector[tests where injected errors were detected]");
+    private static final CounterKey executedTests = DebugContext.counter("SARAVerifyInjector[total number of executed tests]");
 
     public static class Options {
         // @formatter:off
@@ -217,6 +217,9 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
                                 List<Register> filteredRegisters = allocatableRegisters.stream()        //
                                                 .filter(r -> !r.equals(register.getRegister()) && r.getRegisterCategory().equals(register.getRegister().getRegisterCategory()))         //
                                                 .collect(Collectors.toList());
+
+                                // TODO
+                                Register[] registers = context.registerAllocationConfig.getAllocatableRegisters(value.getPlatformKind()).allocatableRegisters;
 
                                 if (filteredRegisters.size() == 0) {
                                     return value;
