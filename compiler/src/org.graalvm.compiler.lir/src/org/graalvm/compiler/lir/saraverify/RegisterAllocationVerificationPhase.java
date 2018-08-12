@@ -26,6 +26,10 @@ package org.graalvm.compiler.lir.saraverify;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.graalvm.compiler.debug.CounterKey;
+import org.graalvm.compiler.debug.DebugContext;
+import org.graalvm.compiler.debug.DebugContext.Scope;
+import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
@@ -41,6 +45,11 @@ import jdk.vm.ci.meta.Constant;
 
 public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationContext> {
 
+    private static final CounterKey skippedCompilationUnits = DebugContext.counter("SARAVerifyRegisterAllocatorVerification[skipped compilation units]");
+
+    private final static String DEBUG_SCOPE = "SARAVerifyRegisterAllocationVerification";
+    private final static int BLOCK_LIMIT = 2000;
+
     public static class Options {
         // @formatter:off
 		@Option(help = "Enable static analysis register allocation verification.", type = OptionType.Debug)
@@ -52,12 +61,29 @@ public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationCont
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
         assert UniqueInstructionVerifier.verify(lirGenRes);
 
+        DebugContext debugContext = lirGenRes.getLIR().getDebug();
+
+        if (lirGenRes.getLIR().getControlFlowGraph().getBlocks().length > BLOCK_LIMIT) {
+            skippedCompilationUnits.increment(debugContext);
+            return;
+        }
+
+        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            debugContext.log(3, "%s", "RegisterAllocationVerificationPhase begin: " + lirGenRes.getCompilationUnitName());
+        }
+
         DuSequenceAnalysis duSequenceAnalysis = new DuSequenceAnalysis();
         Map<Register, DummyRegDef> dummyRegDefs = new HashMap<>();
         Map<Constant, DummyConstDef> dummyConstDefs = new HashMap<>();
-        AnalysisResult result = duSequenceAnalysis.determineDuSequences(lirGenRes, context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), dummyRegDefs, dummyConstDefs);
+        AnalysisResult result = duSequenceAnalysis.determineDuSequences(lirGenRes,
+                        context.registerAllocationConfig.getRegisterConfig().getAttributesMap(), dummyRegDefs,
+                        dummyConstDefs);
 
         context.contextAdd(result);
+
+        try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
+            debugContext.log(3, "%s", "RegisterAllocationVerificationPhase ended: " + lirGenRes.getCompilationUnitName());
+        }
     }
 
 }

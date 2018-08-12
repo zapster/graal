@@ -74,7 +74,7 @@ public class DefAnalysis {
 
             // log information
             try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                debugContext.log(3, "Visit Block: %d", blockIndex);
+                debugContext.log(3, "Visit Block: %d of %d", blockIndex, blockCount);
             }
 
             DefAnalysisInfo mergedDefAnalysisInfo;
@@ -84,9 +84,6 @@ public class DefAnalysis {
             } else {
                 mergedDefAnalysisInfo = mergeDefAnalysisInfo(lir, blockInfos, block, mapping, blockPhiInValues, blockPhiOutValues);
             }
-
-            // TODO: remove debug
-            Map<Value, List<Triple>> debugGroupedLocationTriples = mergedDefAnalysisInfo.getGroupedTriples();
 
             computeLocalFlow(lir.getLIRforBlock(block), mergedDefAnalysisInfo, mapping, callerSaveRegisterValues);
             DefAnalysisInfo previousDefAnalysisSets = blockInfos.get(block);
@@ -101,7 +98,7 @@ public class DefAnalysis {
 
             // log information
             try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                debugContext.log(3, "Visited Block: %d", blockIndex);
+                debugContext.log(3, "Visited Block: %d of %d", blockIndex, blockCount);
             }
             mergedDefAnalysisInfo.logSetSizes(debugContext);
         }
