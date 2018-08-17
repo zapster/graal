@@ -41,7 +41,7 @@ import jdk.vm.ci.meta.Value;
 public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
 
     private final static String DEBUG_SCOPE = "SARAVerifyInjectorVerification";
-    private final static int ERROR_COUNT = 5;
+    private final static int ERROR_COUNT = 1;
 
     private static int wrongRegisterAssignmentCount;
     private static int wrongRegisterUseCount;
@@ -59,6 +59,13 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
 
     @Override
     protected void run(TargetDescription target, LIRGenerationResult lirGenRes, AllocationContext context) {
+        AnalysisResult inputResult = context.contextLookup(AnalysisResult.class);
+
+        if (inputResult == null) {
+            // no input du-sequences were created by the RegisterAllocationVerificationPhase
+            return;
+        }
+
         LIR lir = lirGenRes.getLIR();
         DebugContext debugContext = lir.getDebug();
 
