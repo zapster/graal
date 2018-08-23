@@ -30,6 +30,7 @@ import org.graalvm.compiler.debug.CounterKey;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.debug.Indent;
+import org.graalvm.compiler.debug.TTY;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.phases.AllocationPhase.AllocationContext;
 import org.graalvm.compiler.lir.phases.LIRPhase;
@@ -66,7 +67,7 @@ public class RegisterAllocationVerificationPhase extends LIRPhase<AllocationCont
 
         if (lirGenRes.getLIR().getControlFlowGraph().getBlocks().length > Options.SARAVerifyBlockLimit.getValue(debugContext.getOptions())) {
             skippedCompilationUnits.increment(debugContext);
-            System.err.println("Skipped SARAVerify for: " + lirGenRes.getCompilationId());
+            TTY.print("Skipped SARAVerify for: " + lirGenRes.getCompilationId());
             return;
         }
 
