@@ -92,6 +92,7 @@ public class GraalCompiler {
     private static final TimerKey BackEnd = DebugContext.timer("BackEnd").doc("Time spent in EmitLIR and EmitCode.");
 
     private static final CounterKey compilationUnits = DebugContext.counter("compilationUnits");
+    private static final CounterKey compilationUnitsFinished = DebugContext.counter("compilationUnitsFinished");
 
     /**
      * Encapsulates all the inputs to a {@linkplain GraalCompiler#compile(Request) compilation}.
@@ -181,7 +182,11 @@ public class GraalCompiler {
                 emitBackEnd(r.graph, null, r.installedCodeOwner, r.backend, r.compilationResult, r.factory, null, r.lirSuites);
             } catch (Throwable e) {
                 throw debug.handle(e);
+            } finally {
+                // TODO: SARAVerify debug
+                compilationUnitsFinished.increment(debug);
             }
+
             checkForRequestedCrash(r.graph);
             return r.compilationResult;
         }
