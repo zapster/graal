@@ -41,7 +41,7 @@ import jdk.vm.ci.meta.Value;
 public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
 
     private final static String DEBUG_SCOPE = "SARAVerifyInjectorVerification";
-    private final static int ERROR_COUNT = 1;
+    private final static int ERROR_COUNT = 5;
 
     private static int wrongRegisterAssignmentCount;
     private static int wrongRegisterUseCount;
@@ -80,7 +80,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         // log that no errors were injected
         if (!injectedErrors) {
             try (Indent i = debugContext.indent(); Scope s = debugContext.scope(DEBUG_SCOPE)) {
-                debugContext.log(3, "%s", "No injected errors.");
+                debugContext.log(3, "%s", "No injected errors in " + lirGenRes.getCompilationId());
             }
         } else {
             testsInjectedErrors.increment(debugContext);
@@ -89,12 +89,14 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         try {
             VerificationPhase.runVerification(lirGenRes, context);
             if (injectedErrors) {
-                GraalError.shouldNotReachHere("Injected errors were not detected.");
+                GraalError.shouldNotReachHere("Injected errors were not detected in " + lirGenRes.getCompilationId());
+            } else {
+                return;
             }
         } catch (SARAVerifyError error) {
             // sara verify error occured
             if (!injectedErrors) {
-                GraalError.shouldNotReachHere("SARAVerify error without having injected errors.");
+                GraalError.shouldNotReachHere("SARAVerify error without having injected errors in " + lirGenRes.getCompilationUnitName());
             } else {
                 testsDetectedInjectedErrors.increment(debugContext);
             }
