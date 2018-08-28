@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -48,7 +50,8 @@ import com.oracle.truffle.api.test.ReflectionUtils;
 
 public class MergeSpecializationsTest {
 
-    private static final int THREADS = 50;
+    private static final int THREADS = 25;
+    private static final int ITERATIONS = 20;
 
     @NodeChild
     @SuppressWarnings("unused")
@@ -94,35 +97,35 @@ public class MergeSpecializationsTest {
 
     @Test
     public void testMultithreadedMergeInOrder() throws Exception {
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < ITERATIONS; i++) {
             multithreadedMerge(TestNodeFactory.getInstance(), new Executions(1, 1L << 32, 1.0), 1, 2, 3);
         }
     }
 
     @Test
     public void testMultithreadedMergeReverse() throws Exception {
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < ITERATIONS; i++) {
             multithreadedMerge(TestNodeFactory.getInstance(), new Executions(1.0, 1L << 32, 1), 3, 2, 1);
         }
     }
 
     @Test
     public void testMultithreadedMergeCachedInOrder() throws Exception {
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < ITERATIONS; i++) {
             multithreadedMerge(TestCachedNodeFactory.getInstance(), new Executions(1, 1L << 32, 1.0), 1, 2, 3);
         }
     }
 
     @Test
     public void testMultithreadedMergeCachedTwoEntries() throws Exception {
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < ITERATIONS; i++) {
             multithreadedMerge(TestCachedNodeFactory.getInstance(), new Executions(1, 2, 1.0), 1, 1, 3);
         }
     }
 
     @Test
     public void testMultithreadedMergeCachedThreeEntries() throws Exception {
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < ITERATIONS; i++) {
             multithreadedMerge(TestCachedNodeFactory.getInstance(), new Executions(1, 2, 3), 1, 1, 1);
         }
     }

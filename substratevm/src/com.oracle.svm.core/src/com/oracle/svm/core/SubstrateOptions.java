@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -35,6 +37,7 @@ import org.graalvm.compiler.options.OptionType;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
+import com.oracle.svm.core.option.APIOption;
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.option.RuntimeOptionKey;
 
@@ -75,6 +78,8 @@ public class SubstrateOptions {
     @Option(help = "Path passed to the linker as the -rpath (list of comma-separated directories)")//
     public static final HostedOptionKey<String> LinkerRPath = new HostedOptionKey<>("");
 
+    @APIOption(name = "-ea", customHelp = "enable assertions in the generated image")//
+    @APIOption(name = "-da", kind = APIOption.APIOptionKind.Negated, customHelp = "disable assertions in the generated image")//
     @Option(help = "Enable or disable Java assert statements at run time", type = OptionType.User)//
     public static final HostedOptionKey<Boolean> RuntimeAssertions = new HostedOptionKey<>(false);
 
@@ -92,7 +97,7 @@ public class SubstrateOptions {
     @Option(help = "Print summary GC information after main completion")//
     public static final RuntimeOptionKey<Boolean> PrintGCSummary = new RuntimeOptionKey<>(false);
 
-    @Option(help = "Print the time since the first allocation on logs")//
+    @Option(help = "Print a time stamp at each collection, if +PrintGC or +VerboseGC.")//
     public static final RuntimeOptionKey<Boolean> PrintGCTimeStamps = new RuntimeOptionKey<>(false);
 
     @Option(help = "Print more information about the heap before and after each collection")//
@@ -109,6 +114,9 @@ public class SubstrateOptions {
 
     @Option(help = "Use heap base register. ")//
     public static final HostedOptionKey<Boolean> UseHeapBaseRegister = new HostedOptionKey<>(false);
+
+    @Option(help = "Use linear pointer compression (requires the use of heap base register).")//
+    public static final HostedOptionKey<Boolean> UseLinearPointerCompression = new HostedOptionKey<>(true);
 
     @Option(help = "Support multiple isolates (disable for legacy mode with a single isolate). ")//
     public static final HostedOptionKey<Boolean> SpawnIsolates = new HostedOptionKey<Boolean>(false) {
@@ -191,13 +199,13 @@ public class SubstrateOptions {
     public static final HostedOptionKey<Boolean> AOTInline = new HostedOptionKey<>(true);
 
     @Option(help = "Maximum number of nodes in a method so that it is considered trivial.")//
-    public static final HostedOptionKey<Integer> MaxNodesInTrivialMethod = new HostedOptionKey<>(15);
+    public static final HostedOptionKey<Integer> MaxNodesInTrivialMethod = new HostedOptionKey<>(20);
 
     @Option(help = "Maximum number of invokes in a method so that it is considered trivial (for testing only).")//
     public static final HostedOptionKey<Integer> MaxInvokesInTrivialMethod = new HostedOptionKey<>(1);
 
     @Option(help = "Maximum number of nodes in a method so that it is considered trivial, if it does not have any invokes.")//
-    public static final HostedOptionKey<Integer> MaxNodesInTrivialLeafMethod = new HostedOptionKey<>(30);
+    public static final HostedOptionKey<Integer> MaxNodesInTrivialLeafMethod = new HostedOptionKey<>(40);
 
     public static FoldedPredicate makeFilter(String definedFilter) {
         if (definedFilter != null) {

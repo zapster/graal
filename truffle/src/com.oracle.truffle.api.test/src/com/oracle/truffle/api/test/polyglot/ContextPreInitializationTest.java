@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -32,6 +34,7 @@ import com.oracle.truffle.api.nodes.RootNode;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -44,6 +47,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
 import org.graalvm.options.OptionCategory;
 import org.graalvm.options.OptionDescriptors;
 import org.graalvm.options.OptionKey;
@@ -850,6 +855,59 @@ public class ContextPreInitializationTest {
         assertEquals(1, firstLangCtx.disposeThreadCount);
     }
 
+    @Test
+    public void testLogging() throws Exception {
+        setPatchable(FIRST);
+        // In context pre-initialization there is no sdk Context to set log handler,
+        // logging is done to System.out
+        final PrintStream origOut = System.out;
+        final ByteArrayOutputStream preInitOut = new ByteArrayOutputStream();
+        try (PrintStream printStream = new PrintStream(preInitOut)) {
+            System.setOut(printStream);
+            System.setProperty("polyglot.log.engine.level", "FINE");
+            doContextPreinitialize(FIRST);
+        } finally {
+            System.setOut(origOut);
+            System.getProperties().remove("polyglot.log.engine.level");
+        }
+        final String preInitLog = preInitOut.toString("UTF-8");
+        assertTrue(preInitLog.contains("Pre-initialized context for language: ContextPreInitializationFirst"));
+        List<CountingContext> contexts = new ArrayList<>(emittedContexts);
+        assertEquals(1, contexts.size());
+        final CountingContext firstLangCtx = findContext(FIRST, contexts);
+        assertNotNull(firstLangCtx);
+        assertEquals(1, firstLangCtx.createContextCount);
+        assertEquals(1, firstLangCtx.initializeContextCount);
+        assertEquals(0, firstLangCtx.patchContextCount);
+        assertEquals(0, firstLangCtx.disposeContextCount);
+        assertEquals(0, firstLangCtx.initializeThreadCount);
+        assertEquals(0, firstLangCtx.disposeThreadCount);
+        final TestHandler testHandler = new TestHandler();
+        final Context ctx = Context.newBuilder().option("log.engine.level", "FINE").logHandler(testHandler).build();
+        Value res = ctx.eval(Source.create(FIRST, "test"));
+        assertEquals("test", res.asString());
+        assertEquals(1, testHandler.logs.size());
+        assertEquals(FIRST, testHandler.logs.get(0).getParameters()[0]);
+        assertEquals("Successfully patched context of language: {0}", testHandler.logs.get(0).getMessage());
+        contexts = new ArrayList<>(emittedContexts);
+        assertEquals(1, contexts.size());
+        assertEquals(1, firstLangCtx.createContextCount);
+        assertEquals(1, firstLangCtx.initializeContextCount);
+        assertEquals(1, firstLangCtx.patchContextCount);
+        assertEquals(0, firstLangCtx.disposeContextCount);
+        assertEquals(1, firstLangCtx.initializeThreadCount);
+        assertEquals(0, firstLangCtx.disposeThreadCount);
+        ctx.close();
+        contexts = new ArrayList<>(emittedContexts);
+        assertEquals(1, contexts.size());
+        assertEquals(1, firstLangCtx.createContextCount);
+        assertEquals(1, firstLangCtx.initializeContextCount);
+        assertEquals(1, firstLangCtx.patchContextCount);
+        assertEquals(1, firstLangCtx.disposeContextCount);
+        assertEquals(1, firstLangCtx.initializeThreadCount);
+        assertEquals(1, firstLangCtx.disposeThreadCount);
+    }
+
     private static void resetSystemPropertiesOptions() {
         System.getProperties().remove("polyglot.engine.PreinitializeContexts");
         System.getProperties().remove(SYS_OPTION1_KEY);
@@ -1024,7 +1082,7 @@ public class ContextPreInitializationTest {
         }
 
         protected void useLanguage(CountingContext context, String id) {
-            com.oracle.truffle.api.source.Source source = com.oracle.truffle.api.source.Source.newBuilder("").language(id).name("").build();
+            com.oracle.truffle.api.source.Source source = com.oracle.truffle.api.source.Source.newBuilder(id, "", "").build();
             context.environment().parse(source);
         }
 
@@ -1039,7 +1097,7 @@ public class ContextPreInitializationTest {
         }
     }
 
-    @TruffleLanguage.Registration(id = FIRST, name = FIRST, version = "1.0", mimeType = FIRST, dependentLanguages = INTERNAL)
+    @TruffleLanguage.Registration(id = FIRST, name = FIRST, version = "1.0", dependentLanguages = INTERNAL)
     public static final class ContextPreInitializationTestFirstLanguage extends BaseLanguage {
         @Option(category = OptionCategory.USER, help = "Option 1") public static final OptionKey<Boolean> Option1 = new OptionKey<>(false);
         @Option(category = OptionCategory.USER, help = "Option 2") public static final OptionKey<Boolean> Option2 = new OptionKey<>(false);
@@ -1079,7 +1137,7 @@ public class ContextPreInitializationTest {
         }
     }
 
-    @TruffleLanguage.Registration(id = SECOND, name = SECOND, version = "1.0", mimeType = SECOND, dependentLanguages = FIRST)
+    @TruffleLanguage.Registration(id = SECOND, name = SECOND, version = "1.0", dependentLanguages = FIRST)
     public static final class ContextPreInitializationTestSecondLanguage extends BaseLanguage {
         private static boolean callDependentLanguage;
 
@@ -1092,7 +1150,24 @@ public class ContextPreInitializationTest {
         }
     }
 
-    @TruffleLanguage.Registration(id = INTERNAL, name = INTERNAL, version = "1.0", mimeType = INTERNAL, internal = true)
+    @TruffleLanguage.Registration(id = INTERNAL, name = INTERNAL, version = "1.0", internal = true)
     public static final class ContextPreInitializationTestInternalLanguage extends BaseLanguage {
+    }
+
+    private static final class TestHandler extends Handler {
+        final List<LogRecord> logs = new ArrayList<>();
+
+        @Override
+        public void publish(LogRecord record) {
+            logs.add(record);
+        }
+
+        @Override
+        public void flush() {
+        }
+
+        @Override
+        public void close() throws SecurityException {
+        }
     }
 }

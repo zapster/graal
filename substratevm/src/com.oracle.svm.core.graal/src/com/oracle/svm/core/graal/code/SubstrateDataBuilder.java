@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -21,6 +23,8 @@
  * questions.
  */
 package com.oracle.svm.core.graal.code;
+
+import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
 
 import java.nio.ByteBuffer;
 
@@ -55,7 +59,11 @@ public class SubstrateDataBuilder extends DataBuilder {
             assert constant instanceof SubstrateObjectConstant : "should be only VMConstant";
             return new ObjectData((SubstrateObjectConstant) constant);
         } else if (JavaConstant.isNull(constant)) {
-            size = FrameAccess.wordSize();
+            if (SubstrateObjectConstant.isCompressed((JavaConstant) constant)) {
+                size = ConfigurationValues.getObjectLayout().getReferenceSize();
+            } else {
+                size = FrameAccess.uncompressedReferenceSize();
+            }
             return ZeroData.create(size, size);
         } else if (constant instanceof SerializableConstant) {
             SerializableConstant s = (SerializableConstant) constant;
@@ -81,7 +89,13 @@ public class SubstrateDataBuilder extends DataBuilder {
         @Override
         protected void emit(ByteBuffer buffer, Patches patches) {
             int position = buffer.position();
-            buffer.putLong(0L);
+            if (getSize() == Integer.BYTES) {
+                buffer.putInt(0);
+            } else if (getSize() == Long.BYTES) {
+                buffer.putLong(0L);
+            } else {
+                shouldNotReachHere("Unsupported object constant reference size: " + getSize());
+            }
             patches.registerPatch(position, constant);
         }
     }

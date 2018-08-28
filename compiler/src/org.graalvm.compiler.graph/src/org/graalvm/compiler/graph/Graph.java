@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -1199,7 +1201,7 @@ public class Graph {
         return true;
     }
 
-    public boolean verifySourcePositions() {
+    public boolean verifySourcePositions(boolean performConsistencyCheck) {
         if (trackNodeSourcePosition()) {
             ResolvedJavaMethod root = null;
             for (Node node : getNodes()) {
@@ -1210,6 +1212,12 @@ public class Graph {
                     } else {
                         assert pos.verifyRootMethod(root) : node;
                     }
+                }
+
+                // More strict node-type-specific check
+                if (performConsistencyCheck) {
+                    // Disabled due to GR-10445.
+                    // node.verifySourcePosition();
                 }
             }
         }

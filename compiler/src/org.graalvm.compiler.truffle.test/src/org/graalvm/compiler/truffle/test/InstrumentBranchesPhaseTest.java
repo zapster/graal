@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -100,7 +102,7 @@ public class InstrumentBranchesPhaseTest extends PartialEvaluationTest {
 
     @Test
     public void simpleIfTest() {
-        InstrumentPhase.Instrumentation instrumentation = truffleCompiler.getInstrumentation();
+        InstrumentPhase.Instrumentation instrumentation = truffleCompiler.getPartialEvaluator().getInstrumentation();
         FrameDescriptor descriptor = new FrameDescriptor();
         SimpleIfTestNode result = new SimpleIfTestNode(5);
         RootTestNode rootNode = new RootTestNode(descriptor, "simpleIfRoot", result);
@@ -116,7 +118,7 @@ public class InstrumentBranchesPhaseTest extends PartialEvaluationTest {
 
     @Test
     public void twoIfsTest() {
-        InstrumentPhase.Instrumentation instrumentation = truffleCompiler.getInstrumentation();
+        InstrumentPhase.Instrumentation instrumentation = truffleCompiler.getPartialEvaluator().getInstrumentation();
         FrameDescriptor descriptor = new FrameDescriptor();
         TwoIfsTestNode result = new TwoIfsTestNode(5, -1);
         RootTestNode rootNode = new RootTestNode(descriptor, "twoIfsRoot", result);

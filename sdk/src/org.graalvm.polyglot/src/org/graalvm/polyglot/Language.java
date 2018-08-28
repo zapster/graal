@@ -24,6 +24,8 @@
  */
 package org.graalvm.polyglot;
 
+import java.util.Set;
+
 import org.graalvm.options.OptionDescriptor;
 import org.graalvm.options.OptionDescriptors;
 import org.graalvm.polyglot.impl.AbstractPolyglotImpl.AbstractLanguageImpl;
@@ -107,8 +109,27 @@ public final class Language {
         return impl.getOptions();
     }
 
-    Engine getEngine() {
-        return impl.getEngineAPI();
+    /**
+     * Returns the default MIME type that is in use by a language. The default MIME type specifies
+     * whether a source is loaded as character or binary based source by default. Returns
+     * <code>null</code> if the language does not specify a default MIME type.
+     *
+     * @see Source#hasBytes()
+     * @see Source#getMimeType()
+     * @since 1.0
+     */
+    public String getDefaultMimeType() {
+        return impl.getDefaultMimeType();
+    }
+
+    /**
+     * Returns the MIME types supported by this language.
+     *
+     * @see Source#getMimeType()
+     * @since 1.0
+     */
+    public Set<String> getMimeTypes() {
+        return impl.getMimeTypes();
     }
 
 }

@@ -27,9 +27,6 @@ package com.oracle.truffle.regex.runtime;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.interop.ArityException;
-import com.oracle.truffle.api.interop.ForeignAccess;
-import com.oracle.truffle.api.interop.InteropException;
-import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.MessageResolution;
 import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
@@ -69,18 +66,26 @@ public class RegexObjectMessageResolution {
         }
     }
 
+    static class GetNamedCaptureGroupsNode extends RegexObjectPropertyNode {
+
+        @Override
+        Object execute(RegexObject receiver) {
+            return receiver.getNamedCaptureGroups();
+        }
+    }
+
     abstract static class ReadCacheNode extends Node {
 
         abstract Object execute(RegexObject receiver, String symbol);
 
-        @Specialization(guards = "symbol == cachedSymbol", limit = "3")
+        @Specialization(guards = "symbol == cachedSymbol", limit = "4")
         Object readIdentity(RegexObject receiver, @SuppressWarnings("unused") String symbol,
                         @Cached("symbol") @SuppressWarnings("unused") String cachedSymbol,
                         @Cached("getResultProperty(symbol)") RegexObjectPropertyNode propertyNode) {
             return propertyNode.execute(receiver);
         }
 
-        @Specialization(guards = "symbol.equals(cachedSymbol)", limit = "3", replaces = "readIdentity")
+        @Specialization(guards = "symbol.equals(cachedSymbol)", limit = "4", replaces = "readIdentity")
         Object readEquals(RegexObject receiver, @SuppressWarnings("unused") String symbol,
                         @Cached("symbol") @SuppressWarnings("unused") String cachedSymbol,
                         @Cached("getResultProperty(symbol)") RegexObjectPropertyNode propertyNode) {
@@ -95,6 +100,8 @@ public class RegexObjectMessageResolution {
                     return new GetPatternNode();
                 case "flags":
                     return new GetFlagsNode();
+                case "groups":
+                    return new GetNamedCaptureGroupsNode();
                 default:
                     throw UnknownIdentifierException.raise(symbol);
             }
@@ -114,7 +121,7 @@ public class RegexObjectMessageResolution {
     @Resolve(message = "INVOKE")
     abstract static class RegexObjectInvokeNode extends Node {
 
-        @Child private Node executeNode = Message.createExecute(3).createNode();
+        @Child private ExecuteRegexObjectNode executeNode = ExecuteRegexObjectNode.create();
 
         public Object access(RegexObject receiver, String name, Object[] args) {
             if (!name.equals("exec")) {
@@ -123,11 +130,7 @@ public class RegexObjectMessageResolution {
             if (args.length != 2) {
                 throw ArityException.raise(2, args.length);
             }
-            try {
-                return ForeignAccess.sendExecute(executeNode, receiver.getCompiledRegexObject(), receiver, args[0], args[1]);
-            } catch (InteropException ex) {
-                throw ex.raise();
-            }
+            return executeNode.execute(receiver, args[0], args[1]);
         }
     }
 }

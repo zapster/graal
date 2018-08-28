@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -55,7 +57,7 @@ class JNIGraphKit extends HostedGraphKit {
         InvokeWithExceptionNode invoke = startInvokeWithException(method, InvokeKind.Static, getFrameState(), invokeBci, exceptionEdgeBci, args);
         exceptionPart();
         ExceptionObjectNode exception = exceptionObject();
-        retainPendingException(exception);
+        setPendingException(exception);
         endInvokeWithException();
         return invoke;
     }
@@ -99,8 +101,12 @@ class JNIGraphKit extends HostedGraphKit {
         return createStaticInvoke("getStaticObjectFieldsArray");
     }
 
-    public InvokeWithExceptionNode retainPendingException(ValueNode obj) {
-        return createStaticInvoke("retainPendingException", obj);
+    public InvokeWithExceptionNode setPendingException(ValueNode obj) {
+        return createStaticInvoke("setPendingException", obj);
+    }
+
+    public InvokeWithExceptionNode getAndClearPendingException() {
+        return createStaticInvoke("getAndClearPendingException");
     }
 
     public InvokeWithExceptionNode rethrowPendingException() {

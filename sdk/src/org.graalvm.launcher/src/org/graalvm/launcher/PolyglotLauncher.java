@@ -92,14 +92,17 @@ public final class PolyglotLauncher extends Launcher {
     }
 
     protected static void printVersion(Engine engine) {
-        System.out.println("GraalVM polyglot launcher " + engine.getVersion());
+        String engineImplementationName = engine.getImplementationName();
+        if (isAOT()) {
+            engineImplementationName += " Native";
+        }
+        System.out.println(String.format("%s polyglot launcher %s", engineImplementationName, engine.getVersion()));
     }
 
     private void launch(String[] args) {
         List<String> arguments = new ArrayList<>(Arrays.asList(args));
         if (isAOT()) {
-            nativeAccess.maybeExec(arguments, true, Collections.emptyMap(), VMType.Native, true);
-            nativeAccess.setGraalVMProperties();
+            nativeAccess.maybeExec(arguments, true, Collections.emptyMap(), VMType.Native);
         }
 
         Map<String, String> options = new HashMap<>();
@@ -225,10 +228,10 @@ public final class PolyglotLauncher extends Launcher {
             launcherClass = getLauncherClass(launcherName);
         }
         try {
-            AbstractLanguageLauncher launcher = launcherClass.newInstance();
+            AbstractLanguageLauncher launcher = launcherClass.getDeclaredConstructor().newInstance();
             launcher.setPolyglot(true);
             launcher.launch(args, options, false);
-        } catch (IllegalAccessException | InstantiationException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to instanciate launcher class " + launcherName, e);
         }
     }
@@ -317,7 +320,16 @@ public final class PolyglotLauncher extends Launcher {
 
     public static void main(String[] args) {
         try {
-            new PolyglotLauncher().launch(args);
+            PolyglotLauncher launcher = new PolyglotLauncher();
+            try {
+                launcher.launch(args);
+            } catch (AbortException e) {
+                throw e;
+            } catch (PolyglotException e) {
+                handlePolyglotException(e);
+            } catch (Throwable t) {
+                throw launcher.abort(t);
+            }
         } catch (AbortException e) {
             handleAbortException(e);
         }

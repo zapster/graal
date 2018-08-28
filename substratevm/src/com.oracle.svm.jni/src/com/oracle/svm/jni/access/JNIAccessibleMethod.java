@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -93,7 +95,7 @@ public final class JNIAccessibleMethod {
                     JNIJavaCallWrapperMethod valistNonvirtualCallWrapperMethod) {
 
         assert varargsCallWrapper != null && arrayCallWrapper != null && valistCallWrapper != null;
-        assert Modifier.isStatic(modifiers) //
+        assert (Modifier.isStatic(modifiers) || Modifier.isAbstract(modifiers)) //
                         ? (varargsNonvirtualCallWrapperMethod == null && arrayNonvirtualCallWrapperMethod == null && valistNonvirtualCallWrapperMethod == null)
                         : (varargsNonvirtualCallWrapperMethod != null & arrayNonvirtualCallWrapperMethod != null && valistNonvirtualCallWrapperMethod != null);
         this.modifiers = modifiers;
@@ -121,7 +123,7 @@ public final class JNIAccessibleMethod {
         varargsCallWrapper = MethodPointer.factory(hUniverse.lookup(aUniverse.lookup(varargsCallWrapperMethod)));
         arrayCallWrapper = MethodPointer.factory(hUniverse.lookup(aUniverse.lookup(arrayCallWrapperMethod)));
         valistCallWrapper = MethodPointer.factory(hUniverse.lookup(aUniverse.lookup(valistCallWrapperMethod)));
-        if (!isStatic()) {
+        if (!Modifier.isStatic(modifiers) && !Modifier.isAbstract(modifiers)) {
             varargsNonvirtualCallWrapper = MethodPointer.factory(hUniverse.lookup(aUniverse.lookup(varargsNonvirtualCallWrapperMethod)));
             arrayNonvirtualCallWrapper = MethodPointer.factory(hUniverse.lookup(aUniverse.lookup(arrayNonvirtualCallWrapperMethod)));
             valistNonvirtualCallWrapper = MethodPointer.factory(hUniverse.lookup(aUniverse.lookup(valistNonvirtualCallWrapperMethod)));

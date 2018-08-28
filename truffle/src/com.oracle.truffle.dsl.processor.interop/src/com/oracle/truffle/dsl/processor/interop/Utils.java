@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -55,8 +57,8 @@ final class Utils {
         try {
             currentMessage = Message.valueOf(messageName);
         } catch (IllegalArgumentException ex) {
-            TypeElement typeElement = processingEnv.getElementUtils().getTypeElement(messageName);
-            TypeElement messageElement = processingEnv.getElementUtils().getTypeElement(Message.class.getName());
+            TypeElement typeElement = ElementUtils.getTypeElement(processingEnv, messageName);
+            TypeElement messageElement = ElementUtils.getTypeElement(processingEnv, Message.class.getName());
             if (typeElement != null && processingEnv.getTypeUtils().isAssignable(typeElement.asType(), messageElement.asType())) {
                 currentMessage = messageName;
             }
@@ -66,7 +68,7 @@ final class Utils {
 
     static TypeMirror getTypeMirror(ProcessingEnvironment env, Class<?> clazz) {
         String name = clazz.getName();
-        TypeElement elem = env.getElementUtils().getTypeElement(name);
+        TypeElement elem = ElementUtils.getTypeElement(env, name);
         return elem.asType();
     }
 

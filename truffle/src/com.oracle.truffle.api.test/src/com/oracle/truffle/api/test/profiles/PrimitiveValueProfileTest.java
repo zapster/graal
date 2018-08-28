@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,7 +24,6 @@
  */
 package com.oracle.truffle.api.test.profiles;
 
-import com.oracle.truffle.api.interop.java.*;
 import static com.oracle.truffle.api.test.ReflectionUtils.getStaticField;
 import static com.oracle.truffle.api.test.ReflectionUtils.invoke;
 import static com.oracle.truffle.api.test.ReflectionUtils.invokeStatic;
@@ -36,6 +37,8 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeThat;
+
+import java.util.Objects;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -135,11 +138,7 @@ public class PrimitiveValueProfileTest {
     }
 
     private static boolean primitiveEquals(Object value0, Object value1) {
-        if (JavaInterop.isPrimitive(value0)) {
-            return value0.equals(value1);
-        } else {
-            return value0 == value1;
-        }
+        return Objects.equals(value0, value1);
     }
 
     @Theory
@@ -151,26 +150,6 @@ public class PrimitiveValueProfileTest {
         assertThat(result1, is(value1));
 
         if (primitiveEquals(value0, value1)) {
-            assertThat(getCachedValue(profile), is(value0));
-            assertThat(isGeneric(profile), is(false));
-        } else {
-            assertThat(isGeneric(profile), is(true));
-        }
-        assertThat(isUninitialized(profile), is(false));
-        profile.toString(); // test that it is not crashing
-    }
-
-    @Theory
-    public void testProfileThreeObject(Object value0, Object value1, Object value2) {
-        Object result0 = profile.profile(value0);
-        Object result1 = profile.profile(value1);
-        Object result2 = profile.profile(value2);
-
-        assertThat(result0, is(value0));
-        assertThat(result1, is(value1));
-        assertThat(result2, is(value2));
-
-        if (primitiveEquals(value0, value1) && primitiveEquals(value1, value2)) {
             assertThat(getCachedValue(profile), is(value0));
             assertThat(isGeneric(profile), is(false));
         } else {

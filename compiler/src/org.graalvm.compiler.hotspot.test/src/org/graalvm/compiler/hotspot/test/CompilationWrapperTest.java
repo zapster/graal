@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -223,25 +225,19 @@ public class CompilationWrapperTest extends GraalCompilerTest {
             Assert.assertTrue(zip.toString(), zip.exists());
             Assert.assertTrue(zip + " not in " + dumpPathEntries, dumpPathEntries.contains(zip.getName()));
             try {
-                int bgv = 0;
-                int cfg = 0;
+                int bgvOrCfgFiles = 0;
                 ZipFile dd = new ZipFile(diagnosticOutputZip);
                 List<String> entries = new ArrayList<>();
                 for (Enumeration<? extends ZipEntry> e = dd.entries(); e.hasMoreElements();) {
                     ZipEntry ze = e.nextElement();
                     String name = ze.getName();
                     entries.add(name);
-                    if (name.endsWith(".bgv")) {
-                        bgv++;
-                    } else if (name.endsWith(".cfg")) {
-                        cfg++;
+                    if (name.endsWith(".bgv") || name.endsWith(".cfg")) {
+                        bgvOrCfgFiles++;
                     }
                 }
-                if (bgv == 0) {
-                    Assert.fail(String.format("Expected at least one .bgv file in %s: %s%n%s", diagnosticOutputZip, entries, proc));
-                }
-                if (cfg == 0) {
-                    Assert.fail(String.format("Expected at least one .cfg file in %s: %s%n%s", diagnosticOutputZip, entries, proc));
+                if (bgvOrCfgFiles == 0) {
+                    Assert.fail(String.format("Expected at least one .bgv or .cfg file in %s: %s%n%s", diagnosticOutputZip, entries, proc));
                 }
             } finally {
                 zip.delete();

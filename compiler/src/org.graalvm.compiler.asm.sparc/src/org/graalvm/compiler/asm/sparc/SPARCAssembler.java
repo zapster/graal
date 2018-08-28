@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -1171,7 +1173,7 @@ public abstract class SPARCAssembler extends Assembler {
     public static final Sethi SETHI = new Sethi();
     public static final FMOVcc FMOVSCC = new FMOVcc(OpfLow.Fmovscc);
     public static final FMOVcc FMOVDCC = new FMOVcc(OpfLow.Fmovdcc);
-    public static final MOVicc MOVicc = new MOVicc();
+    public static final MOVicc MOVICC = new MOVicc();
     public static final OpfOp OPF = new OpfOp();
     public static final Op3Op OP3 = new Op3Op();
     public static final SPARCOp LDST = new SPARCOp(Ops.LdstOp);

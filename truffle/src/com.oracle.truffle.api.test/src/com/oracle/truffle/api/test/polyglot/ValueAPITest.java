@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -38,6 +40,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -71,6 +74,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.ComparisonFailure;
 import org.junit.Test;
+
+import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.nodes.RootNode;
 
 public class ValueAPITest {
 
@@ -200,7 +207,6 @@ public class ValueAPITest {
             } else {
                 assertValue(context, context.asValue(value), MEMBERS, HOST_OBJECT);
             }
-
         }
     }
 
@@ -853,8 +859,7 @@ public class ValueAPITest {
                         "Cannot convert 'false'(language: Java, type: java.lang.Boolean) to Java type 'java.lang.String' using Value.asString(): Invalid coercion. You can ensure that the value can be converted using Value.isString().");
         assertFails(() -> noString.as(char.class), ClassCastException.class,
                         "Cannot convert 'false'(language: Java, type: java.lang.Boolean) to Java type 'char': Invalid or lossy primitive coercion.");
-        assertFails(() -> noString.as(String.class), ClassCastException.class,
-                        "Cannot convert 'false'(language: Java, type: java.lang.Boolean) to Java type 'java.lang.String': Invalid or lossy primitive coercion.");
+        assertEquals("false", noString.as(String.class));
 
         Value noBoolean = context.asValue("foobar");
 
@@ -951,10 +956,11 @@ public class ValueAPITest {
                         "Invalid index 1 for List<java.lang.String> '[asdf]'(language: Java, type: java.lang.String[]).");
         assertFails(() -> stringList.set(1, null), IndexOutOfBoundsException.class,
                         "Invalid index 1 for List<java.lang.String> '[asdf]'(language: Java, type: java.lang.String[]).");
-        assertFails(() -> ((List<Object>) stringList).set(0, 42), ClassCastException.class,
-                        "Invalid value '42'(language: Java, type: java.lang.Integer) for List<java.lang.String> '[asdf]'(language: Java, type: java.lang.String[]) and index 0.");
-        assertFails(() -> ((List<Object>) stringList).set(0, context.asValue(42)), ClassCastException.class,
-                        "Invalid value '42'(language: Java, type: java.lang.Integer) for List<java.lang.String> '[asdf]'(language: Java, type: java.lang.String[]) and index 0.");
+
+        ((List<Object>) stringList).set(0, 42);
+        assertEquals("42", stringList.get(0));
+        ((List<Object>) stringList).set(0, context.asValue(42));
+        assertEquals("42", stringList.get(0));
 
         // just to make sure this works
         ((List<Object>) stringList).set(0, context.asValue("foo"));
@@ -1039,9 +1045,7 @@ public class ValueAPITest {
                         "Illegal identifier type 'java.lang.Object' for Map<Object, Object> 'MemberErrorTest'(language: Java, type: com.oracle.truffle.api.test.polyglot.ValueAPITest$MemberErrorTest).");
 
         Map<String, String> stringMap = v.as(STRING_MAP);
-
-        assertFails(() -> stringMap.get("value"), ClassCastException.class,
-                        "Cannot convert '43'(language: Java, type: java.lang.Integer) to Java type 'java.lang.String': Invalid or lossy primitive coercion.");
+        assertEquals("43", stringMap.get("value"));
 
         assertFails(() -> map.put("value", ""), ClassCastException.class,
                         "Invalid value ''(language: Java, type: java.lang.String) for Map<Object, Object> 'MemberErrorTest'(language: Java, type: com.oracle.truffle.api.test.polyglot.ValueAPITest$MemberErrorTest) and identifier 'value'.");
@@ -1121,35 +1125,33 @@ public class ValueAPITest {
         assertEquals("", v.execute("").as(Object.class));
         assertEquals("", v.execute("").asString());
 
+        String className = executable.getClass().getName();
         assertFails(() -> v.execute("", ""), IllegalArgumentException.class,
-                        "Invalid argument count when executing 'testExecutable'(language: Java, type: com.oracle.truffle.api.test.polyglot.ValueAPITest$9) " +
+                        "Invalid argument count when executing 'testExecutable'(language: Java, type: " + className + ") " +
                                         "with arguments [''(language: Java, type: java.lang.String), ''(language: Java, type: java.lang.String)]. Expected 1 argument(s) but got 2.");
 
         assertFails(() -> v.execute(), IllegalArgumentException.class,
-                        "Invalid argument count when executing 'testExecutable'(language: Java, type: com.oracle.truffle.api.test.polyglot.ValueAPITest$9) with arguments []." +
+                        "Invalid argument count when executing 'testExecutable'(language: Java, type: " + className + ") with arguments []." +
                                         " Expected 1 argument(s) but got 0.");
 
-        assertFails(() -> v.execute(42), IllegalArgumentException.class,
-                        "Invalid argument when executing 'testExecutable'(language: Java, type: com.oracle.truffle.api.test.polyglot.ValueAPITest$9) " +
-                                        "with arguments ['42'(language: Java, type: java.lang.Integer)].");
+        assertTrue(v.execute(42).isString());
+        assertEquals("42", v.execute(42).asString());
 
         assertFails(() -> context.asValue("").execute(), UnsupportedOperationException.class,
                         "Unsupported operation Value.execute(Object...) for ''(language: Java, type: java.lang.String). You can ensure that the operation " +
                                         "is supported using Value.canExecute().");
 
         assertFails(() -> v.as(OtherInterface0.class).execute(), IllegalArgumentException.class,
-                        "Invalid argument count when executing 'testExecutable'(language: Java, type: com.oracle.truffle.api.test.polyglot.ValueAPITest$9) " +
+                        "Invalid argument count when executing 'testExecutable'(language: Java, type: " + className + ") " +
                                         "with arguments []. Expected 1 argument(s) but got 0.");
 
         assertEquals("", v.as(OtherInterface1.class).execute(""));
 
-        assertFails(() -> v.as(OtherInterface1.class).execute(42), IllegalArgumentException.class,
-                        "Invalid argument when executing 'testExecutable'(language: Java, type: com.oracle.truffle.api.test.polyglot.ValueAPITest$9) " +
-                                        "with arguments ['42'(language: Java, type: java.lang.Integer)].");
+        assertEquals("42", v.as(OtherInterface1.class).execute(42));
 
         assertFails(() -> v.as(OtherInterface2.class).execute("", ""), IllegalArgumentException.class,
                         "Invalid argument count when executing 'testExecutable'(language: Java, " +
-                                        "type: com.oracle.truffle.api.test.polyglot.ValueAPITest$9) with arguments [''(language: Java, type: java.lang.String), " +
+                                        "type: " + className + ") with arguments [''(language: Java, type: java.lang.String), " +
                                         "''(language: Java, type: java.lang.String)]. Expected 1 argument(s) but got 2.");
 
         assertSame(executable, v.as(ExecutableInterface.class));
@@ -1205,6 +1207,130 @@ public class ValueAPITest {
 
         assertTrue(v.removeArrayElement(0));
         assertTrue(v.getArraySize() == 0);
+    }
+
+    @Test
+    public void testRecursiveList() {
+        Object[] o1 = new Object[1];
+        Object[] o2 = new Object[]{o1};
+        o1[0] = o2;
+
+        Value v1 = context.asValue(o1);
+        Value v2 = context.asValue(o2);
+
+        assertEquals(v1.as(List.class), v1.as(List.class));
+        assertEquals(v2.as(List.class), v2.as(List.class));
+        assertNotEquals(v1.as(List.class), (v2.as(List.class)));
+        assertNotEquals(v1, v2);
+        assertEquals(v1, v1);
+        assertEquals(v2, v2);
+
+        ValueAssert.assertValue(context, v1);
+        ValueAssert.assertValue(context, v2);
+    }
+
+    public static class RecursiveObject {
+
+        public RecursiveObject rec;
+
+    }
+
+    @Test
+    public void testRecursiveObject() {
+        RecursiveObject o1 = new RecursiveObject();
+        RecursiveObject o2 = new RecursiveObject();
+        o1.rec = o2;
+        o2.rec = o1;
+
+        Value v1 = context.asValue(o1);
+        Value v2 = context.asValue(o2);
+
+        assertEquals(v1.as(Map.class), v1.as(Map.class));
+        assertEquals(v2.as(Map.class), v2.as(Map.class));
+        assertNotEquals(v1.as(Map.class), v2.as(Map.class));
+        assertNotEquals(v1, v2);
+        assertEquals(v1, v1);
+        assertEquals(v2, v2);
+
+        ValueAssert.assertValue(context, v1);
+        ValueAssert.assertValue(context, v2);
+    }
+
+    public interface EmptyInterface {
+
+        void foo();
+
+        void bar();
+
+    }
+
+    @FunctionalInterface
+    public interface EmptyFunctionalInterface {
+
+        void noop();
+
+    }
+
+    @Test
+    public void testValueContextPropagation() {
+        ProxyInteropObject o = new ProxyInteropObject() {
+            @Override
+            public boolean hasKeys() {
+                return true;
+            }
+
+            @Override
+            public boolean isExecutable() {
+                return true;
+            }
+
+            @Override
+            public boolean hasSize() {
+                return true;
+            }
+        };
+        ProxyLanguage.setDelegate(new ProxyLanguage() {
+            @Override
+            protected CallTarget parse(ParsingRequest request) throws Exception {
+                return Truffle.getRuntime().createCallTarget(RootNode.createConstantNode(o));
+            }
+
+            @Override
+            protected String toString(@SuppressWarnings("hiding") LanguageContext context, Object value) {
+                if (o == value) {
+                    return "true";
+                } else {
+                    return "false";
+                }
+            }
+        });
+        Value v = context.eval(ProxyLanguage.ID, "");
+        assertEquals("true", v.toString());
+        assertEquals("true", context.asValue(v).toString());
+        assertEquals("true", v.as(Map.class).toString());
+        assertEquals("true", v.as(Function.class).toString());
+        assertEquals("true", v.as(List.class).toString());
+        assertEquals("true", context.asValue(v.as(Map.class)).toString());
+        assertEquals("true", context.asValue(v.as(Function.class)).toString());
+        assertEquals("true", context.asValue(v.as(List.class)).toString());
+
+        assertEquals(v, v);
+        assertEquals(v, context.asValue(v));
+
+        assertEquals(v.as(Map.class), v.as(Map.class));
+        assertEquals(v.as(Function.class), v.as(Function.class));
+        assertEquals(v.as(List.class), v.as(List.class));
+        assertEquals(v.as(Map.class), context.asValue(v.as(Map.class)).as(Map.class));
+        assertEquals(v.as(Function.class), context.asValue(v.as(Function.class)).as(Function.class));
+        assertEquals(v.as(List.class), context.asValue(v.as(List.class)).as(List.class));
+
+        assertNotEquals(v.as(Function.class), v.as(Map.class));
+        assertNotEquals(v.as(Function.class), v.as(List.class));
+        assertNotEquals(v.as(Map.class), v.as(Function.class));
+        assertNotEquals(v.as(Map.class), v.as(List.class));
+        assertNotEquals(v.as(List.class), v.as(Function.class));
+        assertNotEquals(v.as(List.class), v.as(Map.class));
+
     }
 
 }

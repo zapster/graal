@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,7 +24,6 @@
  */
 package com.oracle.svm.core.posix;
 
-import static com.oracle.svm.core.posix.PosixOSInterface.lastErrorString;
 import static com.oracle.svm.core.posix.headers.Fcntl.O_WRONLY;
 import static com.oracle.svm.core.posix.headers.Fcntl.open;
 import static com.oracle.svm.core.posix.headers.Unistd.close;
@@ -33,6 +34,7 @@ import static com.oracle.svm.core.posix.headers.Unistd.write;
 import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.SyncFailedException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -40,8 +42,8 @@ import java.util.List;
 import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.PinnedObject;
 import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.StackValue;
-import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.c.type.CTypeConversion.CCharPointerHolder;
@@ -51,12 +53,17 @@ import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.CompilerCommandPlugin;
+import com.oracle.svm.core.annotate.Alias;
 import com.oracle.svm.core.annotate.AutomaticFeature;
+import com.oracle.svm.core.annotate.Substitute;
+import com.oracle.svm.core.annotate.TargetClass;
+import com.oracle.svm.core.annotate.TargetElement;
 import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.jdk.JDK9OrLater;
 import com.oracle.svm.core.jdk.RuntimeFeature;
 import com.oracle.svm.core.jdk.RuntimeSupport;
-import com.oracle.svm.core.posix.PosixOSInterface.Util_java_io_FileDescriptor;
 import com.oracle.svm.core.posix.headers.Dlfcn;
+import com.oracle.svm.core.posix.headers.Errno;
 import com.oracle.svm.core.posix.headers.LibC;
 import com.oracle.svm.core.posix.headers.Locale;
 import com.oracle.svm.core.posix.headers.Unistd;
@@ -66,6 +73,7 @@ import com.oracle.svm.core.util.VMError;
 public class PosixUtils {
 
     @AutomaticFeature
+    @Platforms({Platform.LINUX.class, Platform.DARWIN.class})
     public static class ExposeSetLocaleFeature implements Feature {
         @Override
         public List<Class<? extends Feature>> getRequiredFeatures() {
@@ -165,12 +173,68 @@ public class PosixUtils {
         return p > 0 ? path.substring(0, p + 1) : path;
     }
 
+    @TargetClass(java.io.FileDescriptor.class)
+    private static final class Target_java_io_FileDescriptor {
+
+        @Alias int fd;
+
+        /* jdk/src/solaris/native/java/io/FileDescriptor_md.c */
+        // 53 JNIEXPORT void JNICALL
+        // 54 Java_java_io_FileDescriptor_sync(JNIEnv *env, jobject this) {
+        @Substitute
+        public /* native */ void sync() throws SyncFailedException {
+            // 55 FD fd = THIS_FD(this);
+            // 56 if (IO_Sync(fd) == -1) {
+            if (Unistd.fsync(fd) == -1) {
+                // 57 JNU_ThrowByName(env, "java/io/SyncFailedException", "sync failed");
+                throw new SyncFailedException("sync failed");
+            }
+        }
+
+        @Substitute //
+        @TargetElement(onlyWith = JDK9OrLater.class) //
+        @SuppressWarnings({"unused"})
+        private static /* native */ boolean getAppend(int fd) {
+            throw VMError.unsupportedFeature("JDK9OrLater: Target_java_io_FileDescriptor.getAppend");
+        }
+
+        @Substitute //
+        @TargetElement(onlyWith = JDK9OrLater.class) //
+        @SuppressWarnings({"unused", "static-method"})
+        private /* native */ void close0() throws IOException {
+            throw VMError.unsupportedFeature("JDK9OrLater: Target_java_io_FileDescriptor.close0");
+        }
+    }
+
+    public static int getFD(FileDescriptor descriptor) {
+        return KnownIntrinsics.unsafeCast(descriptor, Target_java_io_FileDescriptor.class).fd;
+    }
+
+    static void setFD(FileDescriptor descriptor, int fd) {
+        KnownIntrinsics.unsafeCast(descriptor, Target_java_io_FileDescriptor.class).fd = fd;
+    }
+
+    /** Return the error string for the last error, or a default message. */
+    public static String lastErrorString(String defaultMsg) {
+        int errno = Errno.errno();
+        return errorString(errno, defaultMsg);
+    }
+
+    /** Return the error string for the given error number, or a default message. */
+    public static String errorString(int errno, String defaultMsg) {
+        String result = "";
+        if (errno != 0) {
+            result = CTypeConversion.toJavaString(Errno.strerror(errno));
+        }
+        return result.length() != 0 ? result : defaultMsg;
+    }
+
     static void fileOpen(String path, FileDescriptor fd, int flags) throws FileNotFoundException {
         try (CCharPointerHolder pathPin = CTypeConversion.toCString(removeTrailingSlashes(path))) {
             CCharPointer pathPtr = pathPin.get();
             int handle = open(pathPtr, flags, 0666);
             if (handle >= 0) {
-                Util_java_io_FileDescriptor.setFD(fd, handle);
+                setFD(fd, handle);
             } else {
                 throw new FileNotFoundException(path);
             }
@@ -178,11 +242,11 @@ public class PosixUtils {
     }
 
     static void fileClose(FileDescriptor fd) throws IOException {
-        int handle = Util_java_io_FileDescriptor.getFD(fd);
+        int handle = getFD(fd);
         if (handle == -1) {
             return;
         }
-        Util_java_io_FileDescriptor.setFD(fd, -1);
+        setFD(fd, -1);
 
         // Do not close file descriptors 0, 1, 2. Instead, redirect to /dev/null.
         if (handle >= 0 && handle <= 2) {
@@ -193,7 +257,7 @@ public class PosixUtils {
                 devnull = open(pathPtr, O_WRONLY(), 0);
             }
             if (devnull < 0) {
-                Util_java_io_FileDescriptor.setFD(fd, handle);
+                setFD(fd, handle);
                 throw new IOException(lastErrorString("open /dev/null failed"));
             } else {
                 dup2(devnull, handle);
@@ -214,7 +278,7 @@ public class PosixUtils {
     }
 
     static int readSingle(FileDescriptor fd) throws IOException {
-        CCharPointer retPtr = StackValue.get(SizeOf.get(CCharPointer.class));
+        CCharPointer retPtr = StackValue.get(CCharPointer.class);
         int handle = PosixUtils.getFDHandle(fd);
         SignedWord nread = read(handle, retPtr, WordFactory.unsigned(1));
         if (nread.equal(0)) {
@@ -269,12 +333,12 @@ public class PosixUtils {
     @SuppressWarnings("unused")
     static void writeSingle(FileDescriptor fd, int b, boolean append) throws IOException {
         SignedWord n;
-        int handle = Util_java_io_FileDescriptor.getFD(fd);
+        int handle = getFD(fd);
         if (handle == -1) {
             throw new IOException("Stream Closed");
         }
 
-        CCharPointer bufPtr = StackValue.get(SizeOf.get(CCharPointer.class));
+        CCharPointer bufPtr = StackValue.get(CCharPointer.class);
         bufPtr.write((byte) b);
         // the append parameter is disregarded
         n = write(handle, bufPtr, WordFactory.unsigned(1));
@@ -284,8 +348,68 @@ public class PosixUtils {
         }
     }
 
+    @SuppressWarnings("unused")
+    static void writeBytes(FileDescriptor descriptor, byte[] bytes, int off, int len, boolean append) throws IOException {
+        if (bytes == null) {
+            throw new NullPointerException();
+        } else if (PosixUtils.outOfBounds(off, len, bytes)) {
+            throw new IndexOutOfBoundsException();
+        }
+        if (len == 0) {
+            return;
+        }
+
+        try (PinnedObject bytesPin = PinnedObject.create(bytes)) {
+            CCharPointer curBuf = bytesPin.addressOfArrayElement(off);
+            UnsignedWord curLen = WordFactory.unsigned(len);
+            while (curLen.notEqual(0)) {
+                int fd = getFD(descriptor);
+                if (fd == -1) {
+                    throw new IOException("Stream Closed");
+                }
+
+                SignedWord n = write(fd, curBuf, curLen);
+
+                if (n.equal(-1)) {
+                    throw new IOException(lastErrorString("Write error"));
+                }
+                curBuf = curBuf.addressOf(n);
+                curLen = curLen.subtract((UnsignedWord) n);
+            }
+        }
+    }
+
+    /**
+     * Low-level output of bytes already in native memory. This method is allocation free, so that
+     * it can be used, e.g., in low-level logging routines.
+     */
+    public static boolean writeBytes(FileDescriptor descriptor, CCharPointer bytes, UnsignedWord length) {
+        CCharPointer curBuf = bytes;
+        UnsignedWord curLen = length;
+        while (curLen.notEqual(0)) {
+            int fd = getFD(descriptor);
+            if (fd == -1) {
+                return false;
+            }
+
+            SignedWord n = Unistd.write(fd, curBuf, curLen);
+
+            if (n.equal(-1)) {
+                return false;
+            }
+            curBuf = curBuf.addressOf(n);
+            curLen = curLen.subtract((UnsignedWord) n);
+        }
+        return true;
+    }
+
+    static boolean flush(FileDescriptor descriptor) {
+        int fd = getFD(descriptor);
+        return Unistd.fsync(fd) == 0;
+    }
+
     static int getFDHandle(FileDescriptor fd) throws IOException {
-        int handle = Util_java_io_FileDescriptor.getFD(fd);
+        int handle = getFD(fd);
         if (handle == -1) {
             throw new IOException("Stream Closed");
         }

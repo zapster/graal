@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -179,6 +181,10 @@ public abstract class OptimizedCallTarget implements CompilableTruffleAST, RootC
         }
     }
 
+    public final void resetCompilationProfile() {
+        this.compilationProfile = createCompilationProfile();
+    }
+
     protected List<OptimizedAssumption> getProfiledTypesAssumptions() {
         return getCompilationProfile().getProfiledTypesAssumptions();
     }
@@ -228,10 +234,13 @@ public abstract class OptimizedCallTarget implements CompilableTruffleAST, RootC
     protected final Object callBoundary(Object[] args) {
         if (CompilerDirectives.inInterpreter()) {
             // We are called and we are still in Truffle interpreter mode.
-            getCompilationProfile().interpreterCall(this);
             if (isValid()) {
-                // Stubs were deoptimized => reinstall.
+                // Native entry stubs were deoptimized => reinstall.
                 runtime().bypassedInstalledCode();
+            }
+            if (getCompilationProfile().interpreterCall(this)) {
+                // synchronous compile -> call again to take us to the compiled code
+                return doInvoke(args);
             }
         } else {
             // We come here from compiled code
@@ -301,22 +310,32 @@ public abstract class OptimizedCallTarget implements CompilableTruffleAST, RootC
         return OptimizedCompilationProfile.create(PolyglotCompilerOptions.getPolyglotValues(rootNode));
     }
 
-    public final void compile() {
+    /**
+     * Returns <code>true</code> if the call target was already compiled or was compiled
+     * synchronously. Returns <code>false</code> if compilation was not scheduled or is happening in
+     * the background. Use {@link #isCompiling()} to find out whether it is actually compiling.
+     */
+    public final boolean compile() {
+        if (isValid()) {
+            return true;
+        }
         if (!isCompiling()) {
-            if (compilationProfile == null) {
-                initialize();
-            }
-
             if (!runtime().acceptForCompilation(getRootNode())) {
-                return;
+                return false;
             }
 
             CancellableCompileTask task = null;
             // Do not try to compile this target concurrently,
             // but do not block other threads if compilation is not asynchronous.
             synchronized (this) {
+                if (isValid()) {
+                    return true;
+                }
+                if (this.compilationProfile == null) {
+                    initialize();
+                }
                 if (!isCompiling()) {
-                    compilationTask = task = runtime().submitForCompilation(this);
+                    this.compilationTask = task = runtime().submitForCompilation(this);
                 }
             }
             if (task != null) {
@@ -326,9 +345,11 @@ public abstract class OptimizedCallTarget implements CompilableTruffleAST, RootC
                                     !TruffleCompilerOptions.getValue(TruffleCompilationExceptionsAreThrown);
                     boolean mayBeAsynchronous = TruffleCompilerOptions.getValue(TruffleBackgroundCompilation) && allowBackgroundCompilation;
                     runtime().finishCompilation(this, submitted, mayBeAsynchronous);
+                    return !mayBeAsynchronous;
                 }
             }
         }
+        return false;
     }
 
     public final boolean isCompiling() {
@@ -541,9 +562,7 @@ public abstract class OptimizedCallTarget implements CompilableTruffleAST, RootC
     @Override
     public boolean nodeReplaced(Node oldNode, Node newNode, CharSequence reason) {
         CompilerAsserts.neverPartOfCompilation();
-        if (isValid()) {
-            invalidate(newNode, reason);
-        }
+        invalidate(newNode, reason);
         /* Notify compiled method that have inlined this call target that the tree changed. */
         invalidateNodeRewritingAssumption();
 

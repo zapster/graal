@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -42,11 +44,16 @@ import com.oracle.truffle.api.profiles.ValueProfile;
 @RunWith(Theories.class)
 public class EqualityValueProfileTest {
 
+    @SuppressWarnings("deprecation")
+    private static Integer newInteger(int value) {
+        return new Integer(value);
+    }
+
     @DataPoint public static final String O1 = new String();
     @DataPoint public static final String O2 = O1;
     @DataPoint public static final Object O3 = new Object();
-    @DataPoint public static final Integer O4 = new Integer(1);
-    @DataPoint public static final Integer O5 = new Integer(1);
+    @DataPoint public static final Integer O4 = newInteger(1);
+    @DataPoint public static final Integer O5 = newInteger(1);
     @DataPoint public static final Integer O6 = null;
 
     private ValueProfile profile;

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -169,7 +171,7 @@ public class PolyglotExceptionTest {
         public CallTarget accessExecute(int argumentsLength) {
             return Truffle.getRuntime().createCallTarget(new RootNode(null) {
 
-                @Child private Node execute = Message.createExecute(0).createNode();
+                @Child private Node execute = Message.EXECUTE.createNode();
 
                 @Override
                 public Object execute(VirtualFrame frame) {
@@ -202,7 +204,7 @@ public class PolyglotExceptionTest {
         public CallTarget accessExecute(int argumentsLength) {
             return Truffle.getRuntime().createCallTarget(new RootNode(null) {
 
-                @Child private Node execute = Message.createExecute(0).createNode();
+                @Child private Node execute = Message.EXECUTE.createNode();
 
                 @Override
                 public Object execute(VirtualFrame frame) {

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -44,6 +46,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.graalvm.compiler.core.common.SuppressFBWarnings;
 import org.graalvm.compiler.options.Option;
@@ -438,6 +442,11 @@ class ClassDescriptor extends PlatformsDescriptor {
         }
 
         @Override
+        public Class<? extends Function<TargetClass, String>> classNameProvider() {
+            return TargetClass.NoClassNameProvider.class;
+        }
+
+        @Override
         public String innerClass() {
             return "";
         }
@@ -454,6 +463,7 @@ class ClassDescriptor extends PlatformsDescriptor {
     }
 }
 
+@SuppressWarnings("unchecked")
 @SuppressFBWarnings(value = "UwF", justification = "Fields written by GSON using reflection")
 class ElementDescriptor extends PlatformsDescriptor {
 
@@ -473,8 +483,8 @@ class ElementDescriptor extends PlatformsDescriptor {
         }
 
         @Override
-        public boolean optional() {
-            return get("optional", false);
+        public Class<? extends Predicate<Class<?>>>[] onlyWith() {
+            return (Class<? extends Predicate<Class<?>>>[]) new Class<?>[]{TargetElement.AlwaysIncluded.class};
         }
     }
 }

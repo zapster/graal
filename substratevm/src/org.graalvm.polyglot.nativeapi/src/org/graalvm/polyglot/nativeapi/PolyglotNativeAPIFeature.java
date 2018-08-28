@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,6 +25,7 @@
 package org.graalvm.polyglot.nativeapi;
 
 import static com.oracle.svm.hosted.NativeImageOptions.CStandards.C11;
+import static java.lang.ProcessBuilder.Redirect.INHERIT;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 import java.io.IOException;
@@ -33,6 +36,7 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.graalvm.nativeimage.Feature;
+import org.graalvm.nativeimage.Platform;
 
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.hosted.FeatureImpl.BeforeImageWriteAccessImpl;
@@ -50,15 +54,43 @@ public class PolyglotNativeAPIFeature implements Feature {
     @Override
     public void afterImageWrite(AfterImageWriteAccess access) {
         Collection<String> headerFiles = Arrays.asList("polyglot_types.h", "polyglot_isolate.h");
+        Path imagePath = access.getImagePath();
         headerFiles.forEach(headerFile -> {
             Path source = Paths.get(System.getProperty("org.graalvm.polyglot.nativeapi.libraryPath"), headerFile);
-            Path destination = access.getImagePath().getParent().resolve(headerFile);
+            Path destination = imagePath.getParent().resolve(headerFile);
             try {
                 Files.copy(source, destination, REPLACE_EXISTING);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         });
+        if (Platform.includedIn(Platform.DARWIN.class)) {
+            // on Darwin, change the `id` install name
+            String id = System.getProperty("org.graalvm.polyglot.install_name_id");
+            if (id == null) {
+                // Checkstyle: stop This is Hosted-only code
+                String msg = String.format("Warning: no id passed through `org.graalvm.polyglot.install_name_id`:" +
+                                "\n%s might include its absolute path as id (see man install_name_tool)", imagePath);
+                System.err.println(msg);
+                // Checkstyle: resume
+            } else {
+                Process process = null;
+                try {
+                    process = new ProcessBuilder("install_name_tool", "-id", id, imagePath.toString()).redirectOutput(INHERIT).redirectError(INHERIT).start();
+                    int exitCode = process.waitFor();
+                    if (exitCode != 0) {
+                        // Checkstyle: stop This is Hosted-only code
+                        System.err.println(String.format("Failed to set `id` install name. install_name_tool exited with code %d", exitCode));
+                        // Checkstyle: resume
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                } catch (InterruptedException e) {
+                    process.destroy();
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
     }
 
     @Override

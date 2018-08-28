@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -99,12 +101,16 @@ public class ElementUtils {
             }
             return processingEnv.getTypeUtils().getPrimitiveType(typeKind);
         } else {
-            TypeElement typeElement = processingEnv.getElementUtils().getTypeElement(element.getCanonicalName());
+            TypeElement typeElement = getTypeElement(processingEnv, element.getCanonicalName());
             if (typeElement == null) {
                 return null;
             }
             return typeElement.asType();
         }
+    }
+
+    public static TypeElement getTypeElement(final ProcessingEnvironment processingEnv, final CharSequence typeName) {
+        return ModuleCache.getTypeElement(processingEnv, typeName);
     }
 
     public static ExecutableElement findExecutableElement(DeclaredType type, String name) {
@@ -939,7 +945,7 @@ public class ElementUtils {
     }
 
     public static AnnotationMirror findAnnotationMirror(ProcessingEnvironment processingEnv, List<? extends AnnotationMirror> mirrors, Class<?> annotationClass) {
-        TypeElement expectedAnnotationType = processingEnv.getElementUtils().getTypeElement(annotationClass.getCanonicalName());
+        TypeElement expectedAnnotationType = getTypeElement(processingEnv, annotationClass.getCanonicalName());
         return findAnnotationMirror(mirrors, expectedAnnotationType.asType());
     }
 

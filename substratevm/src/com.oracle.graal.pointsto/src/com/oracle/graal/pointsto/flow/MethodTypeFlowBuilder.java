@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -68,7 +70,6 @@ import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.calc.IsNullNode;
 import org.graalvm.compiler.nodes.calc.ObjectEqualsNode;
 import org.graalvm.compiler.nodes.extended.BoxNode;
-import org.graalvm.compiler.nodes.extended.BytecodeExceptionNode;
 import org.graalvm.compiler.nodes.extended.ForeignCallNode;
 import org.graalvm.compiler.nodes.extended.GetClassNode;
 import org.graalvm.compiler.nodes.extended.RawLoadNode;
@@ -157,6 +158,14 @@ public class MethodTypeFlowBuilder {
         typeFlowGraphBuilder = new TypeFlowGraphBuilder(bb);
     }
 
+    public MethodTypeFlowBuilder(BigBang bb, StructuredGraph graph) {
+        this.bb = bb;
+        this.graph = graph;
+        this.method = (AnalysisMethod) graph.method();
+        this.methodFlow = method.getTypeFlow();
+        this.typeFlowGraphBuilder = null;
+    }
+
     @SuppressWarnings("try")
     private boolean parse() {
         OptionValues options = bb.getOptions();
@@ -200,12 +209,12 @@ public class MethodTypeFlowBuilder {
                 }
 
                 // Register used types and fields before canonicalization can optimize them.
-                registerUsedElements(bb, graph, methodFlow);
+                registerUsedElements();
 
                 new CanonicalizerPhase().apply(graph, new PhaseContext(bb.getProviders()));
 
                 // Do it again after canonicalization changed type checks and field accesses.
-                registerUsedElements(bb, graph, methodFlow);
+                registerUsedElements();
             } catch (Throwable e) {
                 throw debug.handle(e);
             }
@@ -213,7 +222,7 @@ public class MethodTypeFlowBuilder {
         return true;
     }
 
-    public static void registerUsedElements(BigBang bb, StructuredGraph graph, MethodTypeFlow methodFlow) {
+    public void registerUsedElements() {
         for (Node n : graph.getNodes()) {
             if (n instanceof InstanceOfNode) {
                 InstanceOfNode node = (InstanceOfNode) n;
@@ -260,11 +269,6 @@ public class MethodTypeFlowBuilder {
                     assert arrayType.isArray();
                     arrayType.getComponentType().registerAsInTypeCheck();
                 }
-
-            } else if (n instanceof BytecodeExceptionNode) {
-                BytecodeExceptionNode node = (BytecodeExceptionNode) n;
-                AnalysisType type = bb.getMetaAccess().lookupJavaType(node.getExceptionClass());
-                type.registerAsInHeap();
 
             } else if (n instanceof ConstantNode) {
                 ConstantNode cn = (ConstantNode) n;
@@ -606,7 +610,7 @@ public class MethodTypeFlowBuilder {
                 BytecodeLocation location = BytecodeLocation.create(bciKey, method);
                 TypeFlowBuilder<?> instanceOfBuilder = TypeFlowBuilder.create(bb, node, InstanceOfTypeFlow.class, () -> {
                     InstanceOfTypeFlow instanceOf = new InstanceOfTypeFlow(node, location, declaredType);
-                    methodFlow.addInstanceOf(instanceOf);
+                    methodFlow.addInstanceOf(key, instanceOf);
                     return instanceOf;
                 });
                 /* InstanceOf must not be removed as it is reported by the analysis results. */
@@ -1011,7 +1015,7 @@ public class MethodTypeFlowBuilder {
                     AnalysisType objectType = (AnalysisType) StampTool.typeOrNull(node.object());
                     TypeFlowBuilder<?> objectBuilder = state.lookup(node.object());
                     TypeFlowBuilder<?> loadBuilder;
-                    if (objectType.isArray() && objectType.getComponentType().getJavaKind() == JavaKind.Object) {
+                    if (objectType != null && objectType.isArray() && objectType.getComponentType().getJavaKind() == JavaKind.Object) {
                         /*
                          * Unsafe load from an array object is essentially an array load since we
                          * don't have separate type flows for different array elements.
@@ -1045,7 +1049,7 @@ public class MethodTypeFlowBuilder {
                     TypeFlowBuilder<?> objectBuilder = state.lookup(node.object());
                     TypeFlowBuilder<?> valueBuilder = state.lookup(node.value());
                     TypeFlowBuilder<?> storeBuilder;
-                    if (objectType.isArray() && objectType.getComponentType().getJavaKind() == JavaKind.Object) {
+                    if (objectType != null && objectType.isArray() && objectType.getComponentType().getJavaKind() == JavaKind.Object) {
                         /*
                          * Unsafe store to an array object is essentially an array store since we
                          * don't have separate type flows for different array elements.
@@ -1078,7 +1082,7 @@ public class MethodTypeFlowBuilder {
                     TypeFlowBuilder<?> objectBuilder = state.lookup(node.object());
                     TypeFlowBuilder<?> newValueBuilder = state.lookup(node.newValue());
                     TypeFlowBuilder<?> storeBuilder;
-                    if (objectType.isArray() && objectType.getComponentType().getJavaKind() == JavaKind.Object) {
+                    if (objectType != null && objectType.isArray() && objectType.getComponentType().getJavaKind() == JavaKind.Object) {
                         /*
                          * Unsafe compare and swap is essentially unsafe store and unsafe store to
                          * an array object is essentially an array store since we don't have
@@ -1117,7 +1121,7 @@ public class MethodTypeFlowBuilder {
                     TypeFlowBuilder<?> storeBuilder;
                     TypeFlowBuilder<?> loadBuilder;
 
-                    if (objectType.isArray() && objectType.getComponentType().getJavaKind() == JavaKind.Object) {
+                    if (objectType != null && objectType.isArray() && objectType.getComponentType().getJavaKind() == JavaKind.Object) {
                         /*
                          * Atomic read and write is essentially unsafe store and unsafe store to an
                          * array object is essentially an array store since we don't have separate
@@ -1288,13 +1292,7 @@ public class MethodTypeFlowBuilder {
                     AnalysisMethod targetMethod = (AnalysisMethod) target.targetMethod();
                     bb.isCallAllowed(bb, callerMethod, targetMethod, target.getNodeSourcePosition());
 
-                    Object key;
-                    if (invoke.bci() >= 0) {
-                        key = invoke.bci();
-                    } else {
-                        shouldNotReachHere("InvokeTypeFlow has a negative BCI");
-                        key = new Object();
-                    }
+                    Object key = uniqueKey(n);
                     BytecodeLocation location = BytecodeLocation.create(key, methodFlow.getMethod());
 
                     /*

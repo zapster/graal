@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -141,6 +143,7 @@ import com.oracle.svm.hosted.substitute.DeletedMethod;
 import jdk.vm.ci.code.BytecodeFrame;
 import jdk.vm.ci.code.CodeCacheProvider;
 import jdk.vm.ci.code.DebugInfo;
+import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.site.Call;
 import jdk.vm.ci.code.site.Infopoint;
 import jdk.vm.ci.code.site.InfopointReason;
@@ -328,7 +331,8 @@ public class CompileQueue {
     @SuppressWarnings("try")
     public void finish(DebugContext debug) {
         try {
-            try (StopTimer t = new Timer("(parse)").start()) {
+            String imageName = universe.getBigBang().getHostVM().getImageName();
+            try (StopTimer t = new Timer(imageName, "(parse)").start()) {
                 parseAll();
             }
             // Checking @Uninterruptible annotations does not take long enough to justify a timer.
@@ -342,11 +346,11 @@ public class CompileQueue {
             beforeCompileAll(debug);
 
             if (SubstrateOptions.AOTInline.getValue()) {
-                try (StopTimer ignored = new Timer("(inline)").start()) {
+                try (StopTimer ignored = new Timer(imageName, "(inline)").start()) {
                     inlineTrivialMethods(debug);
                 }
             }
-            try (StopTimer t = new Timer("(compile)").start()) {
+            try (StopTimer t = new Timer(imageName, "(compile)").start()) {
                 compileAll();
             }
         } catch (InterruptedException ie) {
@@ -813,24 +817,10 @@ public class CompileQueue {
         if (!mustNotAllocateCallee(caller) && mustNotAllocate(callee)) {
             return false;
         }
-
-        if (isNotExecuted(caller) || isNotExecuted(callee)) {
-            return false;
-        }
-
         if (!callee.canBeInlined()) {
             return false;
         }
         return invoke.useForInlining();
-    }
-
-    /**
-     * Hook for subclasses.
-     *
-     * @param method
-     */
-    protected boolean isNotExecuted(HostedMethod method) {
-        return false;
     }
 
     private static void handleSpecialization(final HostedMethod method, MethodCallTargetNode targetNode, HostedMethod invokeTarget, HostedMethod invokeImplementation) {
@@ -879,8 +869,8 @@ public class CompileQueue {
     class HostedCompilationResultBuilderFactory implements CompilationResultBuilderFactory {
         @Override
         public CompilationResultBuilder createBuilder(CodeCacheProvider codeCache, ForeignCallsProvider foreignCalls, FrameMap frameMap, Assembler asm, DataBuilder dataBuilder,
-                        FrameContext frameContext, OptionValues options, DebugContext debug, CompilationResult compilationResult) {
-            return new CompilationResultBuilder(codeCache, foreignCalls, frameMap, asm, dataBuilder, frameContext, options, debug, compilationResult, EconomicMap.wrapMap(dataCache));
+                        FrameContext frameContext, OptionValues options, DebugContext debug, CompilationResult compilationResult, Register nullRegister) {
+            return new CompilationResultBuilder(codeCache, foreignCalls, frameMap, asm, dataBuilder, frameContext, options, debug, compilationResult, nullRegister, EconomicMap.wrapMap(dataCache));
         }
     }
 
@@ -933,7 +923,7 @@ public class CompileQueue {
             };
             try (Indent indent = debug.logAndIndent("compile %s", method)) {
                 GraalCompiler.compileGraph(graph, method, backend.getProviders(), backend, null, optimisticOpts, method.getProfilingInfo(), suites, lirSuites, result,
-                                new HostedCompilationResultBuilderFactory());
+                                new HostedCompilationResultBuilderFactory(), false);
             }
             method.getProfilingInfo().setCompilerIRSize(StructuredGraph.class, method.compilationInfo.graph.getNodeCount());
             method.compilationInfo.numNodesAfterCompilation = graph.getNodeCount();

@@ -25,6 +25,7 @@
 package com.oracle.truffle.regex.literal;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.regex.CompiledRegex;
@@ -38,13 +39,17 @@ import com.oracle.truffle.regex.result.RegexResult;
 import com.oracle.truffle.regex.tregex.nodes.input.InputEndsWithNode;
 import com.oracle.truffle.regex.tregex.nodes.input.InputEqualsNode;
 import com.oracle.truffle.regex.tregex.nodes.input.InputIndexOfNode;
+import com.oracle.truffle.regex.tregex.nodes.input.InputIndexOfStringNode;
 import com.oracle.truffle.regex.tregex.nodes.input.InputLengthNode;
 import com.oracle.truffle.regex.tregex.nodes.input.InputRegionMatchesNode;
 import com.oracle.truffle.regex.tregex.nodes.input.InputStartsWithNode;
 import com.oracle.truffle.regex.tregex.parser.ast.visitors.PreCalcResultVisitor;
 import com.oracle.truffle.regex.tregex.util.DebugUtil;
+import com.oracle.truffle.regex.tregex.util.json.Json;
+import com.oracle.truffle.regex.tregex.util.json.JsonConvertible;
+import com.oracle.truffle.regex.tregex.util.json.JsonValue;
 
-public abstract class LiteralRegexExecRootNode extends RegexExecRootNode implements CompiledRegex {
+public abstract class LiteralRegexExecRootNode extends RegexExecRootNode implements CompiledRegex, JsonConvertible {
 
     protected final String literal;
     protected final PreCalculatedResultFactory resultFactory;
@@ -67,11 +72,12 @@ public abstract class LiteralRegexExecRootNode extends RegexExecRootNode impleme
         return regexCallTarget;
     }
 
-    public DebugUtil.Table toTable() {
-        return new DebugUtil.Table("LiteralRegexNode",
-                        new DebugUtil.Value("method", getImplName()),
-                        new DebugUtil.Value("literal", DebugUtil.escapeString(literal)),
-                        new DebugUtil.Value("factory", resultFactory));
+    @TruffleBoundary
+    @Override
+    public JsonValue toJson() {
+        return Json.obj(Json.prop("method", getImplName()),
+                        Json.prop("literal", DebugUtil.escapeString(literal)),
+                        Json.prop("factory", resultFactory));
     }
 
     protected abstract String getImplName();
@@ -152,14 +158,14 @@ public abstract class LiteralRegexExecRootNode extends RegexExecRootNode impleme
 
     public static final class IndexOfChar extends LiteralRegexExecRootNode {
 
-        private final char c;
+        private final char[] c;
         @Child InputIndexOfNode indexOfNode = InputIndexOfNode.create();
         @Child InputLengthNode lengthNode = InputLengthNode.create();
 
         public IndexOfChar(RegexLanguage language, RegexSource source, PreCalcResultVisitor preCalcResultVisitor) {
             super(language, source, preCalcResultVisitor);
             assert literal.length() == 1;
-            c = literal.charAt(0);
+            c = new char[]{literal.charAt(0)};
         }
 
         @Override
@@ -169,7 +175,31 @@ public abstract class LiteralRegexExecRootNode extends RegexExecRootNode impleme
 
         @Override
         protected RegexResult execute(VirtualFrame frame, RegexObject regex, Object input, int fromIndex) {
-            int start = indexOfNode.execute(input, c, fromIndex, lengthNode.execute(input));
+            int start = indexOfNode.execute(input, fromIndex, lengthNode.execute(input), c);
+            if (start == -1) {
+                return RegexResult.NO_MATCH;
+            }
+            return resultFactory.createFromStart(regex, input, start);
+        }
+    }
+
+    public static final class IndexOfString extends LiteralRegexExecRootNode {
+
+        @Child InputIndexOfStringNode indexOfStringNode = InputIndexOfStringNode.create();
+        @Child InputLengthNode lengthNode = InputLengthNode.create();
+
+        public IndexOfString(RegexLanguage language, RegexSource source, PreCalcResultVisitor preCalcResultVisitor) {
+            super(language, source, preCalcResultVisitor);
+        }
+
+        @Override
+        protected String getImplName() {
+            return "indexOfString";
+        }
+
+        @Override
+        protected RegexResult execute(VirtualFrame frame, RegexObject regex, Object input, int fromIndex) {
+            int start = indexOfStringNode.execute(input, literal, fromIndex, lengthNode.execute(input));
             if (start == -1) {
                 return RegexResult.NO_MATCH;
             }

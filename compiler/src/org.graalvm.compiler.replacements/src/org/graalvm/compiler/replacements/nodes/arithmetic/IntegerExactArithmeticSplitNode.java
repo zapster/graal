@@ -1,10 +1,12 @@
 /*
- * Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -44,6 +46,7 @@ import org.graalvm.compiler.nodes.spi.NodeLIRBuilderTool;
 
 import jdk.vm.ci.meta.DeoptimizationAction;
 import jdk.vm.ci.meta.DeoptimizationReason;
+import jdk.vm.ci.meta.SpeculationLog;
 import jdk.vm.ci.meta.Value;
 
 @NodeInfo(cycles = CYCLES_2, cyclesRationale = "add+cmp", size = SIZE_2)
@@ -88,6 +91,16 @@ public abstract class IntegerExactArithmeticSplitNode extends ControlSplitNode i
         return overflowSuccessor;
     }
 
+    public void setNext(AbstractBeginNode next) {
+        updatePredecessor(this.next, next);
+        this.next = next;
+    }
+
+    public void setOverflowSuccessor(AbstractBeginNode overflowSuccessor) {
+        updatePredecessor(this.overflowSuccessor, overflowSuccessor);
+        this.overflowSuccessor = overflowSuccessor;
+    }
+
     public ValueNode getX() {
         return x;
     }
@@ -110,8 +123,10 @@ public abstract class IntegerExactArithmeticSplitNode extends ControlSplitNode i
             FixedWithNextNode previous = tool.lastFixedNode();
             FixedNode next = previous.next();
             previous.setNext(null);
-            DeoptimizeNode deopt = floatingNode.graph().add(new DeoptimizeNode(DeoptimizationAction.InvalidateReprofile, DeoptimizationReason.ArithmeticException));
-            AbstractBeginNode normalBegin = floatingNode.graph().add(new BeginNode());
+            StructuredGraph graph = floatingNode.graph();
+            DeoptimizeNode deopt = graph.add(new DeoptimizeNode(DeoptimizationAction.InvalidateReprofile, DeoptimizationReason.ArithmeticException,
+                            node.getSpeculation() == null ? SpeculationLog.NO_SPECULATION : graph.getSpeculationLog().speculate(node.getSpeculation())));
+            AbstractBeginNode normalBegin = graph.add(new BeginNode());
             normalBegin.setNext(next);
             IntegerExactArithmeticSplitNode split = node.createSplit(normalBegin, BeginNode.begin(deopt));
             previous.setNext(split);

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -224,12 +226,8 @@ public class FeatureImpl {
         }
 
         @Override
-        public void registerAsUnsafeWritten(Field field) {
+        public void registerAsUnsafeAccessed(Field field) {
             registerAsUnsafeAccessed(getMetaAccess().lookupJavaField(field));
-        }
-
-        public boolean registerAsUnsafeAccessed(Field field) {
-            return registerAsUnsafeAccessed(getMetaAccess().lookupJavaField(field));
         }
 
         public boolean registerAsUnsafeAccessed(AnalysisField aField) {
@@ -512,15 +510,21 @@ public class FeatureImpl {
     }
 
     public static class AfterImageWriteAccessImpl extends FeatureAccessImpl implements Feature.AfterImageWriteAccess {
+        private final HostedUniverse hUniverse;
         protected final Path imagePath;
         protected final Path tempDirectory;
         protected final NativeImageKind imageKind;
 
-        AfterImageWriteAccessImpl(FeatureHandler featureHandler, ImageClassLoader imageClassLoader, Path imagePath, Path tempDirectory, NativeImageKind imageKind) {
+        AfterImageWriteAccessImpl(FeatureHandler featureHandler, ImageClassLoader imageClassLoader, HostedUniverse hUniverse, Path imagePath, Path tempDirectory, NativeImageKind imageKind) {
             super(featureHandler, imageClassLoader);
+            this.hUniverse = hUniverse;
             this.imagePath = imagePath;
             this.tempDirectory = tempDirectory;
             this.imageKind = imageKind;
+        }
+
+        public HostedUniverse getUniverse() {
+            return hUniverse;
         }
 
         @Override

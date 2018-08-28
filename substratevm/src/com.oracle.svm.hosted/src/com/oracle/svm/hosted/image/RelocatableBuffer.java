@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -29,13 +31,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+import org.graalvm.compiler.core.common.NumUtil;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.RelocatedPointer;
 
 import com.oracle.objectfile.ObjectFile;
-import com.oracle.svm.hosted.base.NumUtil;
-import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.hosted.meta.MethodPointer;
+
+import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 public final class RelocatableBuffer {
 
@@ -163,7 +166,7 @@ public final class RelocatableBuffer {
                 result.append("pointer to function");
                 if (targetObject instanceof MethodPointer) {
                     final MethodPointer mp = (MethodPointer) targetObject;
-                    final HostedMethod hm = mp.getMethod();
+                    final ResolvedJavaMethod hm = mp.getMethod();
                     result.append("  name: ");
                     result.append(hm.getName());
                 }

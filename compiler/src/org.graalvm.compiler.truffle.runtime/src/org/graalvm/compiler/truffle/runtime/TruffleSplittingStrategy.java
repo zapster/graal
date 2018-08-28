@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -98,7 +100,7 @@ final class TruffleSplittingStrategy {
             return false;
         }
         final GraalTVMCI.EngineData engineData = getEngineData(call, tvmci);
-        if (!canSplit(call) || engineData.splitCount + call.getCallTarget().getUninitializedNodeCount() >= engineData.splitLimit) {
+        if (!canSplit(call) || isRecursiveSplit(call) || engineData.splitCount + call.getCallTarget().getUninitializedNodeCount() >= engineData.splitLimit) {
             return false;
         }
         if (callTarget.getUninitializedNodeCount() > TruffleCompilerOptions.getValue(TruffleSplittingMaxCalleeSize)) {
@@ -109,7 +111,7 @@ final class TruffleSplittingStrategy {
 
     static void forceSplitting(OptimizedDirectCallNode call, GraalTVMCI tvmci) {
         if (!TruffleCompilerOptions.getValue(TruffleExperimentalSplitting) || TruffleCompilerOptions.getValue(TruffleExperimentalSplittingAllowForcedSplits)) {
-            if (!canSplit(call)) {
+            if (!canSplit(call) || isRecursiveSplit(call)) {
                 return;
             }
             final GraalTVMCI.EngineData engineData = getEngineData(call, tvmci);
@@ -143,7 +145,7 @@ final class TruffleSplittingStrategy {
         }
 
         OptimizedCallTarget callTarget = call.getCallTarget();
-        int nodeCount = callTarget.getNonTrivialNodeCount();
+        int nodeCount = callTarget.getUninitializedNodeCount();
         if (nodeCount > TruffleCompilerOptions.getValue(TruffleSplittingMaxCalleeSize)) {
             return false;
         }
@@ -168,14 +170,16 @@ final class TruffleSplittingStrategy {
         if (isMaxSingleCall(call)) {
             return true;
         }
-
         return countPolymorphic(call) >= 1;
     }
 
     private static boolean isRecursiveSplit(OptimizedDirectCallNode call) {
         final OptimizedCallTarget splitCandidateTarget = call.getCallTarget();
-
-        OptimizedCallTarget callRootTarget = (OptimizedCallTarget) call.getRootNode().getCallTarget();
+        final RootNode rootNode = call.getRootNode();
+        if (rootNode == null) {
+            return false;
+        }
+        OptimizedCallTarget callRootTarget = (OptimizedCallTarget) rootNode.getCallTarget();
         OptimizedCallTarget callSourceTarget = callRootTarget.getSourceCallTarget();
         int depth = 0;
         while (callSourceTarget != null) {

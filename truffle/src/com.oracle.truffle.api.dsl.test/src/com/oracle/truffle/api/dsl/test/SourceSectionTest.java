@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -55,7 +57,7 @@ public class SourceSectionTest {
     @Theory
     public void testSourceSections(int value0, int value1, int value2) {
         TestRootNode<MutableSourceSectionNode> root = createRoot(SourceSectionTestFactory.MutableSourceSectionNodeFactory.getInstance());
-        SourceSection section = Source.newBuilder("").name("a").mimeType("").build().createUnavailableSection();
+        SourceSection section = Source.newBuilder("", "", "a").build().createUnavailableSection();
         root.getNode().changeSourceSection(section);
         expectSourceSection(root.getNode(), section);
         assertThat((int) executeWith(root, value0), is(value0));
@@ -118,7 +120,7 @@ public class SourceSectionTest {
 
     @Test
     public void testCreateCast() {
-        SourceSection section = Source.newBuilder("").name("a").mimeType("").build().createUnavailableSection();
+        SourceSection section = Source.newBuilder("", "", "a").build().createUnavailableSection();
         TestRootNode<NodeWithFixedSourceSection> root = createRootPrefix(SourceSectionTestFactory.NodeWithFixedSourceSectionFactory.getInstance(), true, section);
         expectSourceSection(root.getNode(), section);
         assertThat((int) executeWith(root, 1), is(1));

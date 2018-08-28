@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -234,7 +236,7 @@ public class ContextLookupCompilationTest extends PartialEvaluationTest {
 
     private static void resetSingleContextState() {
         try {
-            Class<?> c = Class.forName("com.oracle.truffle.api.vm.PolyglotContextImpl");
+            Class<?> c = Class.forName("com.oracle.truffle.polyglot.PolyglotContextImpl");
             java.lang.reflect.Method m = c.getDeclaredMethod("resetSingleContextState");
             m.setAccessible(true);
             m.invoke(null);

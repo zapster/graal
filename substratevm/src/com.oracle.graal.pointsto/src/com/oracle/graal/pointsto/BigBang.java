@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -117,8 +119,8 @@ public abstract class BigBang {
     public final AtomicLong numParsedGraphs = new AtomicLong();
     private final CompletionExecutor.Timing timing;
 
-    public final Timer typeFlowTimer = new Timer("(typeflow)", false);
-    public final Timer checkObjectsTimer = new Timer("(objects)", false);
+    public final Timer typeFlowTimer;
+    public final Timer checkObjectsTimer;
 
     public BigBang(OptionValues options, AnalysisUniverse universe, HostedProviders providers, HostVM hostVM, ForkJoinPool executorService,
                     UnsupportedFeatures unsupportedFeatures) {
@@ -126,6 +128,9 @@ public abstract class BigBang {
         this.debugHandlerFactories = Collections.singletonList(new GraalDebugHandlersFactory(providers.getSnippetReflection()));
         this.debug = DebugContext.create(options, debugHandlerFactories);
         this.hostVM = hostVM;
+        String imageName = hostVM.getImageName();
+        this.typeFlowTimer = new Timer(imageName, "(typeflow)", false);
+        this.checkObjectsTimer = new Timer(imageName, "(objects)", false);
 
         this.universe = universe;
         this.metaAccess = (AnalysisMetaAccess) providers.getMetaAccess();
@@ -476,6 +481,11 @@ public abstract class BigBang {
 
     public CompletionExecutor getExecutor() {
         return executor;
+    }
+
+    public abstract boolean isValidClassLoader(Object valueObj);
+
+    public void checkUserLimitations() {
     }
 
     public interface TypeFlowRunnable extends DebugContextRunnable {

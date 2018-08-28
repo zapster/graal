@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -102,7 +104,7 @@ public class ConstraintInteropTypesTest {
     public void forbidNonPrimitiveObjectParam() throws Exception {
         BrokenTruffleObject obj = new BrokenTruffleObject("30");
         Object param = this;
-        Object result = ForeignAccess.sendExecute(Message.createExecute(1).createNode(), obj, param);
+        Object result = ForeignAccess.sendExecute(Message.EXECUTE.createNode(), obj, param);
         fail("No result, an exception should be thrown: " + result);
     }
 
@@ -110,7 +112,7 @@ public class ConstraintInteropTypesTest {
     public void forbidNullParam() throws Exception {
         BrokenTruffleObject obj = new BrokenTruffleObject("30");
         Object param = null;
-        Object result = ForeignAccess.sendExecute(Message.createExecute(1).createNode(), obj, param);
+        Object result = ForeignAccess.sendExecute(Message.EXECUTE.createNode(), obj, param);
         fail("No result, an exception should be thrown: " + result);
     }
 
@@ -118,7 +120,7 @@ public class ConstraintInteropTypesTest {
     public void forbidStringBuilderParam() throws Exception {
         BrokenTruffleObject obj = new BrokenTruffleObject("30");
         Object param = new StringBuilder("I am string builder!");
-        Object result = ForeignAccess.sendExecute(Message.createExecute(1).createNode(), obj, param);
+        Object result = ForeignAccess.sendExecute(Message.EXECUTE.createNode(), obj, param);
         fail("No result, an exception should be thrown: " + result);
     }
 
@@ -126,14 +128,14 @@ public class ConstraintInteropTypesTest {
     public void forbidBigIntegerParam() throws Exception {
         BrokenTruffleObject obj = new BrokenTruffleObject("30");
         Object param = new BigInteger("30");
-        Object result = ForeignAccess.sendExecute(Message.createExecute(1).createNode(), obj, param);
+        Object result = ForeignAccess.sendExecute(Message.EXECUTE.createNode(), obj, param);
         fail("No result, an exception should be thrown: " + result);
     }
 
     public void allowStringReturnWithParam() throws Exception {
         BrokenTruffleObject obj = new BrokenTruffleObject("30");
         Object param = "30";
-        Object result = ForeignAccess.sendExecute(Message.createExecute(1).createNode(), obj, param);
+        Object result = ForeignAccess.sendExecute(Message.EXECUTE.createNode(), obj, param);
         Assert.assertEquals("30", result);
     }
 

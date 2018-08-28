@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -51,7 +53,6 @@ import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.PolyglotException.StackFrame;
 import org.graalvm.polyglot.Value;
 import org.graalvm.polyglot.proxy.Proxy;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -59,31 +60,17 @@ import org.junit.Test;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.api.interop.ArityException;
-import com.oracle.truffle.api.interop.ForeignAccess;
-import com.oracle.truffle.api.interop.Message;
-import com.oracle.truffle.api.interop.TruffleObject;
-import com.oracle.truffle.api.interop.UnknownIdentifierException;
-import com.oracle.truffle.api.interop.UnsupportedMessageException;
-import com.oracle.truffle.api.interop.UnsupportedTypeException;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.test.polyglot.ValueAssert.Trait;
 
 /**
  * Tests class for {@link Context#asValue(Object)}.
  */
-public class ValueHostConversionTest {
-
-    private Context context;
+public class ValueHostConversionTest extends AbstractPolyglotTest {
 
     @Before
     public void setUp() {
-        context = Context.newBuilder().allowHostAccess(true).build();
-    }
-
-    @After
-    public void tearDown() {
-        context.close();
+        setupEnv();
     }
 
     @Test
@@ -268,23 +255,6 @@ public class ValueHostConversionTest {
                         return getCurrentContext(ProxyLanguage.class).env.lookupHostSymbol(clazz.getName());
                     }
                 });
-            }
-
-            @Override
-            protected Object findMetaObject(LanguageContext ctx, Object value) {
-                // TODO Value.getMetaObject() should call HostLanguage.findMetaObject instead
-                if (value instanceof TruffleObject) {
-                    try {
-                        return ForeignAccess.sendInvoke(Message.createInvoke(0).createNode(), (TruffleObject) value, "getClass");
-                    } catch (UnknownIdentifierException | UnsupportedMessageException | UnsupportedTypeException | ArityException e) {
-                    }
-                    try {
-                        Object instanceClass = ForeignAccess.sendRead(Message.READ.createNode(), (TruffleObject) value, "class");
-                        return ForeignAccess.sendInvoke(Message.createInvoke(0).createNode(), (TruffleObject) instanceClass, "getClass");
-                    } catch (UnknownIdentifierException | UnsupportedMessageException | UnsupportedTypeException | ArityException e) {
-                    }
-                }
-                return "";
             }
         });
         return context.asValue(context.eval(ProxyLanguage.ID, clazz.getName()));

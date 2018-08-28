@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -74,7 +76,7 @@ public class TypeSystemParser extends AbstractParser<TypeSystemData> {
         TypeSystemData typeSystem = new TypeSystemData(context, templateType, templateTypeAnnotation, false);
 
         // annotation type on class path!?
-        TypeElement annotationTypeElement = processingEnv.getElementUtils().getTypeElement(getAnnotationType().getCanonicalName());
+        TypeElement annotationTypeElement = ElementUtils.getTypeElement(processingEnv, getAnnotationType().getCanonicalName());
         if (annotationTypeElement == null) {
             typeSystem.addError("Required class %s is not on the classpath.", getAnnotationType().getName());
         }
@@ -189,9 +191,11 @@ public class TypeSystemParser extends AbstractParser<TypeSystemData> {
         }
     }
 
+    private static final TypeKind[] TYPE_KIND_VALUES = TypeKind.values();
+
     private boolean isPrimitiveWrapper(TypeMirror type) {
         Types types = context.getEnvironment().getTypeUtils();
-        for (TypeKind kind : TypeKind.values()) {
+        for (TypeKind kind : TYPE_KIND_VALUES) {
             if (!kind.isPrimitive()) {
                 continue;
             }

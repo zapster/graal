@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -126,6 +128,7 @@ import static java.util.Collections.singletonList;
 import static org.graalvm.compiler.debug.DebugContext.DEFAULT_LOG_STREAM;
 import static org.graalvm.compiler.debug.DebugContext.NO_GLOBAL_METRIC_VALUES;
 import static org.graalvm.compiler.serviceprovider.GraalServices.Java8OrEarlier;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleCompilation;
 import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleCompilationExceptionsAreThrown;
 import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleCompileOnly;
 import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleCompilerThreads;
@@ -151,7 +154,7 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime, TruffleComp
     }
 
     protected static class BackgroundCompileQueue {
-        private final ExecutorService compileQueue;
+        private final ExecutorService compilationExecutor;
 
         public BackgroundCompileQueue() {
             CompilerThreadFactory factory = new CompilerThreadFactory("TruffleCompilerThread");
@@ -165,7 +168,11 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime, TruffleComp
                 }
             }
             selectedProcessors = Math.max(1, selectedProcessors);
-            compileQueue = Executors.newFixedThreadPool(selectedProcessors, factory);
+            compilationExecutor = Executors.newFixedThreadPool(selectedProcessors, factory);
+        }
+
+        public ExecutorService getCompilationExecutor() {
+            return compilationExecutor;
         }
     }
 
@@ -197,6 +204,31 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime, TruffleComp
         this.graalRuntimeSupplier = graalRuntimeSupplier;
         this.lookupTypes = initLookupTypes(extraLookupTypes);
     }
+
+    @Override
+    public String getName() {
+        String compilerConfigurationName = getCompilerConfigurationName();
+        assert compilerConfigurationName != null;
+        String suffix;
+        if (compilerConfigurationName == null) {
+            suffix = "Unknown";
+        } else if (compilerConfigurationName.equals("community")) {
+            suffix = "CE";
+        } else if (compilerConfigurationName.equals("enterprise")) {
+            suffix = "EE";
+        } else {
+            assert false : "unexpected compiler configuration name: " + compilerConfigurationName;
+            suffix = compilerConfigurationName;
+        }
+        return "GraalVM " + suffix;
+    }
+
+    /**
+     * This method allows retrieval of the compiler configuration without requiring to initialize
+     * the {@link TruffleCompiler} with {@link #getTruffleCompiler()}. The result of this method
+     * should always match {@link TruffleCompiler#getCompilerConfigurationName()}.
+     */
+    protected abstract String getCompilerConfigurationName();
 
     protected GraalTVMCI getTvmci() {
         return tvmci;
@@ -583,6 +615,9 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime, TruffleComp
 
     @SuppressFBWarnings(value = "", justification = "Cache that does not need to use equals to compare.")
     final boolean acceptForCompilation(RootNode rootNode) {
+        if (!getValue(TruffleCompilation)) {
+            return false;
+        }
         String includesExcludes = getValue(TruffleCompileOnly);
         if (includesExcludes != null) {
             if (cachedIncludesExcludes != includesExcludes) {
@@ -696,7 +731,7 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime, TruffleComp
         GraphOutput<Void, ?> output = null;
         try (Scope c = debug.scope("TruffleTree")) {
             if (debug.isDumpEnabled(DebugContext.BASIC_LEVEL)) {
-                output = debug.buildOutput(GraphOutput.newBuilder(VoidGraphStructure.INSTANCE));
+                output = debug.buildOutput(GraphOutput.newBuilder(VoidGraphStructure.INSTANCE).protocolVersion(6, 0));
                 output.beginGroup(null, "Truffle::" + callTarget.toString(), "Truffle::" + callTarget.toString(), null, 0, DebugContext.addVersionProperties(null));
                 debug.dump(DebugContext.BASIC_LEVEL, new TruffleTreeDumpHandler.TruffleTreeDump(callTarget, inlining), "TruffleTree");
             }
@@ -735,7 +770,7 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime, TruffleComp
         final WeakReference<OptimizedCallTarget> weakCallTarget = new WeakReference<>(optimizedCallTarget);
         final OptionValues optionOverrides = TruffleCompilerOptions.getCurrentOptionOverrides();
         CancellableCompileTask cancellable = new CancellableCompileTask();
-        cancellable.setFuture(l.compileQueue.submit(new Runnable() {
+        cancellable.setFuture(l.compilationExecutor.submit(new Runnable() {
             @Override
             public void run() {
                 OptimizedCallTarget callTarget = weakCallTarget.get();
@@ -839,7 +874,7 @@ public abstract class GraalTruffleRuntime implements TruffleRuntime, TruffleComp
     }
 
     public int getCompilationQueueSize() {
-        ExecutorService executor = getCompileQueue().compileQueue;
+        ExecutorService executor = getCompileQueue().compilationExecutor;
         if (executor instanceof ThreadPoolExecutor) {
             return ((ThreadPoolExecutor) executor).getQueue().size();
         } else {

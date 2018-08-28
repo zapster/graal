@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,6 +26,7 @@ package org.graalvm.compiler.java;
 
 import static org.graalvm.compiler.bytecode.Bytecodes.AALOAD;
 import static org.graalvm.compiler.bytecode.Bytecodes.AASTORE;
+import static org.graalvm.compiler.bytecode.Bytecodes.ANEWARRAY;
 import static org.graalvm.compiler.bytecode.Bytecodes.ARETURN;
 import static org.graalvm.compiler.bytecode.Bytecodes.ARRAYLENGTH;
 import static org.graalvm.compiler.bytecode.Bytecodes.ATHROW;
@@ -31,6 +34,7 @@ import static org.graalvm.compiler.bytecode.Bytecodes.BALOAD;
 import static org.graalvm.compiler.bytecode.Bytecodes.BASTORE;
 import static org.graalvm.compiler.bytecode.Bytecodes.CALOAD;
 import static org.graalvm.compiler.bytecode.Bytecodes.CASTORE;
+import static org.graalvm.compiler.bytecode.Bytecodes.CHECKCAST;
 import static org.graalvm.compiler.bytecode.Bytecodes.DALOAD;
 import static org.graalvm.compiler.bytecode.Bytecodes.DASTORE;
 import static org.graalvm.compiler.bytecode.Bytecodes.DRETURN;
@@ -43,6 +47,7 @@ import static org.graalvm.compiler.bytecode.Bytecodes.GOTO;
 import static org.graalvm.compiler.bytecode.Bytecodes.GOTO_W;
 import static org.graalvm.compiler.bytecode.Bytecodes.IALOAD;
 import static org.graalvm.compiler.bytecode.Bytecodes.IASTORE;
+import static org.graalvm.compiler.bytecode.Bytecodes.IDIV;
 import static org.graalvm.compiler.bytecode.Bytecodes.IFEQ;
 import static org.graalvm.compiler.bytecode.Bytecodes.IFGE;
 import static org.graalvm.compiler.bytecode.Bytecodes.IFGT;
@@ -64,13 +69,18 @@ import static org.graalvm.compiler.bytecode.Bytecodes.INVOKEINTERFACE;
 import static org.graalvm.compiler.bytecode.Bytecodes.INVOKESPECIAL;
 import static org.graalvm.compiler.bytecode.Bytecodes.INVOKESTATIC;
 import static org.graalvm.compiler.bytecode.Bytecodes.INVOKEVIRTUAL;
+import static org.graalvm.compiler.bytecode.Bytecodes.IREM;
 import static org.graalvm.compiler.bytecode.Bytecodes.IRETURN;
 import static org.graalvm.compiler.bytecode.Bytecodes.JSR;
 import static org.graalvm.compiler.bytecode.Bytecodes.JSR_W;
 import static org.graalvm.compiler.bytecode.Bytecodes.LALOAD;
 import static org.graalvm.compiler.bytecode.Bytecodes.LASTORE;
+import static org.graalvm.compiler.bytecode.Bytecodes.LDIV;
 import static org.graalvm.compiler.bytecode.Bytecodes.LOOKUPSWITCH;
+import static org.graalvm.compiler.bytecode.Bytecodes.LREM;
 import static org.graalvm.compiler.bytecode.Bytecodes.LRETURN;
+import static org.graalvm.compiler.bytecode.Bytecodes.MULTIANEWARRAY;
+import static org.graalvm.compiler.bytecode.Bytecodes.NEW;
 import static org.graalvm.compiler.bytecode.Bytecodes.PUTFIELD;
 import static org.graalvm.compiler.bytecode.Bytecodes.PUTSTATIC;
 import static org.graalvm.compiler.bytecode.Bytecodes.RET;
@@ -650,6 +660,10 @@ public final class BciBlockMapping {
                     }
                     break;
                 }
+                case IDIV:
+                case IREM:
+                case LDIV:
+                case LREM:
                 case IASTORE:
                 case LASTORE:
                 case FASTORE:
@@ -667,10 +681,20 @@ public final class BciBlockMapping {
                 case CALOAD:
                 case SALOAD:
                 case ARRAYLENGTH:
+                case CHECKCAST:
+                case NEW:
+                case ANEWARRAY:
+                case MULTIANEWARRAY:
                 case PUTSTATIC:
                 case GETSTATIC:
                 case PUTFIELD:
                 case GETFIELD: {
+                    /*
+                     * All bytecodes that can trigger lazy class initialization via a
+                     * ClassInitializationPlugin (allocations, static field access) must be listed
+                     * because the class initializer is allowed to throw an exception, which
+                     * requires proper exception handling.
+                     */
                     ExceptionDispatchBlock handler = handleExceptions(blockMap, bci);
                     if (handler != null) {
                         current = null;

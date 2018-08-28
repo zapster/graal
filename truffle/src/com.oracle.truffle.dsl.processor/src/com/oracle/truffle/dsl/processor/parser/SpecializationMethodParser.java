@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -121,8 +123,6 @@ public class SpecializationMethodParser extends NodeMethodParser<SpecializationD
             List<String> replacesDefs = new ArrayList<>();
             replacesDefs.addAll(ElementUtils.getAnnotationValueList(String.class, specialization.getMarkerAnnotation(), "replaces"));
 
-            // TODO remove if deprecated contains api is removed.
-            replacesDefs.addAll(ElementUtils.getAnnotationValueList(String.class, specialization.getMarkerAnnotation(), "contains"));
             Set<String> containsNames = specialization.getReplacesNames();
             containsNames.clear();
             if (replacesDefs != null) {
@@ -131,10 +131,6 @@ public class SpecializationMethodParser extends NodeMethodParser<SpecializationD
                         specialization.getReplacesNames().add(include);
                     } else {
                         AnnotationValue value = ElementUtils.getAnnotationValue(specialization.getMarkerAnnotation(), "replaces");
-                        if (value == null) {
-                            // TODO remove if deprecated api was removed.
-                            value = ElementUtils.getAnnotationValue(specialization.getMarkerAnnotation(), "contains");
-                        }
                         specialization.addError(value, "Duplicate replace declaration '%s'.", include);
                     }
                 }

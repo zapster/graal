@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -101,6 +103,7 @@ public abstract class SectionName {
     private static String getFormatPrefix(ObjectFile.Format f) {
         switch (f) {
             case ELF:
+            case PECOFF:
                 return ".";
             case MACH_O:
                 return "__";
@@ -141,8 +144,7 @@ public abstract class SectionName {
              * format-dependent names, for all formats.
              */
             for (Format f : ObjectFile.Format.values()) {
-                SectionName replaced = NAMES_MAP.put(name.getFormatDependentName(f), name);
-                assert replaced == null;
+                NAMES_MAP.put(name.getFormatDependentName(f), name);
             }
         }
     }

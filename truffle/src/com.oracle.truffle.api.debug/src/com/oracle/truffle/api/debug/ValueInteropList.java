@@ -26,7 +26,10 @@ package com.oracle.truffle.api.debug;
 
 import java.util.AbstractList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
+import com.oracle.truffle.api.interop.KeyInfo;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 
 /**
@@ -47,16 +50,46 @@ final class ValueInteropList extends AbstractList<DebugValue> {
 
     @Override
     public DebugValue get(int index) {
-        Object obj = list.get(index);
+        AtomicReference<Object> objRef;
+        try {
+            objRef = new AtomicReference<>(list.get(index));
+        } catch (ThreadDeath td) {
+            throw td;
+        } catch (Throwable ex) {
+            throw new DebugException(debugger, ex, language, null, true, null);
+        }
         String name = Integer.toString(index);
-        DebugValue dv = new DebugValue.HeapValue(debugger, language, name, obj);
+        Map.Entry<Object, Object> elementEntry = new Map.Entry<Object, Object>() {
+            @Override
+            public String getKey() {
+                return name;
+            }
+
+            @Override
+            public Object getValue() {
+                return objRef.get();
+            }
+
+            @Override
+            public Object setValue(Object value) {
+                list.set(index, value);
+                return objRef.getAndSet(value);
+            }
+        };
+        DebugValue dv = new DebugValue.PropertyValue(debugger, language, KeyInfo.READABLE | KeyInfo.MODIFIABLE, elementEntry, null);
         return dv;
     }
 
     @Override
     public DebugValue set(int index, DebugValue value) {
         DebugValue old = get(index);
-        list.set(index, value.get());
+        try {
+            list.set(index, value.get());
+        } catch (ThreadDeath td) {
+            throw td;
+        } catch (Throwable ex) {
+            throw new DebugException(debugger, ex, language, null, true, null);
+        }
         return old;
     }
 

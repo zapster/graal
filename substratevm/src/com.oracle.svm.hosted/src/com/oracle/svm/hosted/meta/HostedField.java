@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -131,6 +133,11 @@ public class HostedField implements ReadableJavaField, SharedField, Comparable<H
     }
 
     @Override
+    public int getOffset() {
+        return wrapped.getOffset();
+    }
+
+    @Override
     public int hashCode() {
         return wrapped.hashCode();
     }
@@ -227,26 +234,15 @@ public class HostedField implements ReadableJavaField, SharedField, Comparable<H
 
     @Override
     public int compareTo(HostedField other) {
-        if (this.equals(other)) {
-            return 0;
-        }
         /*
          * Order by JavaKind. This is required, since we want instance fields of the same size and
          * kind consecutive.
          */
         int result = other.getJavaKind().ordinal() - this.getJavaKind().ordinal();
-
-        if (result == 0) {
-            /*
-             * Make the field order deterministic by sorting by name. This is arbitrary, we can come
-             * up with any better ordering.
-             */
-            result = this.getDeclaringClass().getName().compareTo(other.getDeclaringClass().getName());
-            if (result == 0) {
-                result = this.getName().compareTo(other.getName());
-            }
-        }
-        assert result != 0 : "Fields not distinguishable: " + this + ", " + other;
+        /*
+         * If the kind is the same, i.e., result == 0, we return 0 so that the sorting keeps the
+         * order unchanged and therefore keeps the field order we get from the hosting VM.
+         */
         return result;
     }
 }

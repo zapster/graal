@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,26 +28,28 @@ import java.io.IOException;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.TruffleLanguage.Registration;
 import com.oracle.truffle.api.dsl.test.ExpectError;
+import com.oracle.truffle.api.test.polyglot.ProxyLanguage;
 
 public class LanguageRegistrationTest {
 
     @ExpectError("Registered language class must be public")
-    @TruffleLanguage.Registration(name = "myLang", version = "0", mimeType = "text/x-my")
+    @TruffleLanguage.Registration(id = "myLang", name = "", version = "0")
     private static final class MyLang {
     }
 
     @ExpectError("Registered language inner-class must be static")
-    @TruffleLanguage.Registration(name = "myLangNonStatic", version = "0", mimeType = "text/x-my")
+    @TruffleLanguage.Registration(id = "myLangNonStatic", name = "", version = "0")
     public final class MyLangNonStatic {
     }
 
     @ExpectError("Registered language class must subclass TruffleLanguage")
-    @TruffleLanguage.Registration(name = "myLang", version = "0", mimeType = "text/x-my")
+    @TruffleLanguage.Registration(id = "myLang", name = "", version = "0")
     public static final class MyLangNoSubclass {
     }
 
-    @TruffleLanguage.Registration(name = "myLangNoCnstr", version = "0", mimeType = "text/x-my")
+    @TruffleLanguage.Registration(id = "myLangNoCnstr", name = "", version = "0")
     @ExpectError("A TruffleLanguage subclass must have a public no argument constructor.")
     public static final class MyLangWrongConstr extends TruffleLanguage<Object> {
 
@@ -69,7 +73,7 @@ public class LanguageRegistrationTest {
 
     }
 
-    @TruffleLanguage.Registration(name = "myLangNoField", version = "0", mimeType = "text/x-my")
+    @TruffleLanguage.Registration(id = "myLangNoField", name = "myLangNoField", version = "0")
     public static final class MyLangGood extends TruffleLanguage<Object> {
 
         public MyLangGood() {
@@ -92,29 +96,29 @@ public class LanguageRegistrationTest {
 
     }
 
-    @TruffleLanguage.Registration(name = "myLangGood", version = "0", mimeType = "text/x-my")
-    public static final class MyLangNoPublicConstructor extends TruffleLanguage<Object> {
-        private MyLangNoPublicConstructor() {
-            super();
-        }
-
-        @ExpectError("Using a singleton field is deprecated. Please provide a public no-argument constructor instead.") //
-        public static final MyLangGood INSTANCE = new MyLangGood();
-
-        @Override
-        protected boolean isObjectOfLanguage(Object object) {
-            return false;
-        }
-
-        @Override
-        protected CallTarget parse(ParsingRequest env) throws IOException {
-            throw new IOException();
-        }
-
-        @Override
-        protected Object createContext(Env env) {
-            return env;
-        }
-
+    @ExpectError("The attribute id is mandatory.")
+    @Registration(name = "")
+    public static class InvalidIDError1 extends ProxyLanguage {
     }
+
+    @ExpectError("The attribute id is mandatory.")
+    @Registration(id = "", name = "")
+    public static class InvalidIDError2 extends ProxyLanguage {
+    }
+
+    @ExpectError("Id 'graal' is reserved for other use and must not be used as id.")
+    @Registration(id = "graal", name = "")
+    public static class InvalidIDError3 extends ProxyLanguage {
+    }
+
+    @ExpectError("Id 'engine' is reserved for other use and must not be used as id.")
+    @Registration(id = "engine", name = "")
+    public static class InvalidIDError4 extends ProxyLanguage {
+    }
+
+    @ExpectError("Id 'compiler' is reserved for other use and must not be used as id.")
+    @Registration(id = "compiler", name = "")
+    public static class InvalidIDError5 extends ProxyLanguage {
+    }
+
 }

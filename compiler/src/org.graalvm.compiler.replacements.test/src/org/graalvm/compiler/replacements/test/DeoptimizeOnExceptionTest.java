@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -81,7 +83,7 @@ public class DeoptimizeOnExceptionTest extends GraalCompilerTest {
             ClassLoader testCl = new MyClassLoader();
             @SuppressWarnings("unchecked")
             Class<Runnable> c = (Class<Runnable>) testCl.loadClass(name);
-            Runnable r = c.newInstance();
+            Runnable r = c.getDeclaredConstructor().newInstance();
             ct = Long.MAX_VALUE;
             // warmup
             for (int i = 0; i < 100; i++) {

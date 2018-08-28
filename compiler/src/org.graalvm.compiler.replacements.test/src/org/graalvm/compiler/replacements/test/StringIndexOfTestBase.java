@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -39,6 +41,13 @@ public abstract class StringIndexOfTestBase extends GraalCompilerTest {
     public static Collection<Object[]> data() {
         ArrayList<Object[]> tests = new ArrayList<>();
         String[] targets = new String[]{"foobar", "foo", "bar"};
+        String[] utf16targets = new String[]{"grga " + ((char) 0x10D) + "varak", "grga", ((char) 0x10D) + "varak"};
+        addTargets(tests, targets);
+        addTargets(tests, utf16targets);
+        return tests;
+    }
+
+    private static void addTargets(ArrayList<Object[]> tests, String[] targets) {
         for (String source : targets) {
             for (String target : targets) {
                 tests.add(new Object[]{source, target});
@@ -58,7 +67,6 @@ public abstract class StringIndexOfTestBase extends GraalCompilerTest {
                 tests.add(new Object[]{s.substring(0, s.length() - 1) + s, s});
             }
         }
-        return tests;
     }
 
     public int testStringIndexOf(String a, String b) {

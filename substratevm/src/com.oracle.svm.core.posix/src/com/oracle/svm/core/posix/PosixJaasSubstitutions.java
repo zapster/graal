@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,8 +26,9 @@ package com.oracle.svm.core.posix;
 
 import org.graalvm.compiler.word.Word;
 import org.graalvm.nativeimage.PinnedObject;
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.StackValue;
-import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.word.WordFactory;
@@ -39,7 +42,6 @@ import com.oracle.svm.core.posix.headers.Pwd;
 import com.oracle.svm.core.posix.headers.Pwd.passwd;
 import com.oracle.svm.core.posix.headers.Pwd.passwdPointer;
 import com.oracle.svm.core.posix.headers.Unistd;
-import com.sun.security.auth.module.UnixSystem;
 
 /**
  * Substitutions for the Java Authentication and Authorization Service (JAAS,
@@ -50,7 +52,8 @@ public final class PosixJaasSubstitutions {
     }
 }
 
-@TargetClass(UnixSystem.class)
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
+@TargetClass(className = "com.sun.security.auth.module.UnixSystem")
 final class Target_com_sun_security_auth_module_UnixSystem {
     @Alias String username;
     @Alias long uid;
@@ -72,8 +75,8 @@ final class Target_com_sun_security_auth_module_UnixSystem {
         }
         CCharPointer pwbuf = LibC.malloc(pwsize);
         try {
-            passwd pwent = StackValue.get(SizeOf.get(passwd.class));
-            passwdPointer p = StackValue.get(SizeOf.get(passwdPointer.class));
+            passwd pwent = StackValue.get(passwd.class);
+            passwdPointer p = StackValue.get(passwdPointer.class);
             int result;
             do {
                 if (pwbuf.isNull()) {

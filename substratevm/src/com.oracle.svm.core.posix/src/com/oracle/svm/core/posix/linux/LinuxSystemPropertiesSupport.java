@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,11 +28,14 @@ import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
+import org.graalvm.nativeimage.StackValue;
+import org.graalvm.nativeimage.c.type.CTypeConversion;
 
 import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.jdk.SystemPropertiesSupport;
 import com.oracle.svm.core.posix.PosixSystemPropertiesSupport;
 import com.oracle.svm.core.posix.headers.Paths;
+import com.oracle.svm.core.posix.headers.Utsname;
 
 @Platforms({Platform.LINUX.class})
 public class LinuxSystemPropertiesSupport extends PosixSystemPropertiesSupport {
@@ -38,6 +43,15 @@ public class LinuxSystemPropertiesSupport extends PosixSystemPropertiesSupport {
     @Override
     protected String tmpdirValue() {
         return Paths._PATH_VARTMP();
+    }
+
+    @Override
+    protected String osVersionValue() {
+        Utsname.utsname name = StackValue.get(Utsname.utsname.class);
+        if (Utsname.uname(name) >= 0) {
+            return CTypeConversion.toJavaString(name.release());
+        }
+        return "Unknown";
     }
 }
 

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,6 +24,8 @@
  */
 package com.oracle.svm.hosted.analysis;
 
+import static com.oracle.graal.pointsto.reports.AnalysisReportsOptions.PrintAnalysisCallTree;
+import static com.oracle.svm.hosted.NativeImageOptions.MaxReachableTypes;
 import static jdk.vm.ci.common.JVMCIError.shouldNotReachHere;
 
 import java.lang.annotation.Annotation;
@@ -57,6 +61,7 @@ import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.graal.pointsto.meta.AnalysisUniverse;
 import com.oracle.graal.pointsto.meta.HostedProviders;
+import com.oracle.graal.pointsto.reports.CallTreePrinter;
 import com.oracle.graal.pointsto.util.AnalysisError.TypeNotFoundError;
 import com.oracle.svm.core.annotate.UnknownObjectField;
 import com.oracle.svm.core.annotate.UnknownPrimitiveField;
@@ -64,6 +69,8 @@ import com.oracle.svm.core.hub.AnnotatedSuperInfo;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.GenericInfo;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
+import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.hosted.NativeImageClassLoader;
 import com.oracle.svm.hosted.SVMHost;
 import com.oracle.svm.hosted.analysis.flow.SVMMethodTypeFlowBuilder;
 
@@ -166,18 +173,29 @@ public class Inflation extends BigBang {
                 for (AnalysisField f : type.getStaticFields()) {
                     if (f.getName().endsWith("$VALUES")) {
                         if (found != null) {
-                            throw shouldNotReachHere("Enumeration has more than one static field with enumeration values: " + type);
+                            /*
+                             * Enumeration has more than one static field with enumeration values.
+                             * Bailout and use Class.getEnumConstants() to get the value instead.
+                             */
+                            found = null;
+                            break;
                         }
                         found = f;
                     }
                 }
+                Enum<?>[] enumConstants;
                 if (found == null) {
-                    throw shouldNotReachHere("Enumeration does not have static field with enumeration values: " + type);
+                    /*
+                     * We could not find a unique $VALUES field, so we use the value returned by
+                     * Class.getEnumConstants(). This is not ideal since Class.getEnumConstants()
+                     * returns a copy of the array, so we will have two arrays with the same content
+                     * in the image heap, but it is better than failing image generation.
+                     */
+                    enumConstants = (Enum<?>[]) type.getJavaClass().getEnumConstants();
+                } else {
+                    enumConstants = (Enum[]) SubstrateObjectConstant.asObject(getConstantReflectionProvider().readFieldValue(found, null));
+                    assert enumConstants != null;
                 }
-                AnalysisField field = found;
-                // field.registerAsRead(null);
-                Enum<?>[] enumConstants = (Enum[]) SubstrateObjectConstant.asObject(getConstantReflectionProvider().readFieldValue(field, null));
-                assert enumConstants != null;
                 svmHost.dynamicHub(type).setEnumConstants(enumConstants);
             }
         }
@@ -190,6 +208,28 @@ public class Inflation extends BigBang {
         genericInterfacesMap = null;
         annotatedInterfacesMap = null;
         interfacesEncodings = null;
+    }
+
+    @Override
+    public boolean isValidClassLoader(Object valueObj) {
+        return valueObj.getClass().getClassLoader() == null || // boot class loader
+                        !(valueObj.getClass().getClassLoader() instanceof NativeImageClassLoader) || valueObj.getClass().getClassLoader() == Thread.currentThread().getContextClassLoader();
+    }
+
+    @Override
+    public void checkUserLimitations() {
+        int maxReachableTypes = MaxReachableTypes.getValue();
+        if (maxReachableTypes >= 0) {
+            CallTreePrinter callTreePrinter = new CallTreePrinter(this);
+            callTreePrinter.buildCallTree();
+            int numberOfTypes = callTreePrinter.classesSet(false).size();
+            if (numberOfTypes > maxReachableTypes) {
+                throw UserError.abort("Reachable " + numberOfTypes + " types but only " + maxReachableTypes + " allowed (because the " + MaxReachableTypes.getName() +
+                                " option is set). To see all reachable types use " + PrintAnalysisCallTree.getName() + "; to change the maximum number of allowed types use " +
+                                MaxReachableTypes.getName() +
+                                ".");
+            }
+        }
     }
 
     class GenericInterfacesEncodingKey {
@@ -235,8 +275,6 @@ public class Inflation extends BigBang {
         Class<?> javaClass = type.getJavaClass();
 
         TypeVariable<?>[] typeParameters = javaClass.getTypeParameters();
-        /* The bounds are lazily initialized. Initialize them eagerly in the native image. */
-        Arrays.stream(typeParameters).forEach(TypeVariable::getBounds);
         Type[] genericInterfaces = Arrays.stream(javaClass.getGenericInterfaces()).filter(this::filterGenericInterfaces).toArray(Type[]::new);
         Type[] cachedGenericInterfaces = genericInterfacesMap.computeIfAbsent(new GenericInterfacesEncodingKey(genericInterfaces), k -> genericInterfaces);
         Type genericSuperClass = javaClass.getGenericSuperclass();

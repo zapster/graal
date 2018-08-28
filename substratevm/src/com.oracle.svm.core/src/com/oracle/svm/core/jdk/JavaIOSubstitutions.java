@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,6 +25,7 @@
 package com.oracle.svm.core.jdk;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -172,6 +175,16 @@ final class Target_java_io_DeleteOnExitHook {
                 }
             }
         }
+    }
+}
+
+@TargetClass(className = "java.io.FileCleanable", onlyWith = JDK9OrLater.class)
+final class Target_java_io_FileCleanable {
+
+    @Substitute //
+    @SuppressWarnings({"unused"})
+    private static /* native */ void cleanupClose0(int fd, long handle) throws IOException {
+        throw VMError.unsupportedFeature("JDK9OrLater: Target_java_io_FileCleanable.cleanupClose0");
     }
 }
 

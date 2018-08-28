@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -266,7 +268,7 @@ public class EngineBenchmark extends TruffleBenchmark {
         final Context context = Context.create(TEST_LANGUAGE);
         final Value hostValue = context.getBindings(TEST_LANGUAGE).getMember("context");
         final BenchmarkContext internalContext = hostValue.asHostObject();
-        final Node executeNode = Message.createExecute(0).createNode();
+        final Node executeNode = Message.EXECUTE.createNode();
         final Integer intValue = 42;
         final CallTarget callTarget = Truffle.getRuntime().createCallTarget(new RootNode(null) {
 
@@ -353,7 +355,7 @@ public class EngineBenchmark extends TruffleBenchmark {
     /*
      * Test language that ensures that only engine overhead is tested.
      */
-    @TruffleLanguage.Registration(id = TEST_LANGUAGE, name = "", version = "", mimeType = TEST_LANGUAGE)
+    @TruffleLanguage.Registration(id = TEST_LANGUAGE, name = "")
     public static class BenchmarkTestLanguage extends TruffleLanguage<BenchmarkContext> {
 
         @Override

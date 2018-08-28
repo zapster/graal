@@ -47,7 +47,6 @@ import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Scope;
 import com.oracle.truffle.api.Truffle;
-import com.oracle.truffle.api.TruffleException;
 import com.oracle.truffle.api.debug.Breakpoint.BreakpointConditionFailure;
 import com.oracle.truffle.api.debug.DebuggerNode.InputValuesProvider;
 import com.oracle.truffle.api.frame.FrameDescriptor;
@@ -248,19 +247,26 @@ public final class DebuggerSession implements Closeable {
      * Returns a language top scope. The top scopes have global validity and unlike
      * {@link DebugStackFrame#getScope()} have no relation to the suspended location.
      *
+     * @throws DebugException when guest language code throws an exception
      * @since 0.30
      */
-    public DebugScope getTopScope(String languageId) {
+    public DebugScope getTopScope(String languageId) throws DebugException {
         LanguageInfo info = debugger.getEnv().getLanguages().get(languageId);
         if (info == null) {
             return null;
         }
-        Iterable<Scope> scopes = debugger.getEnv().findTopScopes(languageId);
-        Iterator<Scope> it = scopes.iterator();
-        if (!it.hasNext()) {
-            return null;
+        try {
+            Iterable<Scope> scopes = debugger.getEnv().findTopScopes(languageId);
+            Iterator<Scope> it = scopes.iterator();
+            if (!it.hasNext()) {
+                return null;
+            }
+            return new DebugScope(it.next(), it, debugger, info);
+        } catch (ThreadDeath td) {
+            throw td;
+        } catch (Throwable ex) {
+            throw new DebugException(debugger, ex, info, null, true, null);
         }
-        return new DebugScope(it.next(), it, debugger, info);
     }
 
     /**
@@ -601,7 +607,7 @@ public final class DebuggerSession implements Closeable {
      */
     @Deprecated
     public void setBreakpointsActive(boolean active) {
-        for (Breakpoint.Kind kind : Breakpoint.Kind.values()) {
+        for (Breakpoint.Kind kind : Breakpoint.Kind.VALUES) {
             setBreakpointsActive(kind, active);
         }
     }
@@ -642,7 +648,7 @@ public final class DebuggerSession implements Closeable {
      */
     @Deprecated
     public boolean isBreakpointsActive() {
-        for (Breakpoint.Kind kind : Breakpoint.Kind.values()) {
+        for (Breakpoint.Kind kind : Breakpoint.Kind.VALUES) {
             if (isBreakpointsActive(kind)) {
                 return true;
             }
@@ -848,22 +854,25 @@ public final class DebuggerSession implements Closeable {
         boolean hitBreakpoint = breaks != null && !breaks.isEmpty();
         if (hitStepping || hitBreakpoint) {
             s.consume();
-            doSuspend(SuspendedContext.create(source.getContext()), suspendAnchor, frame, source, inputValuesProvider, returnValue, exception, breaks, breakpointFailures);
+            doSuspend(SuspendedContext.create(source.getContext(), debugger.getEnv()), suspendAnchor, frame, source, inputValuesProvider, returnValue, exception, breaks, breakpointFailures);
         } else {
             if (Debugger.TRACE) {
                 trace("ignored suspended reason: strategy(%s) from source:%s context:%s location:%s", s, source, source.getContext(), source.getSuspendAnchors());
             }
         }
         if (s.isKill()) {   // ComposedStrategy can become kill
-            throw new KillException();
+            throw new KillException(source.getContext().getInstrumentedNode());
         }
     }
 
-    private static void clearFrame(MaterializedFrame frame) {
+    private static void clearFrame(RootNode root, MaterializedFrame frame) {
         FrameDescriptor descriptor = frame.getFrameDescriptor();
-        Object value = descriptor.getDefaultValue();
-        for (FrameSlot slot : descriptor.getSlots()) {
-            frame.setObject(slot, value);
+        if (root.getFrameDescriptor() == descriptor) {
+            // Clear only those frames that correspond to the current root
+            Object value = descriptor.getDefaultValue();
+            for (FrameSlot slot : descriptor.getSlots()) {
+                frame.setObject(slot, value);
+            }
         }
     }
 
@@ -875,7 +884,8 @@ public final class DebuggerSession implements Closeable {
         assert s.isUnwind();
         assert s.step(this, null, null);
         s.consume();
-        clearFrame(frame); // Clear the frame that is to be re-entered
+        // Clear the frame that is to be re-entered
+        clearFrame(((Node) insertableNode).getRootNode(), frame);
         // Fake the caller context
         class Caller {
             final Node node;
@@ -886,6 +896,7 @@ public final class DebuggerSession implements Closeable {
                 this.frame = frameInstance.getFrame(FrameAccess.MATERIALIZE).materialize();
             }
         }
+        Caller[] nearestCaller = new Caller[1];
         Caller caller = Truffle.getRuntime().iterateFrames(new FrameInstanceVisitor<Caller>() {
             private int depth = 0;
 
@@ -895,9 +906,21 @@ public final class DebuggerSession implements Closeable {
                 if (!SuspendedEvent.isEvalRootStackFrame(DebuggerSession.this, frameInstance) && (depth++ == 0)) {
                     return null;
                 }
-                return new Caller(frameInstance);
+                Node callNode = frameInstance.getCallNode();
+                // Prefer call node with a source section
+                if (callNode != null && callNode.getEncapsulatingSourceSection() != null) {
+                    return new Caller(frameInstance);
+                } else {
+                    if (nearestCaller[0] == null) {
+                        nearestCaller[0] = new Caller(frameInstance);
+                    }
+                    return null;
+                }
             }
         });
+        if (caller == null) {
+            caller = nearestCaller[0];
+        }
         SuspendedContext context = SuspendedContext.create(caller.node, ((SteppingStrategy.Unwind) s).unwind);
         doSuspend(context, SuspendAnchor.AFTER, caller.frame, insertableNode, null, null, null, Collections.emptyList(), Collections.emptyMap());
     }
@@ -951,7 +974,7 @@ public final class DebuggerSession implements Closeable {
 
         setSteppingStrategy(currentThread, strategy, true);
         if (strategy.isKill()) {
-            throw new KillException();
+            throw new KillException(context.getInstrumentedNode());
         } else if (strategy.isUnwind()) {
             ThreadDeath unwind = context.createUnwind(null, rootBinding);
             ((SteppingStrategy.Unwind) strategy).unwind = unwind;
@@ -1034,16 +1057,12 @@ public final class DebuggerSession implements Closeable {
         } catch (KillException kex) {
             throw new DebugException(ev.getSession().getDebugger(), "Evaluation was killed.", null, true, null);
         } catch (Throwable ex) {
-            if (ex instanceof TruffleException) {
-                LanguageInfo language = null;
-                RootNode root = node.getRootNode();
-                if (root != null) {
-                    language = root.getLanguageInfo();
-                }
-                throw new DebugException(ev.getSession().getDebugger(), (TruffleException) ex, language, null, true, null);
-            } else {
-                throw ex;
+            LanguageInfo language = null;
+            RootNode root = node.getRootNode();
+            if (root != null) {
+                language = root.getLanguageInfo();
             }
+            throw new DebugException(ev.getSession().getDebugger(), ex, language, null, true, null);
         }
     }
 
@@ -1057,8 +1076,11 @@ public final class DebuggerSession implements Closeable {
         if (info == null) {
             throw new IllegalArgumentException("Cannot evaluate in context using a without an associated TruffleLanguage.");
         }
+        if (!info.isInteractive()) {
+            throw new IllegalStateException("Can not evaluate in a non-interactive language.");
+        }
 
-        final Source source = Source.newBuilder(code).name("eval in context").language(info.getId()).mimeType("content/unknown").build();
+        final Source source = Source.newBuilder(info.getId(), code, "eval in context").build();
         ExecutableNode fragment = ev.getSession().getDebugger().getEnv().parseInline(source, node, frame);
         if (fragment != null) {
             ev.getInsertableNode().setParentOf(fragment);
@@ -1334,9 +1356,8 @@ class DebuggerSessionSnippets {
                 event.prepareStepInto(1);
             }
         })) {
-            Source someCode = Source.newBuilder("...").
-                            mimeType("...").
-                            name("example").build();
+            Source someCode = Source.newBuilder("...",
+                            "...", "example").build();
 
             // install line breakpoint
             session.install(Breakpoint.newBuilder(someCode).lineIs(3).build());

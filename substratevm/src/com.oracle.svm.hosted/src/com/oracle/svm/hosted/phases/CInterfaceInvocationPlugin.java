@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -68,6 +70,8 @@ import com.oracle.svm.core.graal.code.amd64.SubstrateCallingConventionType;
 import com.oracle.svm.core.graal.nodes.CInterfaceReadNode;
 import com.oracle.svm.core.graal.nodes.CInterfaceWriteNode;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
+import com.oracle.svm.core.nodes.CFunctionEpilogueNode;
+import com.oracle.svm.core.nodes.CFunctionPrologueNode;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.hosted.c.CInterfaceError;
 import com.oracle.svm.hosted.c.NativeLibraries;
@@ -477,6 +481,8 @@ public class CInterfaceInvocationPlugin implements NodePlugin {
              * introducing additional invokes without real BCIs in a BytecodeParser context, which
              * does not work too well.
              */
+
+            b.append(new CFunctionPrologueNode());
         }
 
         // We "discard" the receiver from the signature by pretending we are a static method
@@ -505,6 +511,7 @@ public class CInterfaceInvocationPlugin implements NodePlugin {
             } else {
                 b.add(invokeNode);
             }
+            b.append(new CFunctionEpilogueNode());
         } else {
             throw shouldNotReachHere("Unsupported type of call: " + callType);
         }

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -52,6 +54,7 @@ import org.graalvm.word.PointerBase;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.svm.core.c.CTypedef;
 import com.oracle.svm.core.c.struct.PinnedObjectField;
+import com.oracle.svm.hosted.ClassInitializationFeature;
 import com.oracle.svm.hosted.c.BuiltinDirectives;
 import com.oracle.svm.hosted.c.NativeCodeContext;
 import com.oracle.svm.hosted.c.NativeLibraries;
@@ -588,7 +591,8 @@ public class InfoTreeBuilder {
             name = "int";
         }
         EnumInfo enumInfo = new EnumInfo(name, type);
-        type.initialize();
+        ClassInitializationFeature.forceInitializeHosted(type);
+
         for (ResolvedJavaField field : type.getStaticFields()) {
             assert Modifier.isStatic(field.getModifiers());
             if (Modifier.isFinal(field.getModifiers()) && field.getType().equals(type)) {

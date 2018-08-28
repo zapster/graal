@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -39,6 +41,7 @@ import com.oracle.svm.core.hub.LayoutEncoding;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.thread.VMOperation;
 import com.oracle.svm.core.thread.VMThreads;
+import com.oracle.svm.core.util.VMError;
 
 /**
  * A Space is a collection of HeapChunks.
@@ -617,10 +620,9 @@ public class Space {
         final Pointer copyMemory = allocateMemory(copySize);
         trace.string("  copyMemory: ").hex(copyMemory);
         if (copyMemory.isNull()) {
-            /* TODO: Promotion failure! */
             final Log failureLog = Log.log().string("[!SpaceImpl.copyAlignedObject:");
             failureLog.string("  failure to allocate ").unsigned(copySize).string(" bytes").string("!]").newline();
-            return null;
+            throw VMError.shouldNotReachHere("Promotion failure");
         }
         /* - Copy the Object. */
         final Pointer originalMemory = Word.objectToUntrackedPointer(originalObj);

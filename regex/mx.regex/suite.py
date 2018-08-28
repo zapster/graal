@@ -3,6 +3,16 @@ suite = {
 
   "name" : "regex",
 
+  "version" : "1.0.0-rc6",
+  "groupId" : "com.oracle.truffle",
+  "url" : "http://www.graalvm.org/",
+  "developer" : {
+    "name" : "Truffle and Graal developers",
+    "email" : "graalvm-users@oss.oracle.com",
+    "organization" : "Graal",
+    "organizationUrl" : "http://www.graalvm.org/",
+  },
+
   "imports" : {
     "suites": [
       {
@@ -13,13 +23,6 @@ suite = {
          ]
       },
     ]
-  },
-
-  "repositories" : {
-    "lafo-snapshots" : {
-      "url": "https://curio.ssw.jku.at/nexus/content/repositories/snapshots",
-      "licenses" : ["GPLv2-CPE", "UPL", "BSD-new"]
-    },
   },
 
   "defaultLicense" : "GPLv2-CPE",
@@ -34,7 +37,13 @@ suite = {
         "truffle:TRUFFLE_API",
       ],
       "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
-      "javaCompliance" : "1.8",
+      "exports" : [
+        "com.oracle.truffle.regex",
+        "com.oracle.truffle.regex.chardata",
+        "com.oracle.truffle.regex.result",
+      ],
+      "checkstyleVersion" : "8.8",
+      "javaCompliance" : "8+",
       "workingSets" : "Truffle,Regex",
     },
 
@@ -46,18 +55,22 @@ suite = {
         "mx:JUNIT",
       ],
       "checkstyle" : "com.oracle.truffle.regex",
-      "javaCompliance" : "1.8",
+      "javaCompliance" : "8+",
       "workingSets" : "Truffle,Regex",
     },
   },
 
   "distributions" : {
     "TREGEX" : {
+      "moduleName" : "com.oracle.truffle.regex",
       "subDir" : "src",
       "dependencies" : ["com.oracle.truffle.regex"],
       "distDependencies" : [
         "truffle:TRUFFLE_API",
       ],
+      "maven" : {
+        "artifactId" : "truffle-regex",
+      },
     },
 
     "TREGEX_UNIT_TESTS" : {
@@ -71,6 +84,14 @@ suite = {
         "TREGEX",
       ],
       "maven" : False,
+    },
+
+    "TREGEX_GRAALVM_SUPPORT" : {
+      "native" : True,
+      "description" : "TRegex support distribution for the GraalVM",
+      "layout" : {
+        "native-image.properties" : "file:mx.regex/native-image.properties",
+      },
     },
   }
 }

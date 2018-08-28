@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -21,8 +23,6 @@
  * questions.
  */
 package com.oracle.truffle.api.benchmark.debug;
-
-import java.io.IOException;
 
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Source;
@@ -72,8 +72,8 @@ public class DebugSpeedBench implements SuspendedCallback {
     private volatile ACTION action;
 
     @Setup
-    public void beforeTesting() throws IOException {
-        source = Source.newBuilder("instrumentation-test-language", CODE_STEP, "StepTest.instr").build();
+    public void beforeTesting() {
+        source = Source.newBuilder("instrumentation-test-language", CODE_STEP, "StepTest.instr").buildLiteral();
         context = Context.create();
         Debugger debugger = context.getEngine().getInstruments().get("debugger").lookup(Debugger.class);
         session = debugger.startSession(this);

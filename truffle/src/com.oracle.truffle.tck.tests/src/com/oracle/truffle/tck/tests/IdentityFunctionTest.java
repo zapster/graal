@@ -63,7 +63,7 @@ public class IdentityFunctionTest {
 
     @Parameterized.Parameters(name = "{0}")
     public static Collection<? extends TestRun> createExpressionTests() {
-        context = new TestContext();
+        context = new TestContext(IdentityFunctionTest.class);
         final Collection<? extends TestRun> testRuns = TestUtil.createTestRuns(
                         TestUtil.getRequiredLanguages(context),
                         TestUtil.getRequiredValueLanguages(context),
@@ -102,9 +102,9 @@ public class IdentityFunctionTest {
                 Value parameter = snippetRun.getParameters().get(0);
                 TypeDescriptor parameterType = TypeDescriptor.forValue(parameter);
                 TypeDescriptor resultType = TypeDescriptor.forValue(snippetRun.getResult());
-                if (!resultType.isAssignable(parameterType) || !resultType.isAssignable(resultType)) {
+                if (!parameterType.isAssignable(resultType) || !resultType.isAssignable(resultType)) {
                     throw new AssertionError(String.format(
-                                    "Identity function return type must parameter type. Expected %s got %s.",
+                                    "Identity function result type must contain the parameter type. Parameter type: %s Result type: %s.",
                                     parameterType,
                                     resultType));
                 }

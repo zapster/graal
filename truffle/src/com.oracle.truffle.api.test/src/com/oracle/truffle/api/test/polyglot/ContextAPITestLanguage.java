@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -32,11 +34,11 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.test.polyglot.ContextAPITestLanguage.LanguageContext;
 
-@TruffleLanguage.Registration(id = ContextAPITestLanguage.ID, name = ContextAPITestLanguage.ID, version = "1.0", mimeType = ContextAPITestLanguage.MIME)
+@TruffleLanguage.Registration(id = ContextAPITestLanguage.ID, name = ContextAPITestLanguage.ID, version = "1.0", characterMimeTypes = ContextAPITestLanguage.MIME)
 public class ContextAPITestLanguage extends TruffleLanguage<LanguageContext> {
 
     static final String ID = "ContextAPITestLanguage";
-    static final String MIME = "ContextAPITestMime";
+    static final String MIME = "text/x-ContextAPITestLanguage";
     static Function<Env, Object> runinside;
 
     static class LanguageContext {

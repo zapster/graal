@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -31,6 +33,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -79,13 +82,15 @@ import com.oracle.svm.hosted.server.SubstrateServerMessage.ServerCommand;
 public final class NativeImageBuildServer {
 
     public static final String IMAGE_CLASSPATH_PREFIX = "-imagecp";
+    public static final String PORT_LOG_MESSAGE_PREFIX = "Started image build server on port: ";
     private static final String TASK_PREFIX = "-task=";
     static final String PORT_PREFIX = "-port=";
     private static final String LOG_PREFIX = "-logFile=";
     private static final int TIMEOUT_MINUTES = 240;
-    private static final String SUBSTRATEVM_VERSION_PROPERTY = "substratevm.version";
+    private static final String GRAALVM_VERSION_PROPERTY = "org.graalvm.version";
     private static final int SERVER_THREAD_POOL_SIZE = 4;
     private static final int FAILED_EXIT_STATUS = -1;
+
     private static Set<ImageBuildTask> tasks = Collections.synchronizedSet(new HashSet<>());
 
     private boolean terminated;
@@ -200,14 +205,22 @@ public final class NativeImageBuildServer {
     @SuppressWarnings("InfiniteLoopStatement")
     private void serve() {
         threadPoolExecutor.purge();
-        log((port == 0 ? "Server selects port" : "Try binding server to port " + port) + "...");
+        if (port == 0) {
+            log("Server selects ephemeral port\n");
+        } else {
+            log("Try binding server to port " + port + "...\n");
+        }
         try (ServerSocket serverSocket = new ServerSocket()) {
             serverSocket.setReuseAddress(true);
             serverSocket.setSoTimeout((int) TimeUnit.MINUTES.toMillis(TIMEOUT_MINUTES));
             serverSocket.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
 
-            /* NOTE: the following command lines are parsed externally */
-            log(" Started image build server on port:\n%d\nAccepting requests...\n", serverSocket.getLocalPort());
+            /* NOTE: the following command line gets parsed externally */
+            String portLogMessage = PORT_LOG_MESSAGE_PREFIX + serverSocket.getLocalPort();
+            System.out.println(portLogMessage);
+            System.out.flush();
+            log(portLogMessage);
+
             while (true) {
                 Socket socket = serverSocket.accept();
 
@@ -289,8 +302,8 @@ public final class NativeImageBuildServer {
                 sendExitStatus(output, 0);
                 return false;
             case GET_VERSION:
-                log("Received 'version' request. Responding with " + System.getProperty(SUBSTRATEVM_VERSION_PROPERTY) + ".\n");
-                SubstrateServerMessage.send(new SubstrateServerMessage(serverCommand.command, System.getProperty(SUBSTRATEVM_VERSION_PROPERTY).getBytes()), output);
+                log("Received 'version' request. Responding with " + System.getProperty(GRAALVM_VERSION_PROPERTY) + ".\n");
+                SubstrateServerMessage.send(new SubstrateServerMessage(serverCommand.command, System.getProperty(GRAALVM_VERSION_PROPERTY).getBytes()), output);
                 return Instant.now().isBefore(lastKeepAliveAction.plus(Duration.ofMinutes(TIMEOUT_MINUTES)));
             case BUILD_IMAGE:
                 try {
@@ -371,7 +384,7 @@ public final class NativeImageBuildServer {
         URLClassLoader imageClassLoader;
         ClassLoader applicationClassLoader = Thread.currentThread().getContextClassLoader();
         try {
-            imageClassLoader = NativeImageGeneratorRunner.installURLClassLoader(classpath);
+            imageClassLoader = NativeImageGeneratorRunner.installNativeImageClassLoader(classpath);
             final ImageBuildTask task = loadCompilationTask(arguments, imageClassLoader);
             try {
                 tasks.add(task);
@@ -492,10 +505,10 @@ public final class NativeImageBuildServer {
         final String task = taskParameter.get().substring(TASK_PREFIX.length());
         try {
             Class<?> imageTaskClass = Class.forName(task, true, classLoader);
-            return (ImageBuildTask) imageTaskClass.newInstance();
+            return (ImageBuildTask) imageTaskClass.getDeclaredConstructor().newInstance();
         } catch (ClassNotFoundException e) {
             throw UserError.abort("image building task " + task + " can not be found. Make sure that " + task + " is present on the classpath.");
-        } catch (InstantiationException | IllegalAccessException e) {
+        } catch (IllegalArgumentException | InstantiationException | InvocationTargetException | NoSuchMethodException | IllegalAccessException e) {
             throw UserError.abort("image building task " + task + " must have a public constructor without parameters.");
         }
     }

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,12 +24,18 @@
  */
 package com.oracle.truffle.api.test.polyglot;
 
+import java.util.function.Consumer;
+
 import org.graalvm.options.OptionDescriptors;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.Scope;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.instrumentation.ProvidedTags;
+import com.oracle.truffle.api.instrumentation.StandardTags.ExpressionTag;
+import com.oracle.truffle.api.instrumentation.StandardTags.RootTag;
+import com.oracle.truffle.api.instrumentation.StandardTags.StatementTag;
 import com.oracle.truffle.api.nodes.ExecutableNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.source.SourceSection;
@@ -36,7 +44,8 @@ import com.oracle.truffle.api.test.polyglot.ProxyLanguage.LanguageContext;
 /**
  * Reusable language for testing that allows wrap all methods.
  */
-@TruffleLanguage.Registration(id = ProxyLanguage.ID, name = ProxyLanguage.ID, version = "1.0", mimeType = ProxyLanguage.ID)
+@TruffleLanguage.Registration(id = ProxyLanguage.ID, name = ProxyLanguage.ID, version = "1.0", contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
+@ProvidedTags({ExpressionTag.class, StatementTag.class, RootTag.class})
 public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
 
     public static final String ID = "proxyLanguage";
@@ -47,22 +56,41 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
         LanguageContext(Env env) {
             this.env = env;
         }
+
+        public Env getEnv() {
+            return env;
+        }
     }
 
     private static volatile ProxyLanguage delegate = new ProxyLanguage();
     static {
         delegate.wrapper = false;
     }
-    private boolean wrapper = true;
+    protected boolean wrapper = true;
     protected ProxyLanguage languageInstance;
 
-    public static void setDelegate(ProxyLanguage delegate) {
-        delegate.wrapper = false;
+    private Consumer<LanguageContext> onCreate;
+
+    public static <T extends ProxyLanguage> T setDelegate(T delegate) {
+        ((ProxyLanguage) delegate).wrapper = false;
         ProxyLanguage.delegate = delegate;
+        return delegate;
+    }
+
+    public void setOnCreate(Consumer<LanguageContext> onCreate) {
+        this.onCreate = onCreate;
     }
 
     public static LanguageContext getCurrentContext() {
         return getCurrentContext(ProxyLanguage.class);
+    }
+
+    public static LanguageContext getCurrentLanguageContext(Class<? extends ProxyLanguage> languageClass) {
+        return getCurrentContext(languageClass);
+    }
+
+    public static ProxyLanguage getCurrentLanguage() {
+        return getCurrentLanguage(ProxyLanguage.class);
     }
 
     public static ContextReference<LanguageContext> getCurrentContextReference() {
@@ -75,7 +103,11 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
             delegate.languageInstance = this;
             return delegate.createContext(env);
         } else {
-            return new LanguageContext(env);
+            LanguageContext c = new LanguageContext(env);
+            if (onCreate != null) {
+                onCreate.accept(c);
+            }
+            return c;
         }
     }
 
@@ -159,6 +191,27 @@ public class ProxyLanguage extends TruffleLanguage<LanguageContext> {
             super.initializeContext(context);
         }
 
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    protected boolean initializeMultiContext() {
+        if (wrapper) {
+            delegate.languageInstance = this;
+            return delegate.initializeMultiContext();
+        } else {
+            return super.initializeMultiContext();
+        }
+    }
+
+    @Override
+    protected void initializeMultipleContexts() {
+        if (wrapper) {
+            delegate.languageInstance = this;
+            delegate.initializeMultipleContexts();
+        } else {
+            super.initializeMultipleContexts();
+        }
     }
 
     @Override

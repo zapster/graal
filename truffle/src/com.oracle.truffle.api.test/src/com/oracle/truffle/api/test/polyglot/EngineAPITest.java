@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,6 +28,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
@@ -42,6 +45,9 @@ import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.Language;
 import org.junit.Assert;
 import org.junit.Test;
+
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.nodes.RootNode;
 
 public class EngineAPITest {
 
@@ -171,7 +177,7 @@ public class EngineAPITest {
             // not allowed to access
             Assert.assertTrue(context.initialize(LanguageSPITestLanguage.ID));
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
         context.close();
     }
@@ -187,13 +193,25 @@ public class EngineAPITest {
     @Test
     public void testCreateContextWithAutomaticEngine() {
         Context context = Context.create();
-
         try {
             Context.newBuilder().engine(context.getEngine()).build();
             fail();
         } catch (IllegalArgumentException e) {
 
         }
-
     }
+
+    @Test
+    public void testEngineName() {
+        Engine engine = Engine.create();
+        String implName = engine.getImplementationName();
+        assertEquals(Truffle.getRuntime().getName(), engine.getImplementationName());
+        String name = Truffle.getRuntime().createCallTarget(RootNode.createConstantNode(0)).getClass().getSimpleName();
+        if (name.equals("DefaultCallTarget")) {
+            assertEquals(implName, "Interpreted");
+        } else if (name.endsWith("OptimizedCallTarget")) {
+            assertTrue(implName, implName.equals("GraalVM EE") || implName.equals("GraalVM CE"));
+        }
+    }
+
 }

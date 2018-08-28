@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -25,7 +27,7 @@ package org.graalvm.compiler.core.sparc;
 
 import static org.graalvm.compiler.asm.sparc.SPARCAssembler.FMOVDCC;
 import static org.graalvm.compiler.asm.sparc.SPARCAssembler.FMOVSCC;
-import static org.graalvm.compiler.asm.sparc.SPARCAssembler.MOVicc;
+import static org.graalvm.compiler.asm.sparc.SPARCAssembler.MOVICC;
 import static org.graalvm.compiler.asm.sparc.SPARCAssembler.CC.Fcc0;
 import static org.graalvm.compiler.asm.sparc.SPARCAssembler.Op3s.Subcc;
 import static org.graalvm.compiler.asm.sparc.SPARCAssembler.Opfs.Fcmpd;
@@ -285,7 +287,7 @@ public abstract class SPARCLIRGenerator extends LIRGenerator {
         } else if (valueKind.isInteger()) {
             actualTrueValue = loadSimm11(trueValue);
             actualFalseValue = loadSimm11(falseValue);
-            cmove = MOVicc;
+            cmove = MOVICC;
         } else {
             throw GraalError.shouldNotReachHere();
         }
@@ -366,7 +368,7 @@ public abstract class SPARCLIRGenerator extends LIRGenerator {
         Variable result = newVariable(trueValue.getValueKind());
         ConditionFlag flag = SPARCControlFlow.fromCondition(true, Condition.EQ, false);
         CC cc = CC.forKind(left.getPlatformKind());
-        append(new CondMoveOp(MOVicc, cc, flag, loadSimm11(trueValue), loadSimm11(falseValue), result));
+        append(new CondMoveOp(MOVICC, cc, flag, loadSimm11(trueValue), loadSimm11(falseValue), result));
         return result;
     }
 

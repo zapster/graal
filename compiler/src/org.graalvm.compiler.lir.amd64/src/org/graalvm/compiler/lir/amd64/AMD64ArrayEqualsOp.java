@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -30,8 +32,8 @@ import org.graalvm.compiler.asm.Label;
 import org.graalvm.compiler.asm.amd64.AMD64Address;
 import org.graalvm.compiler.asm.amd64.AMD64Address.Scale;
 import org.graalvm.compiler.asm.amd64.AMD64Assembler.ConditionFlag;
-import org.graalvm.compiler.asm.amd64.AMD64Assembler.OperandSize;
 import org.graalvm.compiler.asm.amd64.AMD64Assembler.SSEOp;
+import org.graalvm.compiler.asm.amd64.AMD64BaseAssembler.OperandSize;
 import org.graalvm.compiler.asm.amd64.AMD64MacroAssembler;
 import org.graalvm.compiler.core.common.LIRKind;
 import org.graalvm.compiler.core.common.NumUtil;
@@ -275,7 +277,7 @@ public final class AMD64ArrayEqualsOp extends AMD64LIRInstruction {
         Label loopCheck = new Label();
         Label nanCheck = new Label();
 
-        // Compare 16-byte vectors
+        // Compare 32-byte vectors
         masm.andl(result, AVX_VECTOR_SIZE - 1); // tail count (in bytes)
         masm.andl(length, ~(AVX_VECTOR_SIZE - 1)); // vector count (in bytes)
         masm.jcc(ConditionFlag.Zero, compareTail);

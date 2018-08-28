@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,11 +28,12 @@ import static com.oracle.svm.hosted.NativeImageGenerator.defaultPlatform;
 import static com.oracle.svm.hosted.server.NativeImageBuildServer.IMAGE_CLASSPATH_PREFIX;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLClassLoader;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,11 +41,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.TimerTask;
 import java.util.concurrent.ForkJoinPool;
+import java.util.stream.Stream;
 
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.printer.GraalDebugHandlersFactory;
+import org.graalvm.compiler.serviceprovider.GraalServices;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.nativeimage.c.type.CCharPointerPointer;
 
@@ -58,6 +64,7 @@ import com.oracle.svm.core.option.SubstrateOptionsParser;
 import com.oracle.svm.core.util.InterruptImageBuilding;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.core.util.UserError.UserException;
+import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.hosted.analysis.Inflation;
 import com.oracle.svm.hosted.c.GraalAccess;
 import com.oracle.svm.hosted.code.CEntryPointData;
@@ -73,18 +80,37 @@ public class NativeImageGeneratorRunner implements ImageBuildTask {
     public static void main(String[] args) {
         ArrayList<String> arguments = new ArrayList<>(Arrays.asList(args));
         final String[] classpath = extractImageClassPath(arguments);
-        URLClassLoader bootImageClassLoader = installURLClassLoader(classpath);
+        int watchPID = extractWatchPID(arguments);
+        if (watchPID >= 0) {
+            VMError.guarantee(OS.getCurrent().hasProcFS, "-watchpid <pid> requires system with /proc");
+            TimerTask timerTask = new TimerTask() {
+                @Override
+                public void run() {
+                    try (Stream<String> stream = Files.lines(Paths.get("/proc/" + watchPID + "/comm"))) {
+                        if (stream.noneMatch(line -> line.contains("native-image"))) {
+                            System.exit(1);
+                        }
+                    } catch (IOException e) {
+                        System.exit(1);
+                    }
+                }
+            };
+            java.util.Timer timer = new java.util.Timer("native-image pid watcher");
+            timer.scheduleAtFixedRate(timerTask, 0, 1000);
 
-        int exitStatus = new NativeImageGeneratorRunner().build(arguments.toArray(new String[arguments.size()]), classpath, bootImageClassLoader);
+        }
+        NativeImageClassLoader nativeImageClassLoader = installNativeImageClassLoader(classpath);
+
+        int exitStatus = new NativeImageGeneratorRunner().build(arguments.toArray(new String[arguments.size()]), classpath, nativeImageClassLoader);
         System.exit(exitStatus == 0 ? 0 : 1);
     }
 
-    public static URLClassLoader installURLClassLoader(String[] classpath) {
-        URLClassLoader bootImageClassLoader;
+    public static NativeImageClassLoader installNativeImageClassLoader(String[] classpath) {
+        NativeImageClassLoader nativeImageClassLoader;
         ClassLoader applicationClassLoader = Thread.currentThread().getContextClassLoader();
-        bootImageClassLoader = new URLClassLoader(verifyClassPathAndConvertToURLs(classpath), applicationClassLoader);
-        Thread.currentThread().setContextClassLoader(bootImageClassLoader);
-        return bootImageClassLoader;
+        nativeImageClassLoader = new NativeImageClassLoader(verifyClassPathAndConvertToURLs(classpath), applicationClassLoader);
+        Thread.currentThread().setContextClassLoader(nativeImageClassLoader);
+        return nativeImageClassLoader;
     }
 
     public static String[] extractImageClassPath(List<String> arguments) {
@@ -102,29 +128,38 @@ public class NativeImageGeneratorRunner implements ImageBuildTask {
         return classpath;
     }
 
+    public static int extractWatchPID(List<String> arguments) {
+        String watchpidArg = "-watchpid";
+        int cpIndex = arguments.indexOf(watchpidArg);
+        if (cpIndex >= 0) {
+            if (cpIndex + 1 >= arguments.size()) {
+                throw UserError.abort("ProcessID must be provided after the '" + watchpidArg + "' argument.\n");
+            }
+            arguments.remove(cpIndex);
+            String pidStr = arguments.get(cpIndex);
+            arguments.remove(cpIndex);
+            return Integer.parseInt(pidStr);
+        }
+        return -1;
+    }
+
     private static URL[] verifyClassPathAndConvertToURLs(String[] classpath) {
-        return new HashSet<>(Arrays.asList(classpath)).stream().map(v -> {
+        return new HashSet<>(Arrays.asList(classpath)).stream().flatMap(ImageClassLoader::toClassPathEntries).map(v -> {
             try {
-                return Paths.get(v).toAbsolutePath().toUri().toURL();
+                return v.toAbsolutePath().toUri().toURL();
             } catch (MalformedURLException e) {
                 throw UserError.abort("Invalid classpath element '" + v + "'. Make sure that all paths provided with '" + IMAGE_CLASSPATH_PREFIX + "' are correct.");
             }
         }).toArray(URL[]::new);
     }
 
+    /** Unless the check should be ignored, check that I am running on JDK-8. */
     public static boolean isValidJavaVersion() {
-        String versionString = getJavaVersion();
-        if (versionString.startsWith("1.8")) {
-            String[] splitVersion = versionString.split("_");
-            int update = Integer.valueOf(splitVersion[1]);
-            return update > 40;
-        } else {
-            return false;
-        }
+        return (Boolean.getBoolean("substratevm.IgnoreGraalVersionCheck") || GraalServices.Java8OrEarlier);
     }
 
     private static void reportToolUserError(String msg) {
-        reportUserError("native-image" + msg);
+        reportUserError("native-image " + msg);
     }
 
     private static boolean isValidArchitecture() {
@@ -132,7 +167,7 @@ public class NativeImageGeneratorRunner implements ImageBuildTask {
     }
 
     private static boolean isValidOperatingSystem() {
-        return OS.getCurrent() == OS.LINUX || OS.getCurrent() == OS.DARWIN;
+        return OS.getCurrent() == OS.LINUX || OS.getCurrent() == OS.DARWIN || OS.getCurrent() == OS.WINDOWS;
     }
 
     @SuppressWarnings("try")
@@ -147,7 +182,7 @@ public class NativeImageGeneratorRunner implements ImageBuildTask {
             ImageClassLoader imageClassLoader;
             Timer classlistTimer = new Timer("classlist", false);
             try (StopTimer ignored1 = classlistTimer.start()) {
-                imageClassLoader = ImageClassLoader.create(defaultPlatform(), classpath, classLoader);
+                imageClassLoader = ImageClassLoader.create(defaultPlatform(classLoader), classpath, classLoader);
             }
 
             HostedOptionParser optionParser = new HostedOptionParser(imageClassLoader);
@@ -169,6 +204,9 @@ public class NativeImageGeneratorRunner implements ImageBuildTask {
                                 "Use '" + SubstrateOptionsParser.commandArgument(NativeImageOptions.Name, "<output-file>") + "'.");
             }
 
+            totalTimer.setPrefix(imageName);
+            classlistTimer.setPrefix(imageName);
+
             // print the time here to avoid interactions with flags processing
             classlistTimer.print();
 
@@ -177,10 +215,10 @@ public class NativeImageGeneratorRunner implements ImageBuildTask {
             JavaMainSupport javaMainSupport = null;
 
             AbstractBootImage.NativeImageKind k = AbstractBootImage.NativeImageKind.valueOf(NativeImageOptions.Kind.getValue(parsedHostedOptions));
-            if (k == AbstractBootImage.NativeImageKind.EXECUTABLE) {
+            if (k.executable) {
                 String className = NativeImageOptions.Class.getValue(parsedHostedOptions);
                 if (className == null || className.length() == 0) {
-                    throw UserError.abort("Must specify main entry point class when building " + AbstractBootImage.NativeImageKind.EXECUTABLE + " native image. " +
+                    throw UserError.abort("Must specify main entry point class when building " + k + " native image. " +
                                     "Use '" + SubstrateOptionsParser.commandArgument(NativeImageOptions.Class, "<fully-qualified-class-name>") + "'.");
                 }
                 Class<?> mainClass;
@@ -192,7 +230,7 @@ public class NativeImageGeneratorRunner implements ImageBuildTask {
 
                 String mainEntryPointName = NativeImageOptions.Method.getValue(parsedHostedOptions);
                 if (mainEntryPointName == null || mainEntryPointName.length() == 0) {
-                    throw UserError.abort("Must specify main entry point method when building " + AbstractBootImage.NativeImageKind.EXECUTABLE + " native image. " +
+                    throw UserError.abort("Must specify main entry point method when building " + k + " native image. " +
                                     "Use '" + SubstrateOptionsParser.commandArgument(NativeImageOptions.Method, "<method-name>") + "'.");
                 }
 
@@ -293,7 +331,7 @@ public class NativeImageGeneratorRunner implements ImageBuildTask {
             reportToolUserError("runs only on architecture AMD64. Detected architecture: " + GraalAccess.getOriginalTarget().arch.getClass().getSimpleName());
         }
         if (!isValidOperatingSystem()) {
-            reportToolUserError("runs on Linux and Mac OS X only. Detected OS: " + System.getProperty("os.name"));
+            reportToolUserError("runs on Linux, Mac OS X and Windows only. Detected OS: " + System.getProperty("os.name"));
             return false;
         }
 
@@ -333,8 +371,8 @@ public class NativeImageGeneratorRunner implements ImageBuildTask {
     }
 
     @Override
-    public int build(String[] args, String[] classpath, ClassLoader compilationClassLoader) {
-        return buildImage(args, classpath, compilationClassLoader);
+    public int build(String[] args, String[] classpath, ClassLoader imageClassLoader) {
+        return buildImage(args, classpath, imageClassLoader);
     }
 
     @Override

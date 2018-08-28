@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -30,7 +32,6 @@ import org.graalvm.compiler.word.Word;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.LogHandler;
 import org.graalvm.nativeimage.StackValue;
-import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
@@ -69,7 +70,7 @@ public class RealLog extends Log {
     @Override
     public Log string(String str, int fill, int align) {
 
-        int spaces = fill - SubstrateUtil.getRawStringChars(str).length;
+        int spaces = fill - str.length();
 
         if (align == RIGHT_ALIGN) {
             spaces(spaces);
@@ -110,7 +111,7 @@ public class RealLog extends Log {
      * Write a raw java array by copying it first to a stack allocated temporary buffer. Caller must
      * ensure that the offset and length are within bounds.
      */
-    private void rawBytes(byte[] value, int offset, int length) {
+    private void rawBytes(Object value, int offset, int length) {
         /*
          * Stack allocation needs an allocation size that is a compile time constant, so we split
          * the byte array up in multiple chunks and write them separately.
@@ -124,7 +125,15 @@ public class RealLog extends Log {
             int chunkLength = Math.min(inputLength, chunkSize);
 
             for (int i = 0; i < chunkLength; i++) {
-                byte b = value[chunkOffset + i];
+                int index = chunkOffset + i;
+                byte b;
+                if (value instanceof String) {
+                    b = (byte) charAt((String) value, index);
+                } else if (value instanceof char[]) {
+                    b = (byte) ((char[]) value)[index];
+                } else {
+                    b = ((byte[]) value)[index];
+                }
                 bytes.write(i, b);
             }
             rawBytes(bytes, WordFactory.unsigned(chunkLength));
@@ -132,6 +141,11 @@ public class RealLog extends Log {
             chunkOffset += chunkLength;
             inputLength -= chunkLength;
         }
+    }
+
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true, reason = "String.charAt can allocate exception, but we know that our access is in bounds")
+    private static char charAt(String s, int index) {
+        return s.charAt(index);
     }
 
     @Override
@@ -146,7 +160,7 @@ public class RealLog extends Log {
 
     @Override
     public Log character(char value) {
-        CCharPointer bytes = StackValue.get(SizeOf.get(CCharPointer.class));
+        CCharPointer bytes = StackValue.get(CCharPointer.class);
         bytes.write((byte) value);
         rawBytes(bytes, WordFactory.unsigned(1));
         return this;
@@ -185,7 +199,7 @@ public class RealLog extends Log {
 
         /* Enough space for 64 digits in binary format, and the '-' for a negative value. */
         final int chunkSize = Long.SIZE + 1;
-        CCharPointer bytes = StackValue.get(chunkSize, SizeOf.get(CCharPointer.class));
+        CCharPointer bytes = StackValue.get(chunkSize, CCharPointer.class);
         int charPos = chunkSize;
 
         boolean negative = signed && value < 0;
@@ -366,17 +380,16 @@ public class RealLog extends Log {
     }
 
     @Override
-    public Log indent(boolean addOrRemove) {
+    public Log redent(boolean addOrRemove) {
         int delta = addOrRemove ? 2 : -2;
         indent = Math.max(0, indent + delta);
-        return newline();
+        return this;
     }
 
     private static byte digit(long d) {
         return (byte) (d + (d < 10 ? '0' : 'a' - 10));
     }
 
-    @RestrictHeapAccess(access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true, reason = "Some implementations allocate.")
     protected Log rawBytes(CCharPointer bytes, UnsignedWord length) {
         ImageSingletons.lookup(LogHandler.class).log(bytes, length);
         return this;
@@ -388,32 +401,11 @@ public class RealLog extends Log {
     }
 
     private void rawString(String value) {
-        rawString(SubstrateUtil.getRawStringChars(value));
+        rawBytes(value, 0, value.length());
     }
 
     private void rawString(char[] value) {
-        int length = value.length;
-
-        /*
-         * Stack allocation needs an allocation size that is a compile time constant, so we split
-         * the string up in multiple chunks and write them separately.
-         */
-        final int chunkSize = 256;
-        final CCharPointer bytes = StackValue.get(chunkSize);
-
-        int chunkOffset = 0;
-        while (length > 0) {
-            int chunkLength = Math.min(length, chunkSize);
-
-            for (int i = 0; i < chunkLength; i++) {
-                char c = value[chunkOffset + i];
-                bytes.write(i, (byte) c);
-            }
-            rawBytes(bytes, WordFactory.unsigned(chunkLength));
-
-            chunkOffset += chunkLength;
-            length -= chunkLength;
-        }
+        rawBytes(value, 0, value.length);
     }
 
     @Override

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -27,6 +29,8 @@ import static org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.Polygl
 import static org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotStatus.poly_number_expected;
 import static org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotStatus.poly_ok;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -70,6 +74,8 @@ import org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotConte
 import org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotContextBuilderPointer;
 import org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotContextPointer;
 import org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotEngine;
+import org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotEngineBuilder;
+import org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotEngineBuilderPointer;
 import org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotEnginePointer;
 import org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotExtendedErrorInfo;
 import org.graalvm.polyglot.nativeapi.types.PolyglotNativeAPITypes.PolyglotExtendedErrorInfoPointer;
@@ -115,6 +121,51 @@ public final class PolyglotNativeAPI {
         }
     }
 
+    @CEntryPoint(name = "poly_create_engine_builder", documentation = {
+                    "Creates a new context builder that allows to configure an engine instance.",
+                    "",
+                    " @since 1.1",
+    })
+    public static PolyglotStatus poly_create_engine_builder(PolyglotIsolateThread thread, PolyglotEngineBuilderPointer result) {
+        return withHandledErrors(() -> {
+            ObjectHandle handle = createHandle(Engine.newBuilder());
+            result.write(handle);
+        });
+    }
+
+    @CEntryPoint(name = "poly_engine_builder_option", documentation = {
+                    "Sets an option for an <code>poly_engine_builder</code> that will apply to constructed engines.",
+                    "<p>",
+                    "",
+                    " @param engine_builder that is assigned an option.",
+                    " @param key_utf8 0 terminated and UTF-8 encoded key for the option.",
+                    " @param value_utf8 0 terminated and UTF-8 encoded value for the option.",
+                    " @return poly_ok if all works, poly_generic_error if there is a failure.",
+                    " @since 1.1",
+    })
+    public static PolyglotStatus poly_create_engine_builder(PolyglotIsolateThread thread, PolyglotEngineBuilder engine_builder, @CConst CCharPointer key_utf8, @CConst CCharPointer value_utf8) {
+        return withHandledErrors(() -> {
+            Engine.Builder eb = fetchHandle(engine_builder);
+            eb.option(CTypeConversion.toJavaString(key_utf8), CTypeConversion.toJavaString(value_utf8));
+        });
+    }
+
+    @CEntryPoint(name = "poly_engine_builder_build", documentation = {
+                    "Builds an <code>engine</code> from an <code>engine_builder</code>. The same builder can be used to ",
+                    "produce multiple <code>poly_engine</code> instances.",
+                    "",
+                    " @param engine_builder that is used to build.",
+                    " @param result the created engine.",
+                    " @return poly_ok if all works, poly_generic_error if there is a failure.",
+                    " @since 1.1",
+    })
+    public static PolyglotStatus poly_engine_builder_build(PolyglotIsolateThread thread, PolyglotEngineBuilder engine_builder, PolyglotEnginePointer result) {
+        return withHandledErrors(() -> {
+            Engine.Builder engineBuilder = fetchHandle(engine_builder);
+            result.write(createHandle(engineBuilder.build()));
+        });
+    }
+
     @CEntryPoint(name = "poly_create_engine", documentation = {
                     "Creates a polyglot engine: An execution engine for Graal guest languages that allows to inspect the ",
                     "installed languages and can have multiple execution contexts.",
@@ -127,6 +178,25 @@ public final class PolyglotNativeAPI {
         return withHandledErrors(() -> {
             ObjectHandle handle = createHandle(Engine.create());
             result.write(handle);
+        });
+    }
+
+    @CEntryPoint(name = "poly_engine_close", documentation = {
+                    "Closes this engine and frees up allocated native resources. If there are still open context",
+                    "instances that were created using this engine and they are currently not being executed then",
+                    "they will be closed automatically. If an attempt to close an engine was successful then",
+                    "consecutive calls to close have no effect. If a context is cancelled then the currently",
+                    "executing thread will throw a {@link PolyglotException}.",
+                    "",
+                    " @param engine to be closed.",
+                    " @param cancel_if_executing if <code>true</code> then currently executing contexts will be cancelled.",
+                    " @return poly_ok if all works, poly_generic_error if there is a failure.",
+                    " @since 1.0",
+    })
+    public static PolyglotStatus poly_engine_close(PolyglotIsolateThread thread, PolyglotEngine engine, boolean cancel_if_executing) {
+        return withHandledErrors(() -> {
+            Engine jEngine = fetchHandle(engine);
+            jEngine.close(cancel_if_executing);
         });
     }
 
@@ -273,7 +343,7 @@ public final class PolyglotNativeAPI {
                     "Builds a <code>context</code> from a <code>context_builder</code>. The same builder can be used to ",
                     "produce multiple <code>poly_context</code> instances.",
                     "",
-                    " @param context_builder that is allowed all access.",
+                    " @param context_builder that is used to construct a new context.",
                     " @param result the created context.",
                     " @return poly_ok if all works, poly_generic_error if there is a failure.",
                     " @since 1.0",
@@ -311,6 +381,32 @@ public final class PolyglotNativeAPI {
                 c = Context.create(jPermittedLangs.toArray(new String[jPermittedLangs.size()]));
             }
             result.write(createHandle(c));
+        });
+    }
+
+    @CEntryPoint(name = "poly_context_close", documentation = {
+                    "Closes this context and frees up potentially allocated native resources. A ",
+                    "context cannot free all native resources allocated automatically. For this reason",
+                    "it is necessary to close contexts after use. If a context is canceled then the",
+                    "currently executing thread will throw a {@link PolyglotException}. Please note ",
+                    "that canceling a single context can negatively affect the performance of other ",
+                    "executing contexts constructed with the same engine.",
+                    "<p>",
+                    "If internal errors occur during closing of the language then they are printed to the ",
+                    "configured {@link Builder#err(OutputStream) error output stream}. If a context was ",
+                    "closed then all its methods will throw an {@link IllegalStateException} when invoked. ",
+                    "If an attempt to close a context was successful then consecutive calls to close have ",
+                    "no effect.",
+                    "",
+                    " @param context to be closed.",
+                    " @param cancel_if_executing if <code>true</code> then currently executing context will be cancelled.",
+                    " @return poly_ok if all works, poly_generic_error if there is a failure.",
+                    " @since 1.0",
+    })
+    public static PolyglotStatus poly_context_close(PolyglotIsolateThread thread, PolyglotContext context, boolean cancel_if_executing) {
+        return withHandledErrors(() -> {
+            Context jContext = fetchHandle(context);
+            jContext.close(cancel_if_executing);
         });
     }
 
@@ -1378,7 +1474,8 @@ public final class PolyglotNativeAPI {
     @CEntryPoint(name = "poly_destroy_handle", documentation = {
                     "Destroys a poly_handle. After this point, the handle must not be used anymore. ",
                     "",
-                    "Handles are: poly_engine, poly_context, poly_context_builder, poly_language, poly_value, and poly_callback_info.",
+                    "Handles are: poly_engine, poly_engine_builder, poly_context, poly_context_builder, poly_language, poly_value, ",
+                    "and poly_callback_info.",
                     " @since 1.0",
     })
     public static PolyglotStatus poly_destroy_handle(PolyglotIsolateThread thread, PolyglotHandle handle) {
@@ -1429,7 +1526,12 @@ public final class PolyglotNativeAPI {
         PolyglotStatus errorCode = t instanceof PolyglotNativeAPIError ? ((PolyglotNativeAPIError) t).getCode() : poly_generic_failure;
         PolyglotExtendedErrorInfo unmanagedErrorInfo = UnmanagedMemory.malloc(SizeOf.get(PolyglotExtendedErrorInfo.class));
         unmanagedErrorInfo.setErrorCode(errorCode.getCValue());
-        CCharPointerHolder holder = CTypeConversion.toCString(t.getMessage());
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        pw.println(t.getMessage());
+        pw.println("The full stack trace is:");
+        t.printStackTrace(pw);
+        CCharPointerHolder holder = CTypeConversion.toCString(sw.toString());
         CCharPointer value = holder.get();
         unmanagedErrorInfo.setErrorMessage(value);
         errorInfo.set(new ErrorInfoHolder(unmanagedErrorInfo, holder));

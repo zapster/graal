@@ -1,10 +1,12 @@
 /*
- * Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -38,13 +40,13 @@ import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.SecureRandomSpi;
 import java.util.List;
+import java.util.function.Predicate;
 
 import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.annotate.Alias;
-import com.oracle.svm.core.annotate.Delete;
 import com.oracle.svm.core.annotate.InjectAccessors;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.Substitute;
@@ -75,6 +77,11 @@ final class Target_java_security_AccessController {
 
     @Substitute
     private static <T> T doPrivileged(PrivilegedAction<T> action, AccessControlContext context) {
+        return action.run();
+    }
+
+    @Substitute
+    private static <T> T doPrivileged(PrivilegedAction<T> action, AccessControlContext context, Permission... perms) {
         return action.run();
     }
 
@@ -119,11 +126,6 @@ final class Target_java_security_AccessControlContext {
 @Substitute
 @TargetClass(java.security.ProtectionDomain.class)
 final class Target_java_security_ProtectionDomain {
-}
-
-@Delete
-@TargetClass(className = "java.util.jar.JarVerifier")
-final class Target_java_util_jar_JarVerifier {
 }
 
 @TargetClass(java.security.SecureRandom.class)
@@ -298,6 +300,7 @@ final class Target_java_security_MessageDigest {
 }
 
 @TargetClass(className = "sun.security.provider.NativePRNG")
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
 final class Target_sun_security_provider_NativePRNG {
 
     /*
@@ -312,6 +315,7 @@ final class Target_sun_security_provider_NativePRNG {
     static native Target_sun_security_provider_NativePRNG_RandomIO initIO(Target_sun_security_provider_NativePRNG_Variant v);
 }
 
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
 class NativePRNGInstanceAccessors {
     static volatile Target_sun_security_provider_NativePRNG_RandomIO INSTANCE;
 
@@ -341,11 +345,13 @@ class NativePRNGInstanceAccessors {
 }
 
 @TargetClass(className = "sun.security.provider.NativePRNG", innerClass = "Variant")
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
 final class Target_sun_security_provider_NativePRNG_Variant {
     @Alias static Target_sun_security_provider_NativePRNG_Variant MIXED;
 }
 
 @TargetClass(className = "sun.security.provider.NativePRNG", innerClass = "RandomIO")
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
 final class Target_sun_security_provider_NativePRNG_RandomIO {
 }
 
@@ -364,7 +370,7 @@ final class Target_javax_crypto_CryptoAllPermission {
     static Target_javax_crypto_CryptoAllPermission INSTANCE;
 }
 
-@TargetClass(className = "javax.crypto.JceSecurity")
+@TargetClass(className = "javax.crypto.JceSecurity", onlyWith = JDK8OrEarlier.class)
 @SuppressWarnings({"unused"})
 final class Target_javax_crypto_JceSecurity {
 
@@ -389,15 +395,27 @@ final class Target_javax_crypto_JceSecurity {
 final class Target_javax_crypto_JarVerifier {
 
     @Substitute
-    @TargetElement(optional = true)
+    @TargetElement(onlyWith = ContainsVerifyJars.class)
     private String verifySingleJar(URL var1) {
         throw VMError.unimplemented();
     }
 
     @Substitute
-    @TargetElement(optional = true)
+    @TargetElement(onlyWith = ContainsVerifyJars.class)
     private void verifyJars(URL var1, List<String> var2) {
         throw VMError.unimplemented();
+    }
+}
+
+final class ContainsVerifyJars implements Predicate<Class<?>> {
+    @Override
+    public boolean test(Class<?> originalClass) {
+        try {
+            originalClass.getDeclaredMethod("verifyJars", URL.class, List.class);
+            return true;
+        } catch (NoSuchMethodException ex) {
+            return false;
+        }
     }
 }
 

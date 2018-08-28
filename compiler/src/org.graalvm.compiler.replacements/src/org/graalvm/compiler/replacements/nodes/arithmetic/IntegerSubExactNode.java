@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -28,17 +30,20 @@ import static org.graalvm.compiler.nodeinfo.NodeSize.SIZE_2;
 import org.graalvm.compiler.core.common.type.IntegerStamp;
 import org.graalvm.compiler.graph.NodeClass;
 import org.graalvm.compiler.graph.spi.CanonicalizerTool;
+import org.graalvm.compiler.nodeinfo.InputType;
 import org.graalvm.compiler.nodeinfo.NodeInfo;
 import org.graalvm.compiler.nodes.AbstractBeginNode;
 import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.NodeView;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.calc.SubNode;
+import org.graalvm.compiler.nodes.extended.AnchoringNode;
 import org.graalvm.compiler.nodes.spi.LoweringTool;
 import org.graalvm.compiler.nodes.util.GraphUtil;
 
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.SpeculationLog.SpeculationReason;
 
 /**
  * Node representing an exact integer substraction that will throw an {@link ArithmeticException} in
@@ -48,10 +53,14 @@ import jdk.vm.ci.meta.JavaKind;
 public final class IntegerSubExactNode extends SubNode implements IntegerExactArithmeticNode {
     public static final NodeClass<IntegerSubExactNode> TYPE = NodeClass.create(IntegerSubExactNode.class);
 
-    public IntegerSubExactNode(ValueNode x, ValueNode y) {
+    @OptionalInput(InputType.Anchor) protected AnchoringNode anchor;
+    protected final SpeculationReason speculation;
+
+    public IntegerSubExactNode(ValueNode x, ValueNode y, SpeculationReason speculation) {
         super(TYPE, x, y);
         setStamp(x.stamp(NodeView.DEFAULT).unrestricted());
         assert x.stamp(NodeView.DEFAULT).isCompatible(y.stamp(NodeView.DEFAULT)) && x.stamp(NodeView.DEFAULT) instanceof IntegerStamp;
+        this.speculation = speculation;
     }
 
     @Override
@@ -104,6 +113,22 @@ public final class IntegerSubExactNode extends SubNode implements IntegerExactAr
     @Override
     public IntegerExactArithmeticSplitNode createSplit(AbstractBeginNode next, AbstractBeginNode deopt) {
         return graph().add(new IntegerSubExactSplitNode(stamp(NodeView.DEFAULT), getX(), getY(), next, deopt));
+    }
+
+    @Override
+    public SpeculationReason getSpeculation() {
+        return speculation;
+    }
+
+    @Override
+    public AnchoringNode getAnchor() {
+        return anchor;
+    }
+
+    @Override
+    public void setAnchor(AnchoringNode x) {
+        updateUsagesInterface(this.anchor, x);
+        this.anchor = x;
     }
 
     @Override

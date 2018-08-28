@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,22 +24,20 @@
  */
 package com.oracle.svm.core.jdk;
 
-import java.lang.ref.Reference;
-
-/* Allow the import of {@link sun.misc.Cleaner}: Checkstyle: allow reflection. */
-import sun.misc.Cleaner;
+import org.graalvm.compiler.core.common.SuppressFBWarnings;
 
 /** Access to methods in support of {@link sun.misc}. */
 public class SunMiscSupport {
 
+    @SuppressFBWarnings(value = "BC", justification = "Target_jdk_internal_ref_Cleaner is an alias for a class that extends Reference")
     public static void drainCleanerQueue() {
         for (; /* return */;) {
-            final Reference<?> entry = Target_sun_misc_Cleaner.dummyQueue.poll();
+            final Object entry = Target_jdk_internal_ref_Cleaner.dummyQueue.poll();
             if (entry == null) {
                 return;
             }
-            if (entry instanceof Cleaner) {
-                final Cleaner cleaner = (Cleaner) entry;
+            if (entry instanceof Target_jdk_internal_ref_Cleaner) {
+                final Target_jdk_internal_ref_Cleaner cleaner = (Target_jdk_internal_ref_Cleaner) entry;
                 cleaner.clean();
             }
         }

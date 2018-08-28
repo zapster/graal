@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -28,6 +30,7 @@ import static com.oracle.svm.core.SubstrateOptions.MultiThreaded;
 import static com.oracle.svm.core.snippets.KnownIntrinsics.readCallerStackPointer;
 import static com.oracle.svm.core.snippets.KnownIntrinsics.readReturnAddress;
 
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
@@ -40,7 +43,6 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.compiler.core.common.SuppressFBWarnings;
@@ -60,10 +62,16 @@ import com.oracle.svm.core.annotate.NeverInline;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
+import com.oracle.svm.core.annotate.TargetElement;
 import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.heap.FeebleReferenceList;
 import com.oracle.svm.core.heap.Heap;
+import com.oracle.svm.core.jdk.JDK8OrEarlier;
+import com.oracle.svm.core.jdk.JDK9OrLater;
+import com.oracle.svm.core.jdk.Package_jdk_internal_misc;
 import com.oracle.svm.core.jdk.StackTraceBuilder;
+import com.oracle.svm.core.jdk.Target_jdk_internal_misc_VM;
+import com.oracle.svm.core.jdk.UninterruptibleUtils.AtomicReference;
 import com.oracle.svm.core.locks.VMMutex;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.option.XOptions;
@@ -208,6 +216,7 @@ public abstract class JavaThreads {
         }
     }
 
+    @NeverInline("Truffle compilation must not inline this method")
     private static Thread createThread(IsolateThread isolateThread) {
         /*
          * Either the main thread, or VMThread was started a different way. Create a new Thread
@@ -257,7 +266,6 @@ public abstract class JavaThreads {
         return assignJavaThread(CEntryPointContext.getCurrentIsolateThread(), thread, manuallyStarted);
     }
 
-    @NeverInline("Truffle compilation must not inline this method")
     private static boolean assignJavaThread(IsolateThread isolateThread, Thread thread, boolean manuallyStarted) {
         if (!currentThread.compareAndSet(isolateThread, null, thread)) {
             return false;
@@ -412,7 +420,7 @@ public abstract class JavaThreads {
 
     protected abstract void start0(Thread thread, long stackSize);
 
-    protected abstract void setNativeName(Thread thread, String name);
+    protected abstract void setNativeName(String name);
 
     protected abstract void yield();
 
@@ -460,13 +468,38 @@ public abstract class JavaThreads {
              * Internal frames from the VMOperation handling show up in the stack traces, but we are
              * OK with that.
              */
-            StackTraceBuilder stackTraceBuilder = new StackTraceBuilder();
+            StackTraceBuilder stackTraceBuilder = new StackTraceBuilder(false);
             JavaStackWalker.walkCurrentThread(readCallerStackPointer(), readReturnAddress(), stackTraceBuilder);
             return stackTraceBuilder.getTrace();
         } else {
-            StackTraceBuilder stackTraceBuilder = new StackTraceBuilder();
+            StackTraceBuilder stackTraceBuilder = new StackTraceBuilder(false);
             JavaStackWalker.walkThread(thread, stackTraceBuilder);
             return stackTraceBuilder.getTrace();
+        }
+    }
+
+    /** If there is an uncaught exception handler, call it. */
+    public static void dispatchUncaughtException(Thread thread, Throwable throwable) {
+        /* Get the uncaught exception handler for the Thread, or the default one. */
+        UncaughtExceptionHandler handler = thread.getUncaughtExceptionHandler();
+        if (handler == null) {
+            handler = Thread.getDefaultUncaughtExceptionHandler();
+        }
+        if (handler != null) {
+            try {
+                handler.uncaughtException(thread, throwable);
+            } catch (Throwable t) {
+                /*
+                 * The JavaDoc for {@code Thread.UncaughtExceptionHandler.uncaughtException} says
+                 * the VM ignores any exceptions thrown.
+                 */
+            }
+        } else {
+            /* If no uncaught exception handler is present, then just report the throwable. */
+            /* Checkstyle: stop (printStackTrace below is going to write to System.err too). */
+            System.err.print("Exception in thread \"" + Thread.currentThread().getName() + "\" ");
+            // Checkstyle: resume
+            throwable.printStackTrace();
         }
     }
 
@@ -538,37 +571,37 @@ final class Target_java_lang_Thread {
     @Inject @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.NewInstance, declClass = AtomicReference.class)//
     AtomicReference<ParkEvent> sleepParkEvent;
 
-    @Delete //
-    private ClassLoader contextClassLoader;
+    @Alias//
+    ClassLoader contextClassLoader;
 
     @Alias//
-    private volatile String name;
+    volatile String name;
 
     @Alias//
-    private int priority;
+    int priority;
 
     /* Whether or not the thread is a daemon . */
     @Alias//
-    private boolean daemon;
+    boolean daemon;
 
     /* What will be run. */
     @Alias//
-    private Runnable target;
+    Runnable target;
 
     /* The group of this thread */
     @Alias//
-    private ThreadGroup group;
+    ThreadGroup group;
 
     /*
      * The requested stack size for this thread, or 0 if the creator did not specify a stack size.
      * It is up to the VM to do whatever it likes with this number; some VMs will ignore it.
      */
     @Alias//
-    private long stackSize;
+    long stackSize;
 
     /* Thread ID */
     @Alias//
-    private long tid;
+    long tid;
 
     /** We have our own atomic sequence numbers in {@link JavaThreads}. */
     @Delete//
@@ -580,26 +613,24 @@ final class Target_java_lang_Thread {
     public volatile int threadStatus;
 
     @Alias//
-    private final Object blockerLock;
+    private /* final */ Object blockerLock;
 
     @Alias
     native void setPriority(int newPriority);
 
     @Substitute
-    @SuppressWarnings("static-method")
     public ClassLoader getContextClassLoader() {
-        /* null indicates the system class loader */
-        return null;
+        return contextClassLoader;
     }
 
     @Substitute
     public void setContextClassLoader(ClassLoader cl) {
-        // noop
+        contextClassLoader = cl;
     }
 
     /** Replace "synchronized" modifier with delegation to an atomic increment. */
     @Substitute
-    private static long nextThreadID() {
+    static long nextThreadID() {
         return JavaThreads.singleton().threadSeqNumber.incrementAndGet();
     }
 
@@ -631,7 +662,7 @@ final class Target_java_lang_Thread {
     }
 
     @Substitute
-    private static Thread currentThread() {
+    static Thread currentThread() {
         if (!SubstrateOptions.MultiThreaded.getValue()) {
             return JavaThreads.singleton().singleThread;
         }
@@ -640,39 +671,15 @@ final class Target_java_lang_Thread {
     }
 
     @Substitute
-    @SuppressWarnings("all")
-    private void init(ThreadGroup g, Runnable target, String name, long stackSize) {
-        /*
-         * This method is a copy of the original implementation, with unsupported features removed.
-         */
+    @TargetElement(onlyWith = JDK8OrEarlier.class)
+    private void init(ThreadGroup groupArg, Runnable targetArg, String nameArg, long stackSizeArg) {
+        Util_java_lang_Thread.initialize(this, groupArg, targetArg, nameArg, stackSizeArg);
+    }
 
-        this.unsafeParkEvent = new AtomicReference<>();
-        this.sleepParkEvent = new AtomicReference<>();
-
-        if (name == null) {
-            throw new NullPointerException("name cannot be null");
-        }
-        this.name = name;
-
-        Thread parent = currentThread();
-        if (g == null) {
-            /* Use the parent thread group. */
-            g = parent.getThreadGroup();
-        }
-
-        JavaThreads.toTarget(g).addUnstarted();
-
-        this.group = g;
-        this.daemon = parent.isDaemon();
-        this.priority = parent.getPriority();
-        this.target = target;
-        setPriority(priority);
-
-        /* Stash the specified stack size in case the VM cares */
-        this.stackSize = stackSize;
-
-        /* Set thread ID */
-        tid = nextThreadID();
+    @Substitute
+    @TargetElement(onlyWith = JDK9OrLater.class)
+    private Target_java_lang_Thread(ThreadGroup g, Runnable target, String name, long stackSize) {
+        Util_java_lang_Thread.initialize(this, g, target, name, stackSize);
     }
 
     @Substitute
@@ -724,12 +731,13 @@ final class Target_java_lang_Thread {
             }
         }
 
-        return sun.misc.VM.toThreadState(threadStatus);
+        return Target_jdk_internal_misc_VM.toThreadState(threadStatus);
     }
 
     @Substitute
+    @SuppressWarnings({"static-method"})
     protected void setNativeName(String name) {
-        JavaThreads.singleton().setNativeName(JavaThreads.fromTarget(this), name);
+        JavaThreads.singleton().setNativeName(name);
     }
 
     @Substitute
@@ -817,7 +825,7 @@ final class Target_java_lang_Thread {
     private StackTraceElement[] getStackTrace() {
         if (JavaThreads.fromTarget(this) == Thread.currentThread()) {
             /* We can walk our own stack without a VMOperation. */
-            StackTraceBuilder stackTraceBuilder = new StackTraceBuilder();
+            StackTraceBuilder stackTraceBuilder = new StackTraceBuilder(false);
             JavaStackWalker.walkCurrentThread(KnownIntrinsics.readCallerStackPointer(), KnownIntrinsics.readReturnAddress(), stackTraceBuilder);
             return stackTraceBuilder.getTrace();
 
@@ -829,6 +837,46 @@ final class Target_java_lang_Thread {
     @Substitute
     private static Map<Thread, StackTraceElement[]> getAllStackTraces() {
         return JavaThreads.getAllStackTraces();
+    }
+}
+
+final class Util_java_lang_Thread {
+
+    static void initialize(Target_java_lang_Thread tjlt, ThreadGroup groupArg, Runnable target, String name, long stackSize) {
+        /*
+         * This method is a copy of the implementation of
+         *
+         * Thread.init(ThreadGroup g, Runnable target, String name, long stackSize)
+         *
+         * with unsupported features removed. It is used as the body of `init` in JDK8OrEarlier, and
+         * as the body of the `Thread` constructor in JDK9OrLater.
+         */
+
+        tjlt.unsafeParkEvent = new AtomicReference<>();
+        tjlt.sleepParkEvent = new AtomicReference<>();
+
+        if (name == null) {
+            throw new NullPointerException("name cannot be null");
+        }
+        tjlt.name = name;
+
+        final Thread parent = Target_java_lang_Thread.currentThread();
+        final ThreadGroup group = ((groupArg != null) ? groupArg : parent.getThreadGroup());
+
+        JavaThreads.toTarget(group).addUnstarted();
+
+        tjlt.group = group;
+        tjlt.daemon = parent.isDaemon();
+        tjlt.contextClassLoader = parent.getContextClassLoader();
+        tjlt.priority = parent.getPriority();
+        tjlt.target = target;
+        tjlt.setPriority(tjlt.priority);
+
+        /* Stash the specified stack size in case the VM cares */
+        tjlt.stackSize = stackSize;
+
+        /* Set thread ID */
+        tjlt.tid = Target_java_lang_Thread.nextThreadID();
     }
 }
 
@@ -963,9 +1011,9 @@ final class SleepSupport {
     }
 }
 
-@TargetClass(sun.misc.Unsafe.class)
+@TargetClass(classNameProvider = Package_jdk_internal_misc.class, className = "Unsafe")
 @SuppressWarnings({"static-method"})
-final class Target_sun_misc_Unsafe {
+final class Target_jdk_internal_misc_Unsafe {
 
     /**
      * Block current thread, returning when a balancing <tt>unpark</tt> occurs, or a balancing

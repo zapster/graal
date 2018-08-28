@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -147,11 +149,11 @@ class VMThreadLocalCollector implements Function<Object, Object> {
             return 0;
         }
 
-        /* Ensure that all objects are contiguous. */
-        int result = -Boolean.compare(info1.isObject, info2.isObject);
+        /* Order by size to avoid padding. */
+        int result = -Integer.compare(info1.sizeInBytes, info2.sizeInBytes);
         if (result == 0) {
-            /* Order by size to avoid padding. */
-            result = -Integer.compare(info1.sizeInBytes, info2.sizeInBytes);
+            /* Ensure that all objects are contiguous. */
+            result = -Boolean.compare(info1.isObject, info2.isObject);
             if (result == 0) {
                 /*
                  * Make the order deterministic by sorting by name. This is arbitrary, we can come

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,6 +24,7 @@
  */
 package com.oracle.svm.hosted;
 
+import static org.graalvm.compiler.options.OptionType.Debug;
 import static org.graalvm.compiler.options.OptionType.User;
 
 import java.util.Arrays;
@@ -52,7 +55,9 @@ public class NativeImageOptions {
     @Option(help = "Name of the output file to be generated", type = OptionType.User)//
     public static final HostedOptionKey<String> Name = new HostedOptionKey<>("");
 
-    @Option(help = "Generate a SHARED_LIBRARY or EXECUTABLE image")//
+    @APIOption(name = "shared", fixedValue = {"SHARED_LIBRARY"}, customHelp = "build shared library")//
+    @APIOption(name = "static", fixedValue = {"STATIC_EXECUTABLE"}, customHelp = "build statically linked executable (requires static libc and zlib)")//
+    @Option(help = "Generate a SHARED_LIBRARY, EXECUTABLE or STATIC_EXECUTABLE image")//
     public static final HostedOptionKey<String> Kind = new HostedOptionKey<>(AbstractBootImage.NativeImageKind.EXECUTABLE.name());
 
     @Option(help = "Comma separated list of CPU features that will be used for image generation on the AMD64 platform. " +
@@ -170,6 +175,9 @@ public class NativeImageOptions {
 
     @Option(help = "Print unsafe operation offset warnings.)")//
     public static final HostedOptionKey<Boolean> UnsafeOffsetWarningsAreFatal = new HostedOptionKey<>(false);
+
+    @Option(help = "Maximum number of types allowed in the image. Used for tests where small number of types in necessary.", type = Debug)//
+    public static final HostedOptionKey<Integer> MaxReachableTypes = new HostedOptionKey<>(-1);
 
     public static int getMaximumNumberOfConcurrentThreads(OptionValues optionValues) {
         int maxNumberOfThreads = NativeImageOptions.NumberOfThreads.getValue(optionValues);

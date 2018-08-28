@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,12 +26,15 @@ package org.graalvm.compiler.hotspot;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.List;
 
 import org.graalvm.compiler.core.common.CompressEncoding;
 import org.graalvm.compiler.hotspot.nodes.GraalHotSpotVMConfigNode;
 
 import jdk.vm.ci.common.JVMCIError;
+import jdk.vm.ci.hotspot.HotSpotResolvedJavaMethod;
 import jdk.vm.ci.hotspot.HotSpotVMConfigStore;
+import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 /**
  * Used to access native configuration details.
@@ -79,6 +84,9 @@ public class GraalHotSpotVMConfig extends GraalHotSpotVMConfigBase {
     public final int codeSegmentSize = getFlag("CodeCacheSegmentSize", Integer.class);
     public final boolean foldStableValues = getFlag("FoldStableValues", Boolean.class);
     public final int maxVectorSize = getFlag("MaxVectorSize", Integer.class);
+
+    public final boolean verifyBeforeGC = getFlag("VerifyBeforeGC", Boolean.class);
+    public final boolean verifyAfterGC = getFlag("VerifyAfterGC", Boolean.class);
 
     public final boolean useTLAB = getFlag("UseTLAB", Boolean.class);
     public final boolean useBiasedLocking = getFlag("UseBiasedLocking", Boolean.class);
@@ -305,12 +313,21 @@ public class GraalHotSpotVMConfig extends GraalHotSpotVMConfigBase {
     public final int javaThreadAnchorOffset = getFieldOffset("JavaThread::_anchor", Integer.class, "JavaFrameAnchor");
     public final int threadObjectOffset = getFieldOffset("JavaThread::_threadObj", Integer.class, "oop");
     public final int osThreadOffset = getFieldOffset("JavaThread::_osthread", Integer.class, "OSThread*");
-    public final int javaThreadDirtyCardQueueOffset = getFieldOffset("JavaThread::_dirty_card_queue", Integer.class, "DirtyCardQueue");
     public final int threadIsMethodHandleReturnOffset = getFieldOffset("JavaThread::_is_method_handle_return", Integer.class, "int");
-    public final int javaThreadSatbMarkQueueOffset = getFieldOffset("JavaThread::_satb_mark_queue", Integer.class);
     public final int threadObjectResultOffset = getFieldOffset("JavaThread::_vm_result", Integer.class, "oop");
     public final int jvmciCountersThreadOffset = getFieldOffset("JavaThread::_jvmci_counters", Integer.class, "jlong*");
     public final int javaThreadReservedStackActivationOffset = versioned.javaThreadReservedStackActivationOffset;
+
+    public boolean requiresReservedStackCheck(List<ResolvedJavaMethod> methods) {
+        if (enableStackReservedZoneAddress != 0 && methods != null) {
+            for (ResolvedJavaMethod method : methods) {
+                if (((HotSpotResolvedJavaMethod) method).hasReservedStackAccess()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 
     /**
      * An invalid value for {@link #rtldDefault}.
@@ -352,7 +369,7 @@ public class GraalHotSpotVMConfig extends GraalHotSpotVMConfigBase {
     public final int pendingExceptionOffset = getFieldOffset("ThreadShadow::_pending_exception", Integer.class, "oop");
 
     public final int pendingDeoptimizationOffset = getFieldOffset("JavaThread::_pending_deoptimization", Integer.class, "int");
-    public final int pendingFailedSpeculationOffset = getFieldOffset("JavaThread::_pending_failed_speculation", Integer.class, "oop");
+    public final int pendingFailedSpeculationOffset = getFieldOffset("JavaThread::_pending_failed_speculation", Integer.class, "long");
     public final int pendingTransferToInterpreterOffset = getFieldOffset("JavaThread::_pending_transfer_to_interpreter", Integer.class, "bool");
 
     private final int javaFrameAnchorLastJavaSpOffset = getFieldOffset("JavaFrameAnchor::_last_Java_sp", Integer.class, "intptr_t*");
@@ -491,25 +508,11 @@ public class GraalHotSpotVMConfig extends GraalHotSpotVMConfigBase {
     public final byte dirtyCardValue = versioned.dirtyCardValue;
     public final byte g1YoungCardValue = versioned.g1YoungCardValue;
 
-    public int g1CardQueueIndexOffset() {
-        return javaThreadDirtyCardQueueOffset + versioned.dirtyCardQueueIndexOffset;
-    }
-
-    public int g1CardQueueBufferOffset() {
-        return javaThreadDirtyCardQueueOffset + versioned.dirtyCardQueueBufferOffset;
-    }
-
-    public int g1SATBQueueMarkingOffset() {
-        return javaThreadSatbMarkQueueOffset + versioned.satbMarkQueueActiveOffset;
-    }
-
-    public int g1SATBQueueIndexOffset() {
-        return javaThreadSatbMarkQueueOffset + versioned.satbMarkQueueIndexOffset;
-    }
-
-    public int g1SATBQueueBufferOffset() {
-        return javaThreadSatbMarkQueueOffset + versioned.satbMarkQueueBufferOffset;
-    }
+    public final int g1SATBQueueMarkingOffset = versioned.g1SATBQueueMarkingOffset;
+    public final int g1SATBQueueIndexOffset = versioned.g1SATBQueueIndexOffset;
+    public final int g1SATBQueueBufferOffset = versioned.g1SATBQueueBufferOffset;
+    public final int g1CardQueueIndexOffset = versioned.g1CardQueueIndexOffset;
+    public final int g1CardQueueBufferOffset = versioned.g1CardQueueBufferOffset;
 
     public final int klassOffset = getFieldValue("java_lang_Class::_klass_offset", Integer.class, "int");
     public final int arrayKlassOffset = getFieldValue("java_lang_Class::_array_klass_offset", Integer.class, "int");

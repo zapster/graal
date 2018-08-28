@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -35,6 +37,7 @@ import org.graalvm.compiler.core.match.MatchStatement;
 import org.graalvm.compiler.core.phases.CommunityCompilerConfiguration;
 import org.graalvm.compiler.core.target.Backend;
 import org.graalvm.compiler.graph.Node;
+import org.graalvm.compiler.hotspot.CommunityCompilerConfigurationFactory;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.spi.LoweringProvider;
 import org.graalvm.compiler.options.OptionValues;
@@ -54,6 +57,8 @@ import jdk.vm.ci.meta.MetaAccessProvider;
 
 public class GraalConfiguration {
 
+    private static final String COMPILER_CONFIGURATION_NAME = CommunityCompilerConfigurationFactory.NAME;
+
     public static GraalConfiguration instance() {
         return ImageSingletons.lookup(GraalConfiguration.class);
     }
@@ -70,6 +75,10 @@ public class GraalConfiguration {
 
     public Suites createSuites(OptionValues options, @SuppressWarnings("unused") boolean hosted) {
         return Suites.createSuites(new CommunityCompilerConfiguration(), options);
+    }
+
+    public String getCompilerConfigurationName() {
+        return COMPILER_CONFIGURATION_NAME;
     }
 
     public void populateMatchRuleRegistry(HashMap<Class<? extends NodeMatchRules>, EconomicMap<Class<? extends Node>, List<MatchStatement>>> matchRuleRegistry) {

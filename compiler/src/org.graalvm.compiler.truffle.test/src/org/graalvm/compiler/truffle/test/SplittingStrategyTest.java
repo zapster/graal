@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -132,8 +134,8 @@ public class SplittingStrategyTest extends AbstractSplittingStrategyTest {
                     // Emulates builtin i.e. Split immediately
                     if (outsideCallNode == null) {
                         outsideCallNode = runtime.createDirectCallNode(mid);
-                        adoptChildren();
                         outsideCallNode.cloneCallTarget();
+                        adoptChildren();
                     }
                     return outsideCallNode.call(frame.getArguments());
                 }
@@ -284,7 +286,7 @@ public class SplittingStrategyTest extends AbstractSplittingStrategyTest {
         }
     }
 
-    @TruffleLanguage.Registration(id = "SplitTestLanguage", name = "SplitTestLanguage", mimeType = "application/x-split-test-lang", version = "0.1")
+    @TruffleLanguage.Registration(id = "SplitTestLanguage", name = "SplitTestLanguage")
     public static class SplitTestLanguage extends TruffleLanguage<TruffleLanguage.Env> {
         static final String ID = "SplitTestLanguage";
 

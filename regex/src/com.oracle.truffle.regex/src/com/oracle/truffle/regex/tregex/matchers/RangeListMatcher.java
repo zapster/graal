@@ -24,15 +24,18 @@
  */
 package com.oracle.truffle.regex.tregex.matchers;
 
-import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
+
+import static com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
+import static com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 /**
  * Character range matcher using a sorted list of ranges.
  */
 public final class RangeListMatcher extends ProfiledCharMatcher {
 
-    @CompilerDirectives.CompilationFinal(dimensions = 1) private final char[] ranges;
+    @CompilationFinal(dimensions = 1) private final char[] ranges;
 
     /**
      * Constructs a new {@link RangeListMatcher}.
@@ -49,25 +52,43 @@ public final class RangeListMatcher extends ProfiledCharMatcher {
     }
 
     @Override
-    @ExplodeLoop(kind = ExplodeLoop.LoopExplosionKind.FULL_EXPLODE_UNTIL_RETURN)
+    @ExplodeLoop(kind = ExplodeLoop.LoopExplosionKind.FULL_UNROLL)
     public boolean matchChar(char c) {
         for (int i = 0; i < ranges.length; i += 2) {
             final char lo = ranges[i];
             final char hi = ranges[i + 1];
-            if (lo <= c) {
-                if (hi >= c) {
+            if (isSingleChar(lo, hi)) {
+                // do simple equality checks on ranges that contain a single character
+                if (lo == c) {
                     return true;
                 }
             } else {
-                return false;
+                if (lo <= c) {
+                    if (hi >= c) {
+                        return true;
+                    }
+                } else {
+                    return false;
+                }
             }
         }
         return false;
     }
 
+    private static boolean isSingleChar(char lo, char hi) {
+        CompilerAsserts.partialEvaluationConstant(lo);
+        CompilerAsserts.partialEvaluationConstant(hi);
+        return lo == hi;
+    }
+
     @Override
-    @CompilerDirectives.TruffleBoundary
+    public int estimatedCost() {
+        return ranges.length / 2;
+    }
+
+    @Override
+    @TruffleBoundary
     public String toString() {
-        return "list " + modifiersToString() + MatcherBuilder.rangesToString(ranges);
+        return "list " + modifiersToString() + "[" + MatcherBuilder.rangesToString(ranges) + "]";
     }
 }

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -28,7 +30,7 @@ import org.junit.Test;
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.NodeChildren;
 import com.oracle.truffle.api.dsl.Specialization;
-import com.oracle.truffle.api.dsl.test.Issue8559TestFactory.LookupAndCallBinaryNodeGen;
+import com.oracle.truffle.api.dsl.test.Issue8559TestFactory.Issue8559LookupAndCallBinaryNodeGen;
 import com.oracle.truffle.api.dsl.test.Issue8559TestFactory.SomeNodeGen;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
@@ -39,7 +41,7 @@ public class Issue8559Test {
 
     @Test
     public void testCall() throws UnexpectedResultException {
-        LookupAndCallBinaryNode bin = LookupAndCallBinaryNodeGen.create(new LiteralNode(1), new LiteralNode(2));
+        Issue8559LookupAndCallBinaryNode bin = Issue8559LookupAndCallBinaryNodeGen.create(new LiteralNode(1), new LiteralNode(2));
         Object result = null;
 
         // does not raise UnexpectedResultException
@@ -131,7 +133,7 @@ public class Issue8559Test {
     }
 
     @NodeChildren({@NodeChild("arg"), @NodeChild("arg2")})
-    public abstract static class LookupAndCallBinaryNode extends BaseNode {
+    public abstract static class Issue8559LookupAndCallBinaryNode extends BaseNode {
 
         public abstract int executeInt(int arg, int arg2) throws UnexpectedResultException;
 

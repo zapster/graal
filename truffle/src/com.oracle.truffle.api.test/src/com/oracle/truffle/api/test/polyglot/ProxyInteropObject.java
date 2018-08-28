@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -49,7 +51,7 @@ public abstract class ProxyInteropObject implements TruffleObject {
 
     public Object execute(Object[] args) throws UnsupportedTypeException, ArityException, UnsupportedMessageException {
         CompilerDirectives.transferToInterpreter();
-        throw UnsupportedMessageException.raise(Message.createExecute(0));
+        throw UnsupportedMessageException.raise(Message.EXECUTE);
     }
 
     static boolean isInstance(TruffleObject obj) {
@@ -131,12 +133,12 @@ public abstract class ProxyInteropObject implements TruffleObject {
 
     public Object invoke(String key, Object[] arguments) throws UnsupportedMessageException, UnsupportedTypeException, ArityException {
         CompilerDirectives.transferToInterpreter();
-        throw UnsupportedMessageException.raise(Message.createInvoke(0));
+        throw UnsupportedMessageException.raise(Message.INVOKE);
     }
 
     public Object newInstance(Object[] arguments) throws UnsupportedMessageException, UnsupportedTypeException, ArityException {
         CompilerDirectives.transferToInterpreter();
-        throw UnsupportedMessageException.raise(Message.createNew(0));
+        throw UnsupportedMessageException.raise(Message.NEW);
     }
 
     public Object keys() throws UnsupportedMessageException {
@@ -344,7 +346,7 @@ public abstract class ProxyInteropObject implements TruffleObject {
                         return receiver.invoke((String) key, Arrays.copyOfRange(arguments, 2, arguments.length));
                     } else {
                         CompilerDirectives.transferToInterpreter();
-                        throw UnsupportedMessageException.raise(Message.createInvoke(0));
+                        throw UnsupportedMessageException.raise(Message.INVOKE);
                     }
                 }
             });

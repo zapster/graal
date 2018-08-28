@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -141,13 +143,13 @@ public final class CallTreePrinter {
     private final BigBang bigbang;
     private final Map<AnalysisMethod, MethodNode> methodToNode;
 
-    private CallTreePrinter(BigBang bigbang) {
+    public CallTreePrinter(BigBang bigbang) {
         this.bigbang = bigbang;
         /* Use linked hash map for predictable iteration order. */
         this.methodToNode = new LinkedHashMap<>();
     }
 
-    private void buildCallTree() {
+    public void buildCallTree() {
 
         /* Add all the roots to the tree. */
         bigbang.getUniverse().getMethods().stream()
@@ -262,6 +264,14 @@ public final class CallTreePrinter {
     }
 
     private void printClasses(PrintWriter out, boolean packageNameOnly) {
+        List<String> classList = new ArrayList<>(classesSet(packageNameOnly));
+        classList.sort(null);
+        for (String name : classList) {
+            out.println(name);
+        }
+    }
+
+    public Set<String> classesSet(boolean packageNameOnly) {
         Set<String> classSet = new HashSet<>();
         for (ResolvedJavaMethod method : methodToNode.keySet()) {
             String name = method.getDeclaringClass().toJavaName(true);
@@ -274,12 +284,7 @@ public final class CallTreePrinter {
             }
             classSet.add(name);
         }
-
-        List<String> classList = new ArrayList<>(classSet);
-        classList.sort(null);
-        for (String name : classList) {
-            out.println(name);
-        }
+        return classSet;
     }
 
     private static String packagePrefix(String name) {
