@@ -98,7 +98,7 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
             }
         }
 
-        // TODO: generate mappings for dummy constant definitions
+        // generate mappings for dummy constant definitions
         for (Entry<Constant, DummyConstDef> dummyConstDef : dummyConstDefs.entrySet()) {
             insertDefMapping(new ConstantValue(ValueKind.Illegal, dummyConstDef.getKey()), dummyConstDef.getValue(), 0, webs, map);
         }
