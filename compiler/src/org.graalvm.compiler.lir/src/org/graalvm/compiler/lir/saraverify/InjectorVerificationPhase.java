@@ -2,6 +2,7 @@ package org.graalvm.compiler.lir.saraverify;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Random;
@@ -118,7 +119,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
 
         BlockMap<ArrayList<LIRInstruction>> missingSpillsLoadsMap = new BlockMap<>(controlFlowGraph);
 
-        for (AbstractBlockBase<?> block : blocks) {
+        for (AbstractBlockBase<?> block : shuffleList(blocks)) {
             ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
             ArrayList<LIRInstruction> missingSpillsLoads = new ArrayList<>();
 
@@ -163,7 +164,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         Random random = new Random();
         wrongRegisterAssignmentCount = 0;
 
-        for (AbstractBlockBase<?> block : blocks) {
+        for (AbstractBlockBase<?> block : shuffleList(blocks)) {
             ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
 
             for (LIRInstruction instruction : instructions) {
@@ -194,6 +195,10 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
                         }
                     });
                 }
+
+                if (wrongRegisterAssignmentCount == ERROR_COUNT) {
+                    return true;
+                }
             }
         }
 
@@ -206,7 +211,7 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
         Random random = new Random();
         wrongRegisterUseCount = 0;
 
-        for (AbstractBlockBase<?> block : blocks) {
+        for (AbstractBlockBase<?> block : shuffleList(blocks)) {
             ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
 
             for (LIRInstruction instruction : instructions) {
@@ -237,6 +242,8 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
                             return value;
                         }
                     });
+                } else {
+                    return true;
                 }
             }
         }
@@ -249,5 +256,11 @@ public class InjectorVerificationPhase extends LIRPhase<AllocationContext> {
 
         RegisterValue registerValue = ValueUtil.asRegisterValue(value);
         return Arrays.stream(registers).filter(r -> !r.equals(registerValue.getRegister())).collect(Collectors.toList());
+    }
+
+    private static <T> List<T> shuffleList(T[] blocks) {
+        List<T> shuffledList = Arrays.stream(blocks).collect(Collectors.toList());
+        Collections.shuffle(shuffledList);
+        return shuffledList;
     }
 }
