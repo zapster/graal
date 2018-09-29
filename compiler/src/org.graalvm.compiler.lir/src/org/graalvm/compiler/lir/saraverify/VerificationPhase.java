@@ -53,6 +53,9 @@ public class VerificationPhase extends LIRPhase<AllocationContext> {
         LIR lir = lirGenRes.getLIR();
         DebugContext debugContext = lir.getDebug();
         List<DuSequenceWeb> inputDuSequenceWebs = DuSequenceAnalysis.createDuSequenceWebs(inputResult.getDuSequences());
+
+        assert inputDuSequenceWebs.stream().allMatch(web -> web.getDefNodes().size() == 1);
+
         Map<Constant, DummyConstDef> dummyConstDefs = inputResult.getDummyConstDefs();
         Map<Register, DummyRegDef> dummyRegDefs = inputResult.getDummyRegDefs();
         BlockMap<List<Value>> blockPhiInValues = inputResult.getBlockPhiInValues();
