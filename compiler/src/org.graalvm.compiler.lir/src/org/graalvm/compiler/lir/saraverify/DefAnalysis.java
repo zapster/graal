@@ -294,8 +294,11 @@ public class DefAnalysis {
                 DefNode defNode = new DefNode(phiInValue, labelInstruction, i);
                 DuSequenceWeb mappedWeb = mapping.get(defNode);
 
-                // add phi in triples to the merged def analysis info location set
-                locations.stream().forEach(location -> mergedDefAnalysisInfo.addLocation(location, mappedWeb, labelInstruction, false));
+                // if no mapped value, then there is no usage for phi in value
+                if (mappedWeb != null) {
+                    // add phi in triples to the merged def analysis info location set
+                    locations.stream().forEach(location -> mergedDefAnalysisInfo.addLocation(location, mappedWeb, labelInstruction, false));
+                }
                 i++;
             }
 
