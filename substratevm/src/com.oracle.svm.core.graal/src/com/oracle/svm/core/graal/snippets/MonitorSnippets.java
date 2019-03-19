@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,9 +26,6 @@ package com.oracle.svm.core.graal.snippets;
 
 import java.util.Map;
 
-import com.oracle.svm.core.graal.nodes.UnreachableNode;
-import jdk.vm.ci.meta.DeoptimizationAction;
-import jdk.vm.ci.meta.DeoptimizationReason;
 import org.graalvm.compiler.api.replacements.Snippet;
 import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
 import org.graalvm.compiler.core.common.spi.ForeignCallDescriptor;
@@ -44,18 +43,22 @@ import org.graalvm.compiler.phases.util.Providers;
 import org.graalvm.compiler.replacements.SnippetTemplate;
 import org.graalvm.compiler.replacements.SnippetTemplate.Arguments;
 import org.graalvm.compiler.replacements.SnippetTemplate.SnippetInfo;
-import org.graalvm.word.LocationIdentity;
 import org.graalvm.compiler.replacements.Snippets;
+import org.graalvm.word.LocationIdentity;
 
-import com.oracle.svm.core.MonitorUtils;
+import com.oracle.svm.core.MonitorSupport;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.graal.GraalFeature;
 import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
 import com.oracle.svm.core.graal.nodes.KillMemoryNode;
+import com.oracle.svm.core.graal.nodes.UnreachableNode;
 import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
+
+import jdk.vm.ci.meta.DeoptimizationAction;
+import jdk.vm.ci.meta.DeoptimizationReason;
 
 public final class MonitorSnippets extends SubstrateTemplates implements Snippets {
 
@@ -113,7 +116,7 @@ public final class MonitorSnippets extends SubstrateTemplates implements Snippet
             }
             Arguments args = new Arguments(monitorEnter, node.graph().getGuardsStage(), tool.getLoweringStage());
             args.add("obj", node.object());
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -128,7 +131,7 @@ public final class MonitorSnippets extends SubstrateTemplates implements Snippet
             }
             Arguments args = new Arguments(monitorExit, node.graph().getGuardsStage(), tool.getLoweringStage());
             args.add("obj", node.object());
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -145,8 +148,8 @@ public final class MonitorSnippets extends SubstrateTemplates implements Snippet
     }
 
     static class ForeignCalls {
-        static final SubstrateForeignCallDescriptor MONITOR_SNIPPETS_SLOW_PATH_MONITOR_ENTER = SnippetRuntime.findForeignCall(MonitorUtils.class, "monitorEnter", false);
-        static final SubstrateForeignCallDescriptor MONITOR_SNIPPETS_SLOW_PATH_MONITOR_EXIT = SnippetRuntime.findForeignCall(MonitorUtils.class, "monitorExit", false);
+        static final SubstrateForeignCallDescriptor MONITOR_SNIPPETS_SLOW_PATH_MONITOR_ENTER = SnippetRuntime.findForeignCall(MonitorSupport.class, "monitorEnter", false);
+        static final SubstrateForeignCallDescriptor MONITOR_SNIPPETS_SLOW_PATH_MONITOR_EXIT = SnippetRuntime.findForeignCall(MonitorSupport.class, "monitorExit", false);
         private static final SubstrateForeignCallDescriptor[] FOREIGN_CALLS = new SubstrateForeignCallDescriptor[]{MONITOR_SNIPPETS_SLOW_PATH_MONITOR_ENTER, MONITOR_SNIPPETS_SLOW_PATH_MONITOR_EXIT};
 
         @NodeIntrinsic(value = ForeignCallNode.class)

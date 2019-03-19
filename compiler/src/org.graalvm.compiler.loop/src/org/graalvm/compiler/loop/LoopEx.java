@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,7 +24,13 @@
  */
 package org.graalvm.compiler.loop;
 
-import jdk.vm.ci.code.BytecodeFrame;
+import java.util.Collection;
+import java.util.LinkedList;
+import java.util.Queue;
+
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.EconomicSet;
+import org.graalvm.collections.Equivalence;
 import org.graalvm.compiler.core.common.calc.Condition;
 import org.graalvm.compiler.core.common.cfg.Loop;
 import org.graalvm.compiler.core.common.type.IntegerStamp;
@@ -67,13 +75,8 @@ import org.graalvm.compiler.nodes.cfg.ControlFlowGraph;
 import org.graalvm.compiler.nodes.debug.ControlFlowAnchored;
 import org.graalvm.compiler.nodes.extended.ValueAnchorNode;
 import org.graalvm.compiler.nodes.util.GraphUtil;
-import org.graalvm.util.EconomicMap;
-import org.graalvm.util.EconomicSet;
-import org.graalvm.util.Equivalence;
 
-import java.util.Collection;
-import java.util.LinkedList;
-import java.util.Queue;
+import jdk.vm.ci.code.BytecodeFrame;
 
 public class LoopEx {
     private final Loop<Block> loop;
@@ -236,13 +239,13 @@ public class LoopEx {
             if (isOutsideLoop(lessThan.getX())) {
                 iv = getInductionVariables().get(lessThan.getY());
                 if (iv != null) {
-                    condition = lessThan.condition().mirror();
+                    condition = lessThan.condition().asCondition().mirror();
                     limit = lessThan.getX();
                 }
             } else if (isOutsideLoop(lessThan.getY())) {
                 iv = getInductionVariables().get(lessThan.getX());
                 if (iv != null) {
-                    condition = lessThan.condition();
+                    condition = lessThan.condition().asCondition();
                     limit = lessThan.getY();
                 }
             }
@@ -393,8 +396,8 @@ public class LoopEx {
                 } else {
                     boolean isValidConvert = op instanceof PiNode || op instanceof SignExtendNode;
                     if (!isValidConvert && op instanceof ZeroExtendNode) {
-                        IntegerStamp inputStamp = (IntegerStamp) ((ZeroExtendNode) op).getValue().stamp(NodeView.DEFAULT);
-                        isValidConvert = inputStamp.isPositive();
+                        ZeroExtendNode zeroExtendNode = (ZeroExtendNode) op;
+                        isValidConvert = zeroExtendNode.isInputAlwaysPositive() || ((IntegerStamp) zeroExtendNode.stamp(NodeView.DEFAULT)).isPositive();
                     }
 
                     if (isValidConvert) {

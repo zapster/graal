@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,8 +26,10 @@ package com.oracle.svm.truffle.api;
 
 import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
 
+import org.graalvm.collections.EconomicMap;
 import org.graalvm.compiler.bytecode.BytecodeProvider;
 import org.graalvm.compiler.core.common.spi.ConstantFieldProvider;
+import org.graalvm.compiler.graph.SourceLanguagePositionProvider;
 import org.graalvm.compiler.nodes.EncodedGraph;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.graphbuilderconf.InlineInvokePlugin;
@@ -35,7 +39,6 @@ import org.graalvm.compiler.nodes.graphbuilderconf.NodePlugin;
 import org.graalvm.compiler.nodes.graphbuilderconf.ParameterPlugin;
 import org.graalvm.compiler.nodes.spi.StampProvider;
 import org.graalvm.compiler.replacements.PEGraphDecoder;
-import org.graalvm.util.EconomicMap;
 
 import com.oracle.svm.core.graal.meta.SharedRuntimeMethod;
 import com.oracle.svm.graal.GraalSupport;
@@ -51,13 +54,14 @@ public class SubstratePEGraphDecoder extends PEGraphDecoder {
 
     public SubstratePEGraphDecoder(Architecture architecture, StructuredGraph graph, MetaAccessProvider metaAccess, ConstantReflectionProvider constantReflection,
                     ConstantFieldProvider constantFieldProvider, StampProvider stampProvider, LoopExplosionPlugin loopExplosionPlugin, InvocationPlugins invocationPlugins,
-                    InlineInvokePlugin[] inlineInvokePlugins, ParameterPlugin parameterPlugin, NodePlugin[] nodePlugins, ResolvedJavaMethod callInlinedMethod) {
+                    InlineInvokePlugin[] inlineInvokePlugins, ParameterPlugin parameterPlugin, NodePlugin[] nodePlugins, ResolvedJavaMethod callInlinedMethod,
+                    SourceLanguagePositionProvider sourceLanguagePosition) {
         super(architecture, graph, metaAccess, constantReflection, constantFieldProvider, stampProvider, loopExplosionPlugin, invocationPlugins, inlineInvokePlugins, parameterPlugin, nodePlugins,
-                        callInlinedMethod);
+                        callInlinedMethod, sourceLanguagePosition);
     }
 
     @Override
-    protected EncodedGraph lookupEncodedGraph(ResolvedJavaMethod method, BytecodeProvider intrinsicBytecodeProvider) {
+    protected EncodedGraph lookupEncodedGraph(ResolvedJavaMethod method, ResolvedJavaMethod originalMethod, BytecodeProvider intrinsicBytecodeProvider, boolean trackNodeSourcePosition) {
         /*
          * The EncodedGraph instance also serves as a cache for some information during decoding,
          * e.g., the start offsets of encoded nodes. So it is beneficial to have a cache of the
@@ -65,13 +69,13 @@ public class SubstratePEGraphDecoder extends PEGraphDecoder {
          */
         EncodedGraph result = graphCache.get(method);
         if (result == null) {
-            result = createGraph(method);
+            result = createGraph(method, trackNodeSourcePosition);
         }
         return result;
     }
 
-    private EncodedGraph createGraph(ResolvedJavaMethod method) {
-        EncodedGraph result = GraalSupport.encodedGraph((SharedRuntimeMethod) method);
+    private EncodedGraph createGraph(ResolvedJavaMethod method, boolean trackNodeSourcePosition) {
+        EncodedGraph result = GraalSupport.encodedGraph((SharedRuntimeMethod) method, trackNodeSourcePosition);
         if (result == null) {
             throw shouldNotReachHere("Graph not available for runtime compilation: " + method.format("%H.%n(%p)"));
         }

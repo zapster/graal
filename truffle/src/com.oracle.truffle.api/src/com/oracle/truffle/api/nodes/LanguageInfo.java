@@ -26,8 +26,8 @@ package com.oracle.truffle.api.nodes;
 
 import java.util.Set;
 
-import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleLanguage.Registration;
+import com.oracle.truffle.api.source.Source;
 
 /**
  * Represents public information about a language.
@@ -41,14 +41,19 @@ public final class LanguageInfo {
     private final String version;
     private final Set<String> mimeTypes;
     private final Object engineObject;
-    volatile TruffleLanguage<?> spi;
+    private final String defaultMimeType;
+    private final boolean internal;
+    private final boolean interactive;
 
-    LanguageInfo(Object engineObject, String id, String name, String version, Set<String> mimeTypes) {
+    LanguageInfo(Object engineObject, String id, String name, String version, String defaultMimeType, Set<String> mimeTypes, boolean internal, boolean interactive) {
         this.engineObject = engineObject;
         this.id = id;
         this.name = name;
         this.version = version;
+        this.defaultMimeType = defaultMimeType;
         this.mimeTypes = mimeTypes;
+        this.internal = internal;
+        this.interactive = interactive;
     }
 
     /**
@@ -63,7 +68,7 @@ public final class LanguageInfo {
 
     /**
      * Returns the unique name of the language. This name is equivalent to the name returned by
-     * {@link com.oracle.truffle.api.vm.PolyglotEngine.Language#getName()}.
+     * {@link Registration#name()}.
      *
      * @since 0.25
      */
@@ -73,7 +78,7 @@ public final class LanguageInfo {
 
     /**
      * Returns the version of the language. This version is equivalent to the name returned by
-     * {@link com.oracle.truffle.api.vm.PolyglotEngine.Language#getVersion()}.
+     * {@link Registration#version()}.
      *
      * @since 0.25
      */
@@ -82,8 +87,21 @@ public final class LanguageInfo {
     }
 
     /**
-     * Returns the MIME types supported by this language. This set is equivalent to the set returned
-     * by {@link com.oracle.truffle.api.vm.PolyglotEngine.Language#getMimeTypes()}.
+     * Returns the default MIME type of a language or <code>null</code> if no default mime-type is
+     * set. The default MIME type specifies whether a source is loaded as character or binary based
+     * source by default. If no default MIME type is set all sources evaluated with that language
+     * will be interpreted as {@link Source#hasCharacters() character based} sources. This set is
+     * equivalent to the set provided by {@link Registration#defaultMimeType()}.
+     *
+     * @since 1.0
+     */
+    public String getDefaultMimeType() {
+        return defaultMimeType;
+    }
+
+    /**
+     * Returns the MIME types supported by this language. This set is equivalent to the set provided
+     * by {@link Registration#characterMimeTypes()} and {@link Registration#byteMimeTypes()}.
      *
      * @since 0.25
      */
@@ -95,11 +113,21 @@ public final class LanguageInfo {
         return engineObject;
     }
 
-    void setSpi(TruffleLanguage<?> spi) {
-        this.spi = spi;
+    /**
+     * @return {@code true} if the language is {@link Registration#internal() internal},
+     *         {@code false} otherwise
+     * @since 0.31
+     */
+    public boolean isInternal() {
+        return internal;
     }
 
-    TruffleLanguage<?> getSpi() {
-        return spi;
+    /**
+     * @return {@code true} if the language is {@link Registration#interactive() interactive},
+     *         {@code false} otherwise
+     * @since 1.0
+     */
+    public boolean isInteractive() {
+        return interactive;
     }
 }

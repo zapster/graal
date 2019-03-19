@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -51,6 +53,7 @@ import com.oracle.truffle.api.interop.MessageResolution;
 import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.dsl.processor.ExpectError;
+import com.oracle.truffle.dsl.processor.ProcessorContext;
 import com.oracle.truffle.dsl.processor.java.ElementUtils;
 
 /**
@@ -58,10 +61,9 @@ import com.oracle.truffle.dsl.processor.java.ElementUtils;
  */
 public final class InteropDSLProcessor extends AbstractProcessor {
 
-    static final List<Message> KNOWN_MESSAGES = Arrays.asList(new Message[]{Message.READ, Message.WRITE, Message.IS_NULL, Message.IS_EXECUTABLE,
+    static final List<Message> KNOWN_MESSAGES = Arrays.asList(new Message[]{Message.READ, Message.WRITE, Message.REMOVE, Message.IS_NULL, Message.IS_EXECUTABLE,
                     Message.IS_INSTANTIABLE, Message.IS_BOXED, Message.UNBOX, Message.HAS_SIZE, Message.GET_SIZE, Message.KEY_INFO, Message.HAS_KEYS, Message.KEYS,
-                    Message.IS_POINTER, Message.AS_POINTER, Message.TO_NATIVE,
-                    Message.createExecute(0), Message.createInvoke(0), Message.createNew(0)});
+                    Message.IS_POINTER, Message.AS_POINTER, Message.TO_NATIVE, Message.EXECUTE, Message.INVOKE, Message.NEW});
 
     @Override
     public Set<String> getSupportedAnnotationTypes() {
@@ -85,14 +87,19 @@ public final class InteropDSLProcessor extends AbstractProcessor {
     }
 
     private void process0(RoundEnvironment roundEnv) {
-        for (Element e : roundEnv.getElementsAnnotatedWith(MessageResolution.class)) {
-            try {
-                processElement(e);
-            } catch (Throwable ex) {
-                ex.printStackTrace();
-                String message = "Uncaught error in " + this.getClass();
-                processingEnv.getMessager().printMessage(Kind.ERROR, message + ": " + ElementUtils.printException(ex), e);
+        try {
+            ProcessorContext.setThreadLocalInstance(new ProcessorContext(processingEnv, null));
+            for (Element e : roundEnv.getElementsAnnotatedWith(MessageResolution.class)) {
+                try {
+                    processElement(e);
+                } catch (Throwable ex) {
+                    ex.printStackTrace();
+                    String message = "Uncaught error in " + this.getClass();
+                    processingEnv.getMessager().printMessage(Kind.ERROR, message + ": " + ElementUtils.printException(ex), e);
+                }
             }
+        } finally {
+            ProcessorContext.setThreadLocalInstance(null);
         }
     }
 
@@ -288,6 +295,9 @@ public final class InteropDSLProcessor extends AbstractProcessor {
         }
 
         Object currentMessage = Utils.getMessage(processingEnv, resolveAnnotation.message());
+        if (currentMessage == null) {
+            currentMessage = currentGenerator.getMessageName();
+        }
         factoryGenerator.addMessageHandler(currentMessage, currentGenerator);
         return true;
     }
@@ -314,7 +324,7 @@ public final class InteropDSLProcessor extends AbstractProcessor {
     }
 
     private boolean isInstanceMissing(String receiverTypeFullClassName) {
-        for (Element elem : this.processingEnv.getElementUtils().getTypeElement(receiverTypeFullClassName).getEnclosedElements()) {
+        for (Element elem : ElementUtils.getTypeElement(this.processingEnv, receiverTypeFullClassName).getEnclosedElements()) {
             if (elem.getKind().equals(ElementKind.METHOD)) {
                 ExecutableElement method = (ExecutableElement) elem;
                 if (method.getSimpleName().toString().equals("isInstance")) {
@@ -326,7 +336,7 @@ public final class InteropDSLProcessor extends AbstractProcessor {
     }
 
     private boolean isInstanceHasWrongSignature(String receiverTypeFullClassName) {
-        for (Element elem : this.processingEnv.getElementUtils().getTypeElement(receiverTypeFullClassName).getEnclosedElements()) {
+        for (Element elem : ElementUtils.getTypeElement(this.processingEnv, receiverTypeFullClassName).getEnclosedElements()) {
             if (elem.getKind().equals(ElementKind.METHOD)) {
                 ExecutableElement method = (ExecutableElement) elem;
                 if (method.getSimpleName().toString().equals("isInstance") && method.getParameters().size() == 1 &&

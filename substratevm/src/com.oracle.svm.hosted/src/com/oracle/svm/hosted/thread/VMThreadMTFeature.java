@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -39,8 +41,8 @@ import org.graalvm.nativeimage.IsolateThread;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.graal.GraalFeature;
-import com.oracle.svm.core.graal.nodes.CurrentVMThreadFixedNode;
-import com.oracle.svm.core.graal.nodes.CurrentVMThreadFloatingNode;
+import com.oracle.svm.core.graal.nodes.ReadRegisterFixedNode;
+import com.oracle.svm.core.graal.nodes.ReadRegisterFloatingNode;
 import com.oracle.svm.core.graal.thread.AddressOfVMThreadLocalNode;
 import com.oracle.svm.core.graal.thread.CompareAndSetVMThreadLocalNode;
 import com.oracle.svm.core.graal.thread.LoadVMThreadLocalNode;
@@ -97,7 +99,7 @@ public class VMThreadMTFeature implements GraalFeature {
      * access memory that we manage ourselfs.
      */
     @Override
-    public void registerInvocationPlugins(Providers providers, SnippetReflectionProvider snippetReflection, InvocationPlugins invocationPlugins, boolean hosted) {
+    public void registerInvocationPlugins(Providers providers, SnippetReflectionProvider snippetReflection, InvocationPlugins invocationPlugins, boolean analysis, boolean hosted) {
         for (Class<? extends FastThreadLocal> threadLocalClass : VMThreadLocalInfo.THREAD_LOCAL_CLASSES) {
             Registration r = new Registration(invocationPlugins, threadLocalClass);
             Class<?> valueClass = VMThreadLocalInfo.getValueClass(threadLocalClass);
@@ -189,9 +191,9 @@ public class VMThreadMTFeature implements GraalFeature {
          */
         boolean isDeoptTarget = b.getMethod() instanceof SharedMethod && ((SharedMethod) b.getMethod()).isDeoptTarget();
         if (isDeoptTarget || usedForAddress) {
-            return b.add(new CurrentVMThreadFixedNode());
+            return b.add(ReadRegisterFixedNode.forIsolateThread());
         } else {
-            return b.add(new CurrentVMThreadFloatingNode());
+            return b.add(ReadRegisterFloatingNode.forIsolateThread());
         }
     }
 
@@ -221,7 +223,7 @@ public class VMThreadMTFeature implements GraalFeature {
 
     private boolean handleCompareAndSet(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode, ValueNode expect, ValueNode update) {
         VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, receiver.get());
-        b.addPush(targetMethod.getSignature().getReturnKind(), new CompareAndSetVMThreadLocalNode(threadLocalInfo, threadNode, expect, update, BarrierType.NONE));
+        b.addPush(targetMethod.getSignature().getReturnKind(), new CompareAndSetVMThreadLocalNode(threadLocalInfo, threadNode, expect, update));
         return true;
     }
 
@@ -257,7 +259,7 @@ public class VMThreadMTFeature implements GraalFeature {
             assert nextOffset % Math.min(8, info.sizeInBytes) == 0 : "alignment mismatch: " + info.sizeInBytes + ", " + nextOffset;
 
             if (info.isObject) {
-                referenceMap.markReferenceAtIndex(nextOffset / info.sizeInBytes);
+                referenceMap.markReferenceAtOffset(nextOffset, true);
             }
             info.offset = nextOffset;
             nextOffset += info.sizeInBytes;

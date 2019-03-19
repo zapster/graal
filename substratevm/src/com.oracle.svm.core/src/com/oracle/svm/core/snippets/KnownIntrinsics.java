@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,7 +24,6 @@
  */
 package com.oracle.svm.core.snippets;
 
-import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.word.Pointer;
 
@@ -35,12 +36,9 @@ import com.oracle.svm.core.hub.DynamicHub;
 public class KnownIntrinsics {
 
     /**
-     * Returns the current VMThread, i.e., the current VM-level thread information block.
-     *
-     * In (@link SubstrateOptions#MultiThreaded single-threaded mode}, there is no VMThread
-     * available. This method can still be called, but it always returns {@code null}.
+     * Returns the value of the heap base.
      */
-    public static native IsolateThread currentVMThread();
+    public static native Pointer heapBase();
 
     /**
      * Returns the length of the given array. It does not check if the provided object is an array,
@@ -71,7 +69,7 @@ public class KnownIntrinsics {
 
     /**
      * Narrow down the range of values to exclude 0 as the possible pointer value.
-     * 
+     *
      * @param pointer that we are narrowing to non-null
      * @return a pointer with stamp non-null
      */

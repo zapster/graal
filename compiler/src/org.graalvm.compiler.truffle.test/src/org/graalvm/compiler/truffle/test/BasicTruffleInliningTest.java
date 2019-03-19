@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,13 +24,13 @@
  */
 package org.graalvm.compiler.truffle.test;
 
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleFunctionInlining;
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleInliningMaxCallerSize;
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.TruffleMaximumRecursiveInlining;
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.overrideOptions;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleFunctionInlining;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleInliningMaxCallerSize;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.TruffleMaximumRecursiveInlining;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.overrideOptions;
 
-import org.graalvm.compiler.truffle.TruffleCompilerOptions;
-import org.graalvm.compiler.truffle.TruffleInlining;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions;
+import org.graalvm.compiler.truffle.runtime.TruffleInlining;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -188,7 +190,7 @@ public class BasicTruffleInliningTest extends TruffleInliningTest {
         final int[] inlineDepth = {0};
         TruffleInlining decisions = builder.buildDecisions();
         traverseDecisions(decisions.getCallSites(), decision -> {
-            Assert.assertTrue(decision.isInline());
+            Assert.assertTrue(decision.shouldInline());
             inlineDepth[0]++;
         });
         Assert.assertEquals(depth, inlineDepth[0]);

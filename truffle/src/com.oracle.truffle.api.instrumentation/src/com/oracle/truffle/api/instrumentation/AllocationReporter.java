@@ -28,6 +28,9 @@ import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
@@ -68,10 +71,12 @@ public final class AllocationReporter {
      * @since 0.27
      * @see #isActive()
      * @see #addPropertyChangeListener(java.beans.PropertyChangeListener)
+     * @deprecated Use {@link #addActiveListener(Consumer)}
      */
-    public static final String PROPERTY_ACTIVE = "active";
+    @Deprecated public static final String PROPERTY_ACTIVE = "active";
 
     final LanguageInfo language;
+    private final List<Consumer<Boolean>> activeListeners = new CopyOnWriteArrayList<>();
     private final PropChangeSupport propSupport = new PropChangeSupport(this);
     private final ThreadLocal<LinkedList<Reference<Object>>> valueCheck;
 
@@ -86,12 +91,35 @@ public final class AllocationReporter {
     }
 
     /**
+     * Add a listener that is notified when {@link #isActive() active} value of this reporter
+     * changes. The listener {@link Consumer#accept(Object) accept} method is called with the new
+     * value of {@link #isActive()}.
+     *
+     * @since 1.0
+     */
+    public void addActiveListener(Consumer<Boolean> listener) {
+        activeListeners.add(listener);
+    }
+
+    /**
+     * Remove a listener that is notified when {@link #isActive() active} value of this reporter
+     * changes.
+     *
+     * @since 1.0
+     */
+    public void removeActiveListener(Consumer<Boolean> listener) {
+        activeListeners.remove(listener);
+    }
+
+    /**
      * Add a property change listener that is notified when a property of this reporter changes. Use
      * it to get notified when {@link #isActive()} changes.
      *
      * @since 0.27
      * @see #PROPERTY_ACTIVE
+     * @deprecated Use {@link #addActiveListener(Consumer)} instead.
      */
+    @Deprecated
     public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
         // Using FQN to avoid mx to generate dependency on java.desktop JDK9 module
         propSupport.addPropertyChangeListener(listener);
@@ -102,7 +130,9 @@ public final class AllocationReporter {
      *
      * @since 0.27
      * @see #addPropertyChangeListener(java.beans.PropertyChangeListener)
+     * @deprecated Use {@link #removeActiveListener(Consumer)} instead.
      */
+    @Deprecated
     public void removePropertyChangeListener(java.beans.PropertyChangeListener listener) {
         // Using FQN to avoid mx to generate dependency on java.desktop JDK9 module
         propSupport.removePropertyChangeListener(listener);
@@ -112,9 +142,8 @@ public final class AllocationReporter {
      * Test if the reporter instance is actually doing some reporting when notify methods are
      * called. Methods {@link #onEnter(java.lang.Object, long, long)} and
      * {@link #onReturnValue(java.lang.Object, long, long)} have no effect when this method returns
-     * false. A {@link java.beans.PropertyChangeListener} can be
-     * {@link #addPropertyChangeListener(java.beans.PropertyChangeListener) added} to listen on
-     * changes of this property.
+     * false. A listener can be {@link #addActiveListener(Consumer) added} to listen on changes of
+     * this value.
      *
      * @return <code>true</code> when there are some {@link AllocationListener}s attached,
      *         <code>false</code> otherwise.
@@ -146,6 +175,9 @@ public final class AllocationReporter {
             assumption.invalidate();
         }
         if (!hadListeners) {
+            for (Consumer<Boolean> listener : activeListeners) {
+                listener.accept(true);
+            }
             propSupport.firePropertyChange(PROPERTY_ACTIVE, false, true);
         }
     }
@@ -182,6 +214,9 @@ public final class AllocationReporter {
             assumption.invalidate();
         }
         if (!hasListeners) {
+            for (Consumer<Boolean> listener : activeListeners) {
+                listener.accept(false);
+            }
             propSupport.firePropertyChange(PROPERTY_ACTIVE, true, false);
         }
     }
@@ -213,19 +248,22 @@ public final class AllocationReporter {
      */
     public void onEnter(Object valueToReallocate, long oldSize, long newSizeEstimate) {
         if (valueCheck != null) {
-            enterSizeCheck(valueToReallocate, oldSize, newSizeEstimate);
-            if (valueToReallocate != null) {
-                allocateValueCheck(valueToReallocate);
-            }
+            onEnterCheck(valueToReallocate, oldSize, newSizeEstimate);
         }
         notifyAllocateOrReallocate(valueToReallocate, oldSize, newSizeEstimate);
     }
 
+    @TruffleBoundary
+    private void onEnterCheck(Object valueToReallocate, long oldSize, long newSizeEstimate) {
+        enterSizeCheck(valueToReallocate, oldSize, newSizeEstimate);
+        if (valueToReallocate != null) {
+            allocateValueCheck(valueToReallocate);
+        }
+        setValueCheck(valueToReallocate);
+    }
+
     @ExplodeLoop
     private void notifyAllocateOrReallocate(Object value, long oldSize, long newSizeEstimate) {
-        if (valueCheck != null) {
-            setValueCheck(value);
-        }
         CompilerAsserts.partialEvaluationConstant(this);
         if (!listenersNotChangedAssumption.isValid()) {
             CompilerDirectives.transferToInterpreterAndInvalidate();
@@ -265,10 +303,15 @@ public final class AllocationReporter {
      */
     public void onReturnValue(Object value, long oldSize, long newSize) {
         if (valueCheck != null) {
-            allocateValueCheck(value);
-            allocatedCheck(value, oldSize, newSize);
+            onReturnValueCheck(value, oldSize, newSize);
         }
         notifyAllocated(value, oldSize, newSize);
+    }
+
+    @TruffleBoundary
+    private void onReturnValueCheck(Object value, long oldSize, long newSize) {
+        allocateValueCheck(value);
+        allocatedCheck(value, oldSize, newSize);
     }
 
     @ExplodeLoop
@@ -286,15 +329,15 @@ public final class AllocationReporter {
         }
     }
 
-    @TruffleBoundary
     private static void enterSizeCheck(Object valueToReallocate, long oldSize, long newSizeEstimate) {
+        CompilerAsserts.neverPartOfCompilation();
         assert (newSizeEstimate == SIZE_UNKNOWN || newSizeEstimate > 0) : "Wrong new size estimate = " + newSizeEstimate;
         assert valueToReallocate != null || oldSize == 0 : "Old size must be 0 for new allocations. Was: " + oldSize;
         assert valueToReallocate == null || (oldSize > 0 || oldSize == SIZE_UNKNOWN) : "Old size of a re-allocated value must be positive or unknown. Was: " + oldSize;
     }
 
-    @TruffleBoundary
     private boolean setValueCheck(Object value) {
+        CompilerAsserts.neverPartOfCompilation();
         LinkedList<Reference<Object>> list = valueCheck.get();
         if (list == null) {
             list = new LinkedList<>();
@@ -304,8 +347,8 @@ public final class AllocationReporter {
         return true;
     }
 
-    @TruffleBoundary
     private static void allocateValueCheck(Object value) {
+        CompilerAsserts.neverPartOfCompilation();
         if (value == null) {
             throw new NullPointerException("No allocated value.");
         }
@@ -324,8 +367,9 @@ public final class AllocationReporter {
         assert isTO : "Wrong value class, TruffleObject is required. Was: " + value.getClass().getName();
     }
 
-    @TruffleBoundary
     private void allocatedCheck(Object value, long oldSize, long newSize) {
+        CompilerAsserts.neverPartOfCompilation();
+        assert value != null : "Allocated value must not be null.";
         LinkedList<Reference<Object>> list = valueCheck.get();
         assert list != null && !list.isEmpty() : "onEnter() was not called";
         Object orig = list.removeLast().get();
@@ -334,6 +378,7 @@ public final class AllocationReporter {
         assert orig != null && (oldSize > 0 || oldSize == SIZE_UNKNOWN) || orig == null : "Old size of a re-allocated value must be positive or unknown. Was: " + oldSize;
         assert newSize == SIZE_UNKNOWN || newSize > 0 : "New value size must be positive or unknown. Was: " + newSize;
     }
+
 }
 
 class AllocationReporterSnippets extends TruffleLanguage<ContextObject> {
@@ -380,11 +425,6 @@ class AllocationReporterSnippets extends TruffleLanguage<ContextObject> {
     }
     // END: AllocationReporterSnippets#example
     // @formatter:on
-
-    @Override
-    protected Object getLanguageGlobal(ContextObject context) {
-        return null;
-    }
 
     @Override
     protected boolean isObjectOfLanguage(Object object) {

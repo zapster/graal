@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -36,6 +38,7 @@ import javax.lang.model.type.TypeMirror;
 
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.nodes.UnexpectedResultException;
 import com.oracle.truffle.dsl.processor.ProcessorContext;
 import com.oracle.truffle.dsl.processor.java.ElementUtils;
 import com.oracle.truffle.dsl.processor.model.CachedParameterSpec;
@@ -71,15 +74,23 @@ public class SpecializationMethodParser extends NodeMethodParser<SpecializationD
 
     private SpecializationData parseSpecialization(TemplateMethod method) {
         List<SpecializationThrowsData> exceptionData = new ArrayList<>();
+        boolean unexpectedResultRewrite = false;
         if (method.getMethod() != null) {
             AnnotationValue rewriteValue = ElementUtils.getAnnotationValue(method.getMarkerAnnotation(), "rewriteOn");
             List<TypeMirror> exceptionTypes = ElementUtils.getAnnotationValueList(TypeMirror.class, method.getMarkerAnnotation(), "rewriteOn");
             List<TypeMirror> rewriteOnTypes = new ArrayList<>();
+
             for (TypeMirror exceptionType : exceptionTypes) {
                 SpecializationThrowsData throwsData = new SpecializationThrowsData(method.getMarkerAnnotation(), rewriteValue, exceptionType);
                 if (!ElementUtils.canThrowType(method.getMethod().getThrownTypes(), exceptionType)) {
                     method.addError("A rewriteOn checked exception was specified but not thrown in the method's throws clause. The @%s method must specify a throws clause with the exception type '%s'.",
                                     Specialization.class.getSimpleName(), ElementUtils.getQualifiedName(exceptionType));
+                }
+                if (ElementUtils.typeEquals(exceptionType, getContext().getType(UnexpectedResultException.class))) {
+                    if (ElementUtils.typeEquals(method.getMethod().getReturnType(), getContext().getType(Object.class))) {
+                        method.addError("A specialization with return type 'Object' cannot throw UnexpectedResultException.");
+                    }
+                    unexpectedResultRewrite = true;
                 }
                 rewriteOnTypes.add(throwsData.getJavaClass());
                 exceptionData.add(throwsData);
@@ -101,7 +112,7 @@ public class SpecializationMethodParser extends NodeMethodParser<SpecializationD
                 }
             });
         }
-        SpecializationData specialization = new SpecializationData(getNode(), method, SpecializationKind.SPECIALIZED, exceptionData);
+        SpecializationData specialization = new SpecializationData(getNode(), method, SpecializationKind.SPECIALIZED, exceptionData, unexpectedResultRewrite);
 
         if (method.getMethod() != null) {
             String insertBeforeName = ElementUtils.getAnnotationValue(String.class, method.getMarkerAnnotation(), "insertBefore");
@@ -112,8 +123,6 @@ public class SpecializationMethodParser extends NodeMethodParser<SpecializationD
             List<String> replacesDefs = new ArrayList<>();
             replacesDefs.addAll(ElementUtils.getAnnotationValueList(String.class, specialization.getMarkerAnnotation(), "replaces"));
 
-            // TODO remove if deprecated contains api is removed.
-            replacesDefs.addAll(ElementUtils.getAnnotationValueList(String.class, specialization.getMarkerAnnotation(), "contains"));
             Set<String> containsNames = specialization.getReplacesNames();
             containsNames.clear();
             if (replacesDefs != null) {
@@ -122,10 +131,6 @@ public class SpecializationMethodParser extends NodeMethodParser<SpecializationD
                         specialization.getReplacesNames().add(include);
                     } else {
                         AnnotationValue value = ElementUtils.getAnnotationValue(specialization.getMarkerAnnotation(), "replaces");
-                        if (value == null) {
-                            // TODO remove if deprecated api was removed.
-                            value = ElementUtils.getAnnotationValue(specialization.getMarkerAnnotation(), "contains");
-                        }
                         specialization.addError(value, "Duplicate replace declaration '%s'.", include);
                     }
                 }

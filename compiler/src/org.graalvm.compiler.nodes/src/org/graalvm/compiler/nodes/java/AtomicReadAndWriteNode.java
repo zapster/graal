@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -36,11 +38,10 @@ import org.graalvm.compiler.nodes.spi.LoweringTool;
 import org.graalvm.word.LocationIdentity;
 
 import jdk.vm.ci.meta.JavaKind;
-import sun.misc.Unsafe;
 
 /**
- * Represents an atomic read-and-write operation like {@link Unsafe#getAndSetInt(Object, long, int)}
- * .
+ * Represents an atomic read-and-write operation like
+ * {@link sun.misc.Unsafe#getAndSetInt(Object, long, int)}.
  */
 @NodeInfo(cycles = CYCLES_8, size = SIZE_2)
 public final class AtomicReadAndWriteNode extends AbstractMemoryCheckpoint implements Lowerable, MemoryCheckpoint.Single {

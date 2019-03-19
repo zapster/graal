@@ -24,21 +24,22 @@
  */
 package com.oracle.truffle.tools.profiler.impl;
 
+import java.io.PrintStream;
+
+import org.graalvm.options.OptionDescriptors;
+import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.Instrument;
+
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
-import com.oracle.truffle.api.vm.PolyglotEngine;
-import com.oracle.truffle.api.vm.PolyglotRuntime;
 import com.oracle.truffle.tools.profiler.CPUTracer;
-import org.graalvm.options.OptionDescriptors;
-
-import java.io.PrintStream;
 
 /**
  * The {@linkplain TruffleInstrument instrument} for the CPU tracer.
  *
  * @since 0.30
  */
-@TruffleInstrument.Registration(id = CPUTracerInstrument.ID, name = "CPU Tracer", version = "0.1", services = {CPUTracer.class})
+@TruffleInstrument.Registration(id = CPUTracerInstrument.ID, name = "CPU Tracer", version = CPUTracerInstrument.VERSION, services = {CPUTracer.class})
 public class CPUTracerInstrument extends TruffleInstrument {
 
     /**
@@ -55,6 +56,8 @@ public class CPUTracerInstrument extends TruffleInstrument {
      * @since 0.30
      */
     public static final String ID = "cputracer";
+
+    static final String VERSION = "0.3.0";
     private CPUTracer tracer;
     private static ProfilerToolFactory<CPUTracer> factory;
 
@@ -84,15 +87,14 @@ public class CPUTracerInstrument extends TruffleInstrument {
     /**
      * Does a lookup in the runtime instruments of the engine and returns an instance of the
      * {@link CPUTracer}.
-     * 
-     * @since 0.30
+     *
+     * @since 0.33
      */
-    public static CPUTracer getTracer(PolyglotEngine engine) {
-        PolyglotRuntime.Instrument instrument = engine.getRuntime().getInstruments().get(ID);
+    public static CPUTracer getTracer(Engine engine) {
+        Instrument instrument = engine.getInstruments().get(ID);
         if (instrument == null) {
             throw new IllegalStateException("Tracer is not installed.");
         }
-        instrument.setEnabled(true);
         return instrument.lookup(CPUTracer.class);
     }
 
@@ -104,9 +106,18 @@ public class CPUTracerInstrument extends TruffleInstrument {
      */
     @Override
     protected void onCreate(Env env) {
+
         tracer = factory.create(env);
         if (env.getOptions().get(CPUTracerCLI.ENABLED)) {
-            tracer.setFilter(getSourceSectionFilter(env));
+            try {
+                tracer.setFilter(getSourceSectionFilter(env));
+            } catch (IllegalArgumentException e) {
+                new PrintStream(env.err()).println(ID + " error: " + e.getMessage());
+                env.getOptions().set(CPUTracerCLI.ENABLED, false);
+                tracer.setCollecting(false);
+                env.registerService(tracer);
+                return;
+            }
             tracer.setCollecting(true);
         }
         env.registerService(tracer);
@@ -141,7 +152,7 @@ public class CPUTracerInstrument extends TruffleInstrument {
     @Override
     protected void onDispose(Env env) {
         if (env.getOptions().get(CPUTracerCLI.ENABLED)) {
-            CPUTracerCLI.printTracerHistogram(new PrintStream(env.out()), tracer);
+            CPUTracerCLI.handleOutput(env, tracer);
             tracer.close();
         }
     }

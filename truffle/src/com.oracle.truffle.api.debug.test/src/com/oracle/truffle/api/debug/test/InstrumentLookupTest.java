@@ -24,13 +24,15 @@
  */
 package com.oracle.truffle.api.debug.test;
 
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
+
+import org.graalvm.polyglot.Engine;
+import org.junit.Test;
+
 import com.oracle.truffle.api.InstrumentInfo;
 import com.oracle.truffle.api.debug.Debugger;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
-import com.oracle.truffle.api.vm.PolyglotRuntime;
-
-import org.junit.Assert;
-import org.junit.Test;
 
 /**
  * Test that debugger is accessible to instruments.
@@ -38,14 +40,13 @@ import org.junit.Test;
 public class InstrumentLookupTest {
 
     @Test
-    public void testCanAccessDebugger() {
-        PolyglotRuntime runtime = PolyglotRuntime.newBuilder().build();
-        PolyglotRuntime.Instrument debuggerInstrument = runtime.getInstruments().get("debugger");
-        Assert.assertNotNull(debuggerInstrument);
-        PolyglotRuntime.Instrument accessDebuggerInstrument = runtime.getInstruments().get("testAccessInstrument");
-        Debugger debugger = accessDebuggerInstrument.lookup(DebuggerProvider.class).getDebugger();
-        Assert.assertNotNull(debugger);
-        Assert.assertEquals(debugger, debuggerInstrument.lookup(Debugger.class));
+    public void testCanAccessDebuggerPolyglot() {
+        Engine engine = Engine.create();
+        Debugger debugger = engine.getInstruments().get("debugger").lookup(Debugger.class);
+
+        Debugger debugger2 = Debugger.find(engine);
+        assertSame(debugger, debugger2);
+        assertNotNull(debugger);
     }
 
     @TruffleInstrument.Registration(id = "testAccessInstrument", services = DebuggerProvider.class)

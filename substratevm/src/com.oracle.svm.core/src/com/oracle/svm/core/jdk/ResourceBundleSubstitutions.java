@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -61,6 +63,12 @@ final class Target_java_util_ResourceBundle {
     private static ResourceBundle getBundle(String baseName, Locale targetLocale, Control control) {
         return ImageSingletons.lookup(LocalizationSupport.class).getCached(baseName, targetLocale);
     }
+
+    @Substitute
+    public static ResourceBundle getBundle(String baseName, Locale locale, ClassLoader loader) {
+        return ImageSingletons.lookup(LocalizationSupport.class).getCached(baseName, locale);
+    }
+
 }
 
 @TargetClass(java.util.ListResourceBundle.class)

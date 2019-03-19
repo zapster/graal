@@ -1,5 +1,5 @@
 suite = {
-    "mxversion": "5.128.5",
+    "mxversion": "5.175.2",
     "name": "tools",
     "defaultLicense" : "GPLv2-CPE",
 
@@ -24,9 +24,13 @@ suite = {
                 "TRUFFLE_PROFILER",
                 "NanoHTTPD",
                 "NanoHTTPD-WebSocket",
-                "org.json",
+                "TruffleJSON",
             ],
-            "javaCompliance" : "1.8",
+            "exports" : [
+              "<package-info>", # exports all packages containing package-info.java
+              "com.oracle.truffle.tools.chromeinspector.instrument to com.oracle.truffle.truffle_api"
+            ],
+            "javaCompliance" : "8+",
             "checkstyle" : "com.oracle.truffle.api",
             "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
             "workingSets" : "Tools",
@@ -37,10 +41,13 @@ suite = {
             "sourceDirs" : ["src"],
             "dependencies" : [
                 "com.oracle.truffle.tools.chromeinspector",
+                "truffle:TRUFFLE_TEST",
+                "truffle:TRUFFLE_SL",
                 "mx:JUNIT",
             ],
-            "javaCompliance" : "1.8",
+            "javaCompliance" : "8+",
             "checkstyle" : "com.oracle.truffle.tools.chromeinspector.test",
+            "checkstyleVersion" : "8.8",
             "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
             "workingSets" : "Tools",
             "license" : "GPLv2-CPE",
@@ -48,10 +55,17 @@ suite = {
         "com.oracle.truffle.tools.profiler" : {
             "subDir" : "src",
             "sourceDirs" : ["src"],
-            "dependencies" : ["truffle:TRUFFLE_API"],
+            "dependencies" : [
+                "truffle:TRUFFLE_API",
+                "TruffleJSON",
+                ],
+            "exports" : [
+              "<package-info>", # exports all packages containing package-info.java
+              "com.oracle.truffle.tools.profiler.impl to com.oracle.truffle.truffle_api",
+            ],
             "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
             "checkstyle" : "com.oracle.truffle.api",
-            "javaCompliance" : "1.8",
+            "javaCompliance" : "8+",
             "workingSets" : "Tools",
         },
         "com.oracle.truffle.tools.profiler.test" : {
@@ -64,7 +78,7 @@ suite = {
             ],
             "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
             "checkstyle" : "com.oracle.truffle.api",
-            "javaCompliance" : "1.8",
+            "javaCompliance" : "8+",
             "workingSets" : "Tools",
         },
     },
@@ -94,22 +108,38 @@ suite = {
             "version" : "2.3.1",
           }
         },
-        "org.json" : {
-          "path" : "lib/json-20160810.jar",
+        "TruffleJSON" : {
           "urls" : [
-            "https://search.maven.org/remotecontent?filepath=org/json/json/20160810/json-20160810.jar",
+            "https://lafo.ssw.uni-linz.ac.at/pub/graal-external-deps/trufflejson-20180130.jar",
           ],
-          "sha1" : "aca5eb39e2a12fddd6c472b240afe9ebea3a6733",
-          "maven" : {
-            "groupId" : "org.json",
-            "artifactId" : "json",
-            "version" : "20160810",
-          }
+          "sha1" : "8819cea8bfe22c9c63f55465e296b3855ea41786",
+        },
+        "VISUALVM_COMMON" : {
+            "urls" : ["https://lafo.ssw.uni-linz.ac.at/pub/graal-external-deps/visualvm-592.tar.gz"],
+            "sha1" : "2b5fee653a160f6a3a863527cd68e49b8566d978",
+        },
+        "VISUALVM_PLATFORM_SPECIFIC" : {
+            "os_arch" : {
+                "linux" : {
+                    "amd64" : {
+                        "urls" : ["https://lafo.ssw.uni-linz.ac.at/pub/graal-external-deps/visualvm-592-linux-amd64.tar.gz"],
+                        "sha1" : "725aeb7cdf1ed8c5272b2b4efd57101102676676",
+                    }
+                },
+                "darwin" : {
+                    "amd64" : {
+                        "urls" : ["https://lafo.ssw.uni-linz.ac.at/pub/graal-external-deps/visualvm-592-macosx-x86_64.tar.gz"],
+                        "sha1" : "8ae21feaa9960e583d8868b63ea1bc31a9ccf399",
+                    }
+                },
+            }
         },
     },
 
     "distributions": {
         "CHROMEINSPECTOR": {
+            # This distribution defines a module.
+            "moduleName" : "com.oracle.truffle.tools.chromeinspector",
             "dependencies": ["com.oracle.truffle.tools.chromeinspector"],
             "distDependencies" : [
                 "truffle:TRUFFLE_API",
@@ -121,6 +151,7 @@ suite = {
             "distDependencies" : [
                 "truffle:TRUFFLE_API",
                 "CHROMEINSPECTOR",
+                "truffle:TRUFFLE_TEST",
                 "truffle:TRUFFLE_SL",
             ],
             "exclude": [
@@ -129,7 +160,16 @@ suite = {
               "truffle:JLINE",
             ],
         },
+        "CHROMEINSPECTOR_GRAALVM_SUPPORT" : {
+            "native" : True,
+            "description" : "Truffle Chrome Inspector support distribution for the GraalVM",
+            "layout" : {
+                "native-image.properties" : "file:mx.tools/tools-chromeinspector.properties",
+            },
+        },
         "TRUFFLE_PROFILER": {
+            # This distribution defines a module.
+            "moduleName" : "com.oracle.truffle.tools.profiler",
             "dependencies": [
                 "com.oracle.truffle.tools.profiler",
             ],
@@ -149,6 +189,24 @@ suite = {
             ],
             "description" : "Tests for the truffle profiler.",
             "maven" : False,
+        },
+        "TRUFFLE_PROFILER_GRAALVM_SUPPORT" : {
+            "native" : True,
+            "description" : "Truffle Profiler support distribution for the GraalVM",
+            "layout" : {
+                "native-image.properties" : "file:mx.tools/tools-profiler.properties",
+            },
+        },
+        "VISUALVM_GRAALVM_SUPPORT": {
+            "native": True,
+            "platformDependent": True,
+            "description": "VisualVM support distribution for the GraalVM",
+            "layout": {
+                "./": [
+                    "extracted-dependency:VISUALVM_COMMON/lib/visualvm/*",
+                    "extracted-dependency:VISUALVM_PLATFORM_SPECIFIC/./lib/visualvm/*",
+                ],
+            },
         },
     },
 }

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,6 +25,10 @@
 
 package com.oracle.svm.hosted.analysis.flow;
 
+import org.graalvm.compiler.debug.GraalError;
+import org.graalvm.compiler.graph.Node;
+import org.graalvm.compiler.nodes.ConstantNode;
+import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.java.LoadFieldNode;
 import org.graalvm.compiler.nodes.java.NewArrayNode;
@@ -37,15 +43,52 @@ import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.svm.core.graal.nodes.NewPinnedArrayNode;
 import com.oracle.svm.core.graal.nodes.NewPinnedInstanceNode;
+import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.core.util.UserError.UserException;
 import com.oracle.svm.hosted.NativeImageOptions;
 import com.oracle.svm.hosted.analysis.Inflation;
 import com.oracle.svm.hosted.substitute.ComputedValueField;
 
+import jdk.vm.ci.meta.JavaKind;
+
 public class SVMMethodTypeFlowBuilder extends MethodTypeFlowBuilder {
 
     public SVMMethodTypeFlowBuilder(BigBang bb, MethodTypeFlow methodFlow) {
         super(bb, methodFlow);
+    }
+
+    public SVMMethodTypeFlowBuilder(BigBang bb, StructuredGraph graph) {
+        super(bb, graph);
+    }
+
+    @Override
+    public void registerUsedElements() {
+        super.registerUsedElements();
+
+        for (Node n : graph.getNodes()) {
+            if (n instanceof ConstantNode) {
+                ConstantNode cn = (ConstantNode) n;
+                if (cn.hasUsages() && cn.asJavaConstant().getJavaKind() == JavaKind.Object && cn.asJavaConstant().isNonNull()) {
+                    /*
+                     * Constants that are embedded into graphs via constant folding of static fields
+                     * have already been replaced. But constants embedded manually by graph builder
+                     * plugins, or class constants that come directly from constant bytecodes, are
+                     * not replaced. We verify here that the object replacer would not replace such
+                     * objects.
+                     *
+                     * But more importantly, some object replacers also perform actions like forcing
+                     * eager initialization of fields. We need to make sure that these object
+                     * replacers really see all objects that are embedded into compiled code.
+                     */
+                    Object value = SubstrateObjectConstant.asObject(cn.asJavaConstant());
+                    Object replaced = bb.getUniverse().replaceObject(value);
+                    if (value != replaced) {
+                        throw GraalError.shouldNotReachHere("Missed object replacement during graph building: " +
+                                        value + " (" + value.getClass() + ") != " + replaced + " (" + replaced.getClass() + ")");
+                    }
+                }
+            }
+        }
     }
 
     @Override

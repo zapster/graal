@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -66,7 +68,9 @@ public interface HostVM {
 
     boolean platformSupported(ResolvedJavaType type);
 
-    void registerType(AnalysisType newValue);
+    void registerType(AnalysisType newValue, ResolvedJavaType hostType);
+
+    boolean isInitialized(AnalysisType type);
 
     Optional<AnalysisMethod> handleForeignCall(ForeignCallDescriptor foreignCallDescriptor, ForeignCallsProvider foreignCallsProvider);
 
@@ -76,4 +80,13 @@ public interface HostVM {
     String inspectServerContentPath();
 
     void warn(String message);
+
+    /**
+     * Gets the name of the native image being built.
+     *
+     * @return {@code null} if this VM is not being used in the context of building a native image
+     */
+    default String getImageName() {
+        return null;
+    }
 }

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,20 +26,16 @@ package com.oracle.svm.core.code;
 
 import java.util.List;
 
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.EconomicSet;
+import org.graalvm.collections.Equivalence;
 import org.graalvm.compiler.core.common.util.FrequencyEncoder;
 import org.graalvm.compiler.core.common.util.TypeConversion;
 import org.graalvm.compiler.core.common.util.UnsafeArrayTypeWriter;
 import org.graalvm.compiler.graph.NodeSourcePosition;
-import org.graalvm.util.EconomicMap;
-import org.graalvm.util.EconomicSet;
-import org.graalvm.util.Equivalence;
 
 import com.oracle.svm.core.heap.PinnedAllocator;
-import com.oracle.svm.core.meta.SubstrateObjectConstant;
-import com.oracle.svm.core.snippets.KnownIntrinsics;
 import com.oracle.svm.core.util.ByteArrayReader;
-
-import jdk.vm.ci.meta.JavaConstant;
 
 public class DeoptimizationSourcePositionEncoder {
 
@@ -87,7 +85,6 @@ public class DeoptimizationSourcePositionEncoder {
 
         addObjectConstants(sourcePosition.getCaller(), processedPositions);
         objectConstants.addObject(sourcePosition.getMethod());
-        objectConstants.addObject(unwrapReceiver(sourcePosition));
         processedPositions.add(sourcePosition);
     }
 
@@ -125,20 +122,11 @@ public class DeoptimizationSourcePositionEncoder {
         }
 
         encodingBuffer.putUV(callerRelativeOffset);
-        encodingBuffer.putUV(sourcePosition.getBCI());
+        encodingBuffer.putSV(sourcePosition.getBCI());
         encodingBuffer.putUV(objectConstants.getIndex(sourcePosition.getMethod()));
-        encodingBuffer.putUV(objectConstants.getIndex(unwrapReceiver(sourcePosition)));
 
         sourcePositionStartOffsets.put(sourcePosition, startAbsoluteOffset);
         return startAbsoluteOffset;
-    }
-
-    private static Object unwrapReceiver(NodeSourcePosition sourcePosition) {
-        JavaConstant receiver = sourcePosition.getReceiver();
-        if (receiver == null) {
-            return null;
-        }
-        return KnownIntrinsics.convertUnknownValue(SubstrateObjectConstant.asObject(receiver), Object.class);
     }
 
     private Object[] newObjectArray(int length) {
@@ -171,7 +159,6 @@ public class DeoptimizationSourcePositionEncoder {
 
         assert originalPosition.getBCI() == decodedSourcePosition.getBCI();
         assert originalPosition.getMethod().equals(decodedSourcePosition.getMethod());
-        assert unwrapReceiver(originalPosition) == unwrapReceiver(decodedSourcePosition);
         verifySourcePosition(originalPosition.getCaller(), decodedSourcePosition.getCaller());
     }
 }

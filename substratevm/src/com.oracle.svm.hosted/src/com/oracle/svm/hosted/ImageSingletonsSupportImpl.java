@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -91,13 +93,13 @@ public final class ImageSingletonsSupportImpl extends ImageSingletonsSupport {
         <T> void doAdd(Class<T> key, T value) {
             checkKey(key);
             if (value == null) {
-                throw UserError.abort("ImageSingletons do not allow null value");
+                throw UserError.abort("ImageSingletons do not allow null value for key " + key.getTypeName());
             }
 
             Object prevValue = configObjects.putIfAbsent(key, value);
 
             if (prevValue != null) {
-                throw UserError.abort("ImageSingletons.add must not overwrite existing key");
+                throw UserError.abort("ImageSingletons.add must not overwrite existing key " + key.getTypeName() + "\nExisting value: " + prevValue + "\nNew value: " + value);
             }
         }
 

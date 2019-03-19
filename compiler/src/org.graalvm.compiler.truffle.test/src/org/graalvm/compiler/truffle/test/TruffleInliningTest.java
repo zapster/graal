@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,7 +24,21 @@
  */
 package org.graalvm.compiler.truffle.test;
 
-import static org.graalvm.compiler.truffle.TruffleCompilerOptions.overrideOptions;
+import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.ExplodeLoop;
+import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.RootNode;
+import org.graalvm.compiler.truffle.common.TruffleCompilerOptions;
+import org.graalvm.compiler.truffle.runtime.DefaultInliningPolicy;
+import org.graalvm.compiler.truffle.runtime.GraalTruffleRuntime;
+import org.graalvm.compiler.truffle.runtime.OptimizedCallTarget;
+import org.graalvm.compiler.truffle.runtime.OptimizedDirectCallNode;
+import org.graalvm.compiler.truffle.runtime.TruffleInlining;
+import org.graalvm.compiler.truffle.runtime.TruffleInliningDecision;
+import org.graalvm.compiler.truffle.runtime.TruffleInliningPolicy;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,21 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import org.graalvm.compiler.truffle.DefaultInliningPolicy;
-import org.graalvm.compiler.truffle.GraalTruffleRuntime;
-import org.graalvm.compiler.truffle.OptimizedCallTarget;
-import org.graalvm.compiler.truffle.OptimizedDirectCallNode;
-import org.graalvm.compiler.truffle.TruffleCompilerOptions;
-import org.graalvm.compiler.truffle.TruffleInlining;
-import org.graalvm.compiler.truffle.TruffleInliningDecision;
-import org.graalvm.compiler.truffle.TruffleInliningPolicy;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-
-import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.api.nodes.Node;
-import com.oracle.truffle.api.nodes.RootNode;
+import static org.graalvm.compiler.truffle.common.TruffleCompilerOptions.overrideOptions;
 
 public abstract class TruffleInliningTest {
 
@@ -80,6 +82,7 @@ public abstract class TruffleInliningTest {
         }
 
         @Override
+        @ExplodeLoop
         public Object execute(VirtualFrame frame) {
 
             int maxRecursionDepth = (int) frame.getArguments()[0];
@@ -195,7 +198,7 @@ public abstract class TruffleInliningTest {
         private void buildTargets() {
             for (String targetName : targetInstructions.keySet()) {
                 TargetInstruction instruction = targetInstructions.get(targetName);
-                OptimizedCallTarget newTarget = new OptimizedCallTarget(null, new InlineTestRootNode(instruction.size, targetName));
+                OptimizedCallTarget newTarget = GraalTruffleRuntime.getRuntime().createOptimizedCallTarget(null, new InlineTestRootNode(instruction.size, targetName));
                 for (int i = 0; i < instruction.execCount; i++) {
                     newTarget.call(0);
                 }
@@ -256,7 +259,7 @@ public abstract class TruffleInliningTest {
     int countInlines(TruffleInlining decisions, String name) {
         final int[] count = {0};
         traverseDecisions(decisions.getCallSites(), (TruffleInliningDecision d) -> {
-            if (d.isInline() && d.getTarget().toString().equals(name)) {
+            if (d.shouldInline() && d.getTarget().toString().equals(name)) {
                 count[0]++;
             }
         });
@@ -267,7 +270,7 @@ public abstract class TruffleInliningTest {
 
     @Before
     public void before() {
-        scope = overrideOptions(TruffleCompilerOptions.TruffleCompilationThreshold, Integer.MAX_VALUE);
+        scope = overrideOptions(TruffleCompilerOptions.TruffleCompilation, false);
     }
 
     @After

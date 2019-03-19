@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -27,7 +29,7 @@ import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.nodes.RootNode;
 
-@TruffleLanguage.Registration(id = ContextAPITestInternalLanguage.ID, name = ContextAPITestInternalLanguage.ID, version = "1.0", mimeType = ContextAPITestInternalLanguage.ID, internal = true)
+@TruffleLanguage.Registration(id = ContextAPITestInternalLanguage.ID, name = ContextAPITestInternalLanguage.ID, version = "1.0", internal = true)
 public class ContextAPITestInternalLanguage extends TruffleLanguage<Object> {
 
     static final String ID = "ContextAPITestInternalLanguage";
@@ -40,11 +42,6 @@ public class ContextAPITestInternalLanguage extends TruffleLanguage<Object> {
     @Override
     protected CallTarget parse(ParsingRequest request) throws Exception {
         return Truffle.getRuntime().createCallTarget(RootNode.createConstantNode(""));
-    }
-
-    @Override
-    protected Object getLanguageGlobal(Object context) {
-        return null;
     }
 
     @Override

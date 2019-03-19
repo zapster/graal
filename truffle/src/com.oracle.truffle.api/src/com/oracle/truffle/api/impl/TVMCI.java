@@ -24,11 +24,16 @@
  */
 package com.oracle.truffle.api.impl;
 
+import java.util.Objects;
+import java.util.function.Supplier;
+
 import org.graalvm.options.OptionDescriptors;
 import org.graalvm.options.OptionValues;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.impl.Accessor.EngineSupport;
 import com.oracle.truffle.api.impl.Accessor.InstrumentSupport;
@@ -79,9 +84,17 @@ public abstract class TVMCI {
      */
     protected TVMCI() {
         // export only for select packages
-        assert getClass().getPackage().getName().equals("org.graalvm.compiler.truffle") ||
-                        getClass().getPackage().getName().equals("com.oracle.graal.truffle") ||
-                        getClass().getPackage().getName().equals("com.oracle.truffle.api.impl");
+        assert checkCaller();
+    }
+
+    private boolean checkCaller() {
+        final String packageName = getClass().getPackage().getName();
+        assert packageName.equals("org.graalvm.compiler.truffle.runtime") ||
+                        packageName.equals("org.graalvm.graal.truffle") ||
+                        packageName.equals("com.oracle.graal.truffle") ||
+                        packageName.equals("com.oracle.truffle.api.impl") : //
+        TVMCI.class.getName() + " subclass is not in trusted package: " + getClass().getName();
+        return true;
     }
 
     /**
@@ -159,10 +172,10 @@ public abstract class TVMCI {
         return Accessor.nodesAccess().isCloneUninitializedSupported(root);
     }
 
-    protected void onThrowable(RootNode root, Throwable e) {
+    protected void onThrowable(Node callNode, RootCallTarget root, Throwable e, Frame frame) {
         final Accessor.LanguageSupport language = Accessor.languageAccess();
         if (language != null) {
-            language.onThrowable(root, e);
+            language.onThrowable(callNode, root, e, frame);
         }
     }
 
@@ -173,6 +186,10 @@ public abstract class TVMCI {
      */
     protected RootNode cloneUninitialized(RootNode root) {
         return Accessor.nodesAccess().cloneUninitialized(root);
+    }
+
+    protected int adoptChildrenAndCount(RootNode root) {
+        return Accessor.nodesAccess().adoptChildrenAndCount(root);
     }
 
     /**
@@ -206,6 +223,14 @@ public abstract class TVMCI {
         return false;
     }
 
+    @SuppressWarnings("unused")
+    protected void initializeProfile(CallTarget target, Class<?>[] argumentTypes) {
+    }
+
+    protected Object callProfiled(CallTarget target, Object... args) {
+        return target.call(args);
+    }
+
     /**
      * Accessor for {@link TVMCI#Test} class.
      *
@@ -233,4 +258,34 @@ public abstract class TVMCI {
         }
     }
 
+    private static volatile Object fallbackEngineData;
+
+    protected <T> T getOrCreateRuntimeData(RootNode rootNode, Supplier<T> constructor) {
+        Objects.requireNonNull(constructor);
+        final Accessor.Nodes nodesAccess = Accessor.nodesAccess();
+        final EngineSupport engineAccess = Accessor.engineAccess();
+        if (rootNode != null && nodesAccess != null && engineAccess != null) {
+            final Object sourceVM = nodesAccess.getSourceVM(rootNode);
+            if (sourceVM != null) {
+                final T runtimeData = engineAccess.getOrCreateRuntimeData(sourceVM, constructor);
+                if (runtimeData != null) {
+                    return runtimeData;
+                }
+            }
+
+        }
+        return getOrCreateFallbackEngineData(constructor);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T getOrCreateFallbackEngineData(Supplier<T> constructor) {
+        if (fallbackEngineData == null) {
+            fallbackEngineData = constructor.get();
+        }
+        return (T) fallbackEngineData;
+    }
+
+    @SuppressWarnings("unused")
+    protected void reportPolymorphicSpecialize(Node node) {
+    }
 }

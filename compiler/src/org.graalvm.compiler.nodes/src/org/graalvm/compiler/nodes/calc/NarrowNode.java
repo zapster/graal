@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -112,9 +114,9 @@ public final class NarrowNode extends IntegerConvertNode<Narrow, SignExtend> {
                     // ==> sxxx -(sign-extend)-> sssssxxx
                     return SignExtendNode.create(other.getValue(), other.getInputBits(), getResultBits(), view);
                 } else if (other instanceof ZeroExtendNode) {
-                    // xxxx -(zero-extend)-> 00000000 00000xxx -(narrow)-> 0000xxxx
+                    // xxxx -(zero-extend)-> 00000000 0000xxxx -(narrow)-> 0000xxxx
                     // ==> xxxx -(zero-extend)-> 0000xxxx
-                    return new ZeroExtendNode(other.getValue(), other.getInputBits(), getResultBits());
+                    return new ZeroExtendNode(other.getValue(), other.getInputBits(), getResultBits(), ((ZeroExtendNode) other).isInputAlwaysPositive());
                 }
             }
         } else if (forValue instanceof AndNode) {

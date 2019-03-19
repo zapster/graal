@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,7 +26,7 @@ package org.graalvm.compiler.options;
 
 import java.util.Formatter;
 
-import org.graalvm.util.EconomicMap;
+import org.graalvm.collections.EconomicMap;
 
 /**
  * A key for an option. The value for an option is obtained from an {@link OptionValues} object.

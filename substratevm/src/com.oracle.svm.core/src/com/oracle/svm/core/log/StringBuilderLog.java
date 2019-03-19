@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,7 +28,7 @@ package com.oracle.svm.core.log;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.annotate.MustNotAllocate;
+import com.oracle.svm.core.annotate.RestrictHeapAccess;
 import com.oracle.svm.core.annotate.Uninterruptible;
 
 public class StringBuilderLog extends RealLog {
@@ -35,7 +37,7 @@ public class StringBuilderLog extends RealLog {
     public StringBuilderLog() {
     }
 
-    @MustNotAllocate(list = MustNotAllocate.WHITELIST, reason = "This implementation allocates.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true, reason = "This implementation allocates.")
     @Uninterruptible(reason = "Called from uninterruptible code.", calleeMustBe = false)
     @Override
     protected Log rawBytes(CCharPointer bytes, UnsignedWord length) {
@@ -43,6 +45,12 @@ public class StringBuilderLog extends RealLog {
             char currentChar = (char) bytes.read(i);
             stringBuilder.append(currentChar);
         }
+        return this;
+    }
+
+    @Override
+    public Log flush() {
+        // noop
         return this;
     }
 

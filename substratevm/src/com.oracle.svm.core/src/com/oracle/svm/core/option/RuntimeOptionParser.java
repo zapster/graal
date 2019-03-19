@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -29,6 +31,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import org.graalvm.collections.EconomicMap;
 import org.graalvm.compiler.options.OptionDescriptor;
 import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionValues;
@@ -36,9 +39,9 @@ import org.graalvm.compiler.options.OptionsParser;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
-import org.graalvm.util.EconomicMap;
 
 import com.oracle.svm.core.log.Log;
+import com.oracle.svm.core.option.SubstrateOptionsParser.BooleanOptionFormat;
 import com.oracle.svm.core.option.SubstrateOptionsParser.OptionParseResult;
 
 /**
@@ -54,6 +57,11 @@ public final class RuntimeOptionParser {
      * The suggested prefix for all VM options available in an application based on Substrate VM.
      */
     public static final String DEFAULT_OPTION_PREFIX = "-XX:";
+
+    /**
+     * The prefix for Graal style options available in an application based on Substrate VM.
+     */
+    public static final String GRAAL_OPTION_PREFIX = "-Dgraal.";
 
     /**
      * All reachable options.
@@ -93,16 +101,41 @@ public final class RuntimeOptionParser {
     }
 
     /**
-     * Parses all known options that start with the given prefix, and returns the arguments
-     * excluding the parsed options.
+     * Parses {@code args} and sets/updates runtime option values for the elements matching a
+     * runtime option. Arguments for boolean options are expected to be in
+     * {@link BooleanOptionFormat#PLUS_MINUS} format.
+     *
+     * @param args arguments to be parsed
+     * @param optionPrefix prefix for the options
+     * @return elements in {@code args} that do not match any runtime options
+     * @throws IllegalArgumentException if an element in {@code args} matches a runtime option but
+     *             has an invalid format. The parse error is described by
+     *             {@link Throwable#getMessage()}.
      */
     public String[] parse(String[] args, String optionPrefix) {
+        return parse(args, optionPrefix, BooleanOptionFormat.PLUS_MINUS, false);
+    }
+
+    /**
+     * Parses {@code args} and sets/updates runtime option values for the elements matching a
+     * runtime option.
+     *
+     * @param args arguments to be parsed
+     * @param optionPrefix prefix for the options
+     * @param systemExitOnError determines whether to call {@link System#exit(int)} if any element
+     *            in {@code args} matches a runtime option but has an invalid format
+     * @return elements in {@code args} that do not match any runtime options
+     * @throws IllegalArgumentException if an element in {@code args} is invalid and
+     *             {@code systemExitOnError == false}. The parse error is described by
+     *             {@link Throwable#getMessage()}.
+     */
+    public String[] parse(String[] args, String optionPrefix, BooleanOptionFormat booleanOptionFormat, boolean systemExitOnError) {
         int newIdx = 0;
         EconomicMap<OptionKey<?>, Object> values = OptionValues.newOptionMap();
         for (int oldIdx = 0; oldIdx < args.length; oldIdx++) {
             String arg = args[oldIdx];
             if (arg.startsWith(optionPrefix)) {
-                parseOptionAtRuntime(arg, optionPrefix, values);
+                parseOptionAtRuntime(arg, optionPrefix, booleanOptionFormat, values, systemExitOnError);
             } else {
                 assert newIdx <= oldIdx;
                 args[newIdx] = arg;
@@ -123,20 +156,26 @@ public final class RuntimeOptionParser {
     /**
      * Parse one option at runtime and set its value.
      *
-     * If PrintFlags option is found prints all possible options and exits with code 0.
-     *
      * @param arg argument to be parsed
      * @param optionPrefix prefix for the runtime option
+     * @param systemExitOnError determines whether to call {@link System#exit(int)} if {@code arg}
+     *            is an invalid option
+     * @throws IllegalArgumentException if {@code arg} is invalid and
+     *             {@code systemExitOnError == false}. The parse error is described by
+     *             {@link Throwable#getMessage()}.
      */
-    private void parseOptionAtRuntime(String arg, String optionPrefix, EconomicMap<OptionKey<?>, Object> values) {
-        OptionParseResult parseResult = SubstrateOptionsParser.parseOption(sortedOptions, arg.substring(optionPrefix.length()), values);
-        if (parseResult.shouldPrintFlags()) {
-            SubstrateOptionsParser.printFlags(sortedOptions, null, RuntimeOptionValues.singleton(), "runtime", Log.logStream());
+    private void parseOptionAtRuntime(String arg, String optionPrefix, BooleanOptionFormat booleanOptionFormat, EconomicMap<OptionKey<?>, Object> values, boolean systemExitOnError) {
+        OptionParseResult parseResult = SubstrateOptionsParser.parseOption(sortedOptions, arg.substring(optionPrefix.length()), values, optionPrefix, booleanOptionFormat);
+        if (parseResult.printFlags()) {
+            SubstrateOptionsParser.printFlags(parseResult::matchesFlagsRuntime, sortedOptions, optionPrefix, Log.logStream());
             System.exit(0);
         }
         if (!parseResult.isValid()) {
-            Log.logStream().println("error: " + parseResult.getError());
-            System.exit(1);
+            if (systemExitOnError) {
+                Log.logStream().println("error: " + parseResult.getError());
+                System.exit(1);
+            }
+            throw new IllegalArgumentException(parseResult.getError());
         }
     }
 

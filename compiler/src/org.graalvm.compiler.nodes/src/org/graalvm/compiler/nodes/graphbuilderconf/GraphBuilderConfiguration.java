@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -228,8 +230,7 @@ public class GraphBuilderConfiguration {
     }
 
     protected GraphBuilderConfiguration(boolean eagerResolving, boolean unresolvedIsError, BytecodeExceptionMode bytecodeExceptionMode, boolean omitAssertions, boolean insertFullInfopoints,
-                    boolean trackNodeSourcePosition, ResolvedJavaType[] skippedExceptionTypes,
-                    Plugins plugins) {
+                    boolean trackNodeSourcePosition, ResolvedJavaType[] skippedExceptionTypes, Plugins plugins) {
         this.eagerResolving = eagerResolving;
         this.unresolvedIsError = unresolvedIsError;
         this.bytecodeExceptionMode = bytecodeExceptionMode;

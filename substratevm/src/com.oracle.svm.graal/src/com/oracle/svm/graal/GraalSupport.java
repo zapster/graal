@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,17 +24,15 @@
  */
 package com.oracle.svm.graal;
 
-import static org.graalvm.compiler.debug.DebugContext.DEFAULT_LOG_STREAM;
-
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-
+import com.oracle.graal.pointsto.meta.AnalysisType;
+import com.oracle.svm.core.config.ConfigurationValues;
+import com.oracle.svm.core.graal.code.amd64.SubstrateAMD64Backend;
+import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
+import com.oracle.svm.core.graal.meta.SharedRuntimeMethod;
+import com.oracle.svm.core.option.RuntimeOptionValues;
+import com.oracle.svm.graal.meta.SubstrateMethod;
+import com.oracle.svm.hosted.FeatureImpl.DuringAnalysisAccessImpl;
+import org.graalvm.collections.EconomicMap;
 import org.graalvm.compiler.core.CompilationWrapper.ExceptionAction;
 import org.graalvm.compiler.core.common.CompilationIdentifier;
 import org.graalvm.compiler.core.gen.NodeMatchRules;
@@ -62,16 +62,17 @@ import org.graalvm.nativeimage.Feature.CompilationAccess;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
-import org.graalvm.util.EconomicMap;
 
-import com.oracle.graal.pointsto.meta.AnalysisType;
-import com.oracle.svm.core.config.ConfigurationValues;
-import com.oracle.svm.core.graal.code.amd64.SubstrateAMD64Backend;
-import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
-import com.oracle.svm.core.graal.meta.SharedRuntimeMethod;
-import com.oracle.svm.core.option.RuntimeOptionValues;
-import com.oracle.svm.graal.meta.SubstrateMethod;
-import com.oracle.svm.hosted.FeatureImpl.DuringAnalysisAccessImpl;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+
+import static org.graalvm.compiler.debug.DebugContext.DEFAULT_LOG_STREAM;
 
 /**
  * Holds data that is pre-computed during native image generation and accessed at run time during a
@@ -249,16 +250,16 @@ public class GraalSupport {
         return get().methodsToCompile;
     }
 
-    public static EncodedGraph encodedGraph(SharedRuntimeMethod method) {
+    public static EncodedGraph encodedGraph(SharedRuntimeMethod method, boolean trackNodeSourcePosition) {
         int startOffset = method.getEncodedGraphStartOffset();
         if (startOffset == -1) {
             return null;
         }
-        return new EncodedGraph(get().graphEncoding, startOffset, get().graphObjects, get().graphNodeTypes, null, null);
+        return new EncodedGraph(get().graphEncoding, startOffset, get().graphObjects, get().graphNodeTypes, null, null, null, false, trackNodeSourcePosition);
     }
 
     public static StructuredGraph decodeGraph(DebugContext debug, String name, CompilationIdentifier compilationId, SharedRuntimeMethod method) {
-        EncodedGraph encodedGraph = encodedGraph(method);
+        EncodedGraph encodedGraph = encodedGraph(method, false); // XXX
         if (encodedGraph == null) {
             return null;
         }

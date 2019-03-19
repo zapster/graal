@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -25,25 +27,30 @@ package com.oracle.svm.core.c.function;
 import org.graalvm.nativeimage.Isolate;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
+import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.word.WordBase;
+import org.graalvm.word.WordFactory;
+
+import com.oracle.svm.core.annotate.Uninterruptible;
 
 /**
  * Advanced entry and leave actions for entry point methods annotated with {@link CEntryPoint}.
- * These are an alternative to automatically entering and leaving a context passed as a parameter
- * and also enable creating an isolate or attaching a thread on demand.
+ * These methods are an alternative to automatically entering and leaving a context that is passed
+ * as a parameter, and they also enable creating an isolate or attaching a method on demand. The
+ * methods of this class must be called from the {@link CEntryPointOptions#prologue() prologue} or
+ * {@link CEntryPointOptions#epilogue() epilogue} code of the entry point, or, if the entry point
+ * method is annotated with {@link Uninterruptible}, from that method itself.
  *
- * A method that is annotated with {@link CEntryPoint} may explicitly call one of the enter* methods
- * (such as {@link #enterCreateIsolate(CEntryPointCreateIsolateParameters)} as the first statement
- * to set up its execution context. A method can additionally choose to call one of the leave*
- * methods before each return. If no leave* methods are called, the leave action defaults to
- * {@link CEntryPointActions#leave()}.
+ * @see CEntryPointSetup
  */
 public final class CEntryPointActions {
     private CEntryPointActions() {
     }
 
     /**
-     * Creates a new isolate on entry.
+     * Creates a new isolate, then {@linkplain #enterAttachThread(Isolate) attaches} the current
+     * thread to the created isolate, creating a context for the thread in the isolate, and then
+     * enters that context before returning.
      *
      * @param params initialization parameters.
      * @return 0 on success, otherwise non-zero.
@@ -52,9 +59,9 @@ public final class CEntryPointActions {
 
     /**
      * Creates a context for the current thread in the specified existing isolate, then enters that
-     * context.
+     * context. If the thread has already been attached, this does not cause the operation to fail.
      *
-     * @param isolate existing virtual machine.
+     * @param isolate an existing isolate.
      * @return 0 on success, otherwise non-zero.
      */
     public static native int enterAttachThread(Isolate isolate);
@@ -69,7 +76,8 @@ public final class CEntryPointActions {
     public static native int enter(IsolateThread thread);
 
     /**
-     * Enters an existing context for the current thread that has been created in the given isolate.
+     * Enters an existing context for the current thread that has already been created in the given
+     * isolate.
      *
      * @param isolate isolate in which a context for the current thread exists.
      * @return 0 on success, otherwise non-zero.
@@ -124,11 +132,26 @@ public final class CEntryPointActions {
     public static native int leaveDetachThread();
 
     /**
-     * Leaves the current thread's current context, then shuts down all other threads in the
-     * context's isolate and discards the isolate entirely.
+     * Leaves the current thread's current context, then waits for all attached threads in the
+     * context's isolate to detach and discards that isolate entirely.
      *
      * @return 0 on success, otherwise non-zero.
      */
     public static native int leaveTearDownIsolate();
 
+    /**
+     * Fail in a fatal manner, such as by terminating the executing process. This method is intended
+     * for situations in which recovery is not possible, or in which reporting a severe error in any
+     * other way is not possible. This method does not return.
+     *
+     * @param code An integer representing the cause (should be non-zero by convention).
+     * @param message A message describing the cause (may be omitted by passing
+     *            {@link WordFactory#nullPointer() null}).
+     */
+    public static native void failFatally(int code, CCharPointer message);
+
+    /**
+     * @return whether the current thread is attached to the specified isolate.
+     */
+    public static native boolean isCurrentThreadAttachedTo(Isolate isolate);
 }

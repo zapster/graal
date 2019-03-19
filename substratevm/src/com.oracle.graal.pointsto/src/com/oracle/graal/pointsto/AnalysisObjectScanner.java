@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -94,7 +96,7 @@ public class AnalysisObjectScanner extends ObjectScanner {
     }
 
     @Override
-    public void forNullArrayElement(JavaConstant array, AnalysisType arrayType) {
+    public void forNullArrayElement(JavaConstant array, AnalysisType arrayType, int elementIndex) {
         ArrayElementsTypeFlow arrayObjElementsFlow = getArrayElementsFlow(array, arrayType);
         if (!arrayObjElementsFlow.getState().canBeNull()) {
             /* Signal that the constant array can contain null. */
@@ -103,7 +105,7 @@ public class AnalysisObjectScanner extends ObjectScanner {
     }
 
     @Override
-    public void forNonNullArrayElement(JavaConstant array, AnalysisType arrayType, JavaConstant elementConstant, AnalysisType elementType) {
+    public void forNonNullArrayElement(JavaConstant array, AnalysisType arrayType, JavaConstant elementConstant, AnalysisType elementType, int elementIndex) {
         assert elementType.isInstantiated();
         /*
          * *ALL* constants are scanned after each analysis iteration, thus the elementType will

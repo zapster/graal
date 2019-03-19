@@ -24,6 +24,17 @@
  */
 package com.oracle.truffle.tools.profiler;
 
+import java.io.Closeable;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
+
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.instrumentation.EventBinding;
@@ -35,18 +46,9 @@ import com.oracle.truffle.api.instrumentation.StandardTags.RootTag;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument.Env;
 import com.oracle.truffle.api.nodes.NodeCost;
-import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
-import com.oracle.truffle.api.vm.PolyglotEngine;
 import com.oracle.truffle.tools.profiler.impl.CPUTracerInstrument;
 import com.oracle.truffle.tools.profiler.impl.ProfilerToolFactory;
-
-import java.io.Closeable;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Implementation of a tracing based profiler for {@linkplain com.oracle.truffle.api.TruffleLanguage
@@ -56,8 +58,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * The tracer counts how many times each of the elements of interest (e.g. functions, statements,
  * etc.) are executed.
  * <p>
- * Usage example: {@link CPUTracerSnippets#example}
- * 
+ * Usage example: {@codesnippet CPUTracerSnippets#example}
+ *
  * @since 0.30
  */
 public final class CPUTracer implements Closeable {
@@ -85,9 +87,9 @@ public final class CPUTracer implements Closeable {
      *
      * @param engine the engine to find debugger for
      * @return an instance of associated {@link CPUTracer}
-     * @since 0.30
+     * @since 1.0
      */
-    public static CPUTracer find(PolyglotEngine engine) {
+    public static CPUTracer find(Engine engine) {
         return CPUTracerInstrument.getTracer(engine);
     }
 
@@ -139,7 +141,7 @@ public final class CPUTracer implements Closeable {
      * @return All the payloads the tracer has gathered as an unmodifiable collection
      * @since 0.30
      */
-    public synchronized Collection<Payload> getPayloads() {
+    public Collection<Payload> getPayloads() {
         return Collections.unmodifiableCollection(payloadMap.values());
     }
 
@@ -148,21 +150,18 @@ public final class CPUTracer implements Closeable {
      *
      * @since 0.30
      */
-    public synchronized void clearData() {
+    public void clearData() {
         payloadMap.clear();
     }
 
-    private synchronized Payload getCounter(EventContext context) {
+    private Payload getCounter(EventContext context) {
         SourceSection sourceSection = context.getInstrumentedSourceSection();
-        Payload payload = payloadMap.get(sourceSection);
-        if (payload == null) {
-            payload = new Payload(new SourceLocation(env.getInstrumenter(), context));
-            Payload otherPayload = payloadMap.putIfAbsent(sourceSection, payload);
-            if (otherPayload != null) {
-                payload = otherPayload;
+        return payloadMap.computeIfAbsent(sourceSection, new Function<SourceSection, Payload>() {
+            @Override
+            public Payload apply(SourceSection section) {
+                return new Payload(new SourceLocation(CPUTracer.this.env.getInstrumenter(), context));
             }
-        }
-        return payload;
+        });
     }
 
     private synchronized void verifyConfigAllowed() {
@@ -188,7 +187,7 @@ public final class CPUTracer implements Closeable {
         if (f == null) {
             f = DEFAULT_FILTER;
         }
-        this.activeBinding = env.getInstrumenter().attachFactory(f, new ExecutionEventNodeFactory() {
+        this.activeBinding = env.getInstrumenter().attachExecutionEventFactory(f, new ExecutionEventNodeFactory() {
             @Override
             public ExecutionEventNode create(EventContext context) {
                 return new CounterNode(getCounter(context));
@@ -313,13 +312,10 @@ class CPUTracerSnippets {
     public void example() {
         // @formatter:off
         // BEGIN: CPUTracerSnippets#example
-        PolyglotEngine engine = PolyglotEngine.newBuilder().build();
-        CPUTracer tracer = CPUTracer.find(engine);
+        Context context = Context.create();
+        CPUTracer tracer = CPUTracer.find(context.getEngine());
         tracer.setCollecting(true);
-        Source someCode = Source.newBuilder("...").
-                mimeType("...").
-                name("example").build();
-        engine.eval(someCode);
+        context.eval("...", "...");
         tracer.setCollecting(false);
         tracer.close();
         // Read information about execution counts of elements.

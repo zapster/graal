@@ -40,13 +40,12 @@
  */
 package com.oracle.truffle.sl;
 
-import java.math.BigInteger;
-
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleException;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.NodeInfo;
 import com.oracle.truffle.api.source.SourceSection;
+import com.oracle.truffle.sl.runtime.SLBigNumber;
 import com.oracle.truffle.sl.runtime.SLContext;
 import com.oracle.truffle.sl.runtime.SLFunction;
 import com.oracle.truffle.sl.runtime.SLNull;
@@ -66,6 +65,12 @@ public class SLException extends RuntimeException implements TruffleException {
     public SLException(String message, Node location) {
         super(message);
         this.location = location;
+    }
+
+    @SuppressWarnings("sync-override")
+    @Override
+    public Throwable fillInStackTrace() {
+        return null;
     }
 
     public Node getLocation() {
@@ -103,7 +108,7 @@ public class SLException extends RuntimeException implements TruffleException {
             Object value = values[i];
             result.append(sep);
             sep = ", ";
-            if (value instanceof Long || value instanceof BigInteger) {
+            if (value instanceof Long || value instanceof SLBigNumber) {
                 result.append("Number ").append(value);
             } else if (value instanceof Boolean) {
                 result.append("Boolean ").append(value);

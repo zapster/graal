@@ -36,8 +36,8 @@ import org.junit.Test;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.InstrumentInfo;
-import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.Scope;
+import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.debug.Debugger;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.api.interop.ForeignAccess;
@@ -46,7 +46,6 @@ import com.oracle.truffle.api.interop.MessageResolution;
 import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
-import com.oracle.truffle.api.interop.java.JavaInterop;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
@@ -56,7 +55,7 @@ public class DebuggerRetrievalTest {
 
     @Test
     public void testFromLanguage() {
-        Value debuggerValue = Context.create(LanguageThatNeedsDebugger.ID).lookup(LanguageThatNeedsDebugger.ID, "debugger");
+        Value debuggerValue = Context.create(LanguageThatNeedsDebugger.ID).getBindings(LanguageThatNeedsDebugger.ID).getMember("debugger");
         Assert.assertTrue(debuggerValue.asBoolean());
     }
 
@@ -67,11 +66,10 @@ public class DebuggerRetrievalTest {
         Assert.assertTrue(InstrumentThatNeedsDebugger.haveDebugger);
     }
 
-    @TruffleLanguage.Registration(id = LanguageThatNeedsDebugger.ID, mimeType = LanguageThatNeedsDebugger.MIME_TYPE, name = "Language That Needs Debugger", version = "1.0")
+    @TruffleLanguage.Registration(id = LanguageThatNeedsDebugger.ID, name = "Language That Needs Debugger", version = "1.0")
     public static class LanguageThatNeedsDebugger extends TruffleLanguage<Debugger> {
 
         static final String ID = "language-that-needs-debugger";
-        static final String MIME_TYPE = "application/x-language-that-needs-debugger";
 
         @Override
         protected Debugger createContext(TruffleLanguage.Env env) {
@@ -79,11 +77,6 @@ public class DebuggerRetrievalTest {
             Debugger debugger = env.lookup(debuggerInfo, Debugger.class);
             Assert.assertEquals(debugger, Debugger.find(env));
             return debugger;
-        }
-
-        @Override
-        protected Object getLanguageGlobal(Debugger context) {
-            return null;
         }
 
         @Override
@@ -114,15 +107,22 @@ public class DebuggerRetrievalTest {
                 @Resolve(message = "KEY_INFO")
                 abstract static class VarsMapInfoNode extends Node {
 
-                    private static final int EXISTING_INFO = KeyInfo.newBuilder().setReadable(true).build();
-
                     @SuppressWarnings("unused")
                     public Object access(TopScopeObject ts, String name) {
                         if ("debugger".equals(name)) {
-                            return EXISTING_INFO;
+                            return KeyInfo.READABLE;
                         } else {
                             return 0;
                         }
+                    }
+                }
+
+                @Resolve(message = "HAS_KEYS")
+                abstract static class HasKeysNode extends Node {
+
+                    @SuppressWarnings("unused")
+                    public Object access(TopScopeObject ts) {
+                        return true;
                     }
                 }
 
@@ -132,7 +132,7 @@ public class DebuggerRetrievalTest {
                     @CompilerDirectives.TruffleBoundary
                     public Object access(TopScopeObject ts, String name) {
                         if ("debugger".equals(name)) {
-                            return JavaInterop.asTruffleObject(ts.context != null);
+                            return ts.context != null;
                         } else {
                             throw UnknownIdentifierException.raise(name);
                         }

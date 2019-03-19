@@ -1,10 +1,12 @@
 /*
- * Copyright (c) 2012, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -50,6 +52,7 @@ import static jdk.vm.ci.amd64.AMD64.valueRegistersSSE;
 
 import java.util.ArrayList;
 
+import com.oracle.svm.core.OS;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.graal.meta.SubstrateRegisterConfig;
@@ -80,6 +83,7 @@ public class SubstrateAMD64RegisterConfig implements SubstrateRegisterConfig {
     }
 
     private final TargetDescription target;
+    private final int nativeParamsStackOffset;
     private final RegisterArray generalParameterRegs;
     private final RegisterArray xmmParameterRegs;
     private final RegisterArray allocatableRegs;
@@ -93,19 +97,41 @@ public class SubstrateAMD64RegisterConfig implements SubstrateRegisterConfig {
         this.target = target;
         this.metaAccess = metaAccess;
 
-        // This is the Linux 64-bit ABI for parameters.
-        generalParameterRegs = new RegisterArray(rdi, rsi, rdx, rcx, r8, r9);
-        xmmParameterRegs = new RegisterArray(xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7);
+        if (OS.getCurrent() == OS.WINDOWS) {
+            // This is the Windows 64-bit ABI for parameters.
+            generalParameterRegs = new RegisterArray(rcx, rdx, r8, r9);
+            xmmParameterRegs = new RegisterArray(xmm0, xmm1, xmm2, xmm3);
 
-        heapBaseRegister = SubstrateOptions.UseHeapBaseRegister.getValue() ? r14 : null;
-        threadRegister = SubstrateOptions.MultiThreaded.getValue() ? r15 : null;
+            // Windows reserves space on the stack for first 4 native parameters
+            // even though they are passed in registers.
+            nativeParamsStackOffset = 4 * target.wordSize;
 
-        ArrayList<Register> regs = new ArrayList<>(valueRegistersSSE.asList());
-        regs.remove(rsp);
-        regs.remove(rbp);
-        regs.remove(heapBaseRegister);
-        regs.remove(threadRegister);
-        allocatableRegs = new RegisterArray(regs);
+            heapBaseRegister = SubstrateOptions.UseHeapBaseRegister.getValue() ? r14 : null;
+            threadRegister = SubstrateOptions.MultiThreaded.getValue() ? r15 : null;
+
+            ArrayList<Register> regs = new ArrayList<>(valueRegistersSSE.asList());
+            regs.remove(rsp);
+            regs.remove(rbp);
+            regs.remove(heapBaseRegister);
+            regs.remove(threadRegister);
+            allocatableRegs = new RegisterArray(regs);
+        } else {
+            // This is the Linux 64-bit ABI for parameters.
+            generalParameterRegs = new RegisterArray(rdi, rsi, rdx, rcx, r8, r9);
+            xmmParameterRegs = new RegisterArray(xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7);
+
+            nativeParamsStackOffset = 0;
+
+            heapBaseRegister = SubstrateOptions.UseHeapBaseRegister.getValue() ? r14 : null;
+            threadRegister = SubstrateOptions.MultiThreaded.getValue() ? r15 : null;
+
+            ArrayList<Register> regs = new ArrayList<>(valueRegistersSSE.asList());
+            regs.remove(rsp);
+            regs.remove(rbp);
+            regs.remove(heapBaseRegister);
+            regs.remove(threadRegister);
+            allocatableRegs = new RegisterArray(regs);
+        }
 
         switch (config) {
             case NORMAL:
@@ -117,7 +143,11 @@ public class SubstrateAMD64RegisterConfig implements SubstrateRegisterConfig {
                  * rbp must be last in the list, so that it gets the location closest to the saved
                  * return address.
                  */
-                calleeSaveRegisters = new RegisterArray(rbx, r12, r13, r14, r15, rbp);
+                if (OS.getCurrent() == OS.WINDOWS) {
+                    calleeSaveRegisters = new RegisterArray(rbx, rdi, rsi, r12, r13, r14, r15, rbp);
+                } else {
+                    calleeSaveRegisters = new RegisterArray(rbx, r12, r13, r14, r15, rbp);
+                }
                 break;
 
             default:
@@ -208,7 +238,7 @@ public class SubstrateAMD64RegisterConfig implements SubstrateRegisterConfig {
          * We have to reserve a slot between return address and outgoing parameters for the deopt
          * frame handle. Exception: calls to native methods.
          */
-        int currentStackOffset = (type.nativeABI ? 0 : target.wordSize);
+        int currentStackOffset = (type.nativeABI ? nativeParamsStackOffset : target.wordSize);
 
         JavaKind[] kinds = new JavaKind[locations.length];
         for (int i = 0; i < parameterTypes.length; i++) {
@@ -248,9 +278,7 @@ public class SubstrateAMD64RegisterConfig implements SubstrateRegisterConfig {
 
         JavaKind returnKind = returnType == null ? JavaKind.Void : ObjectLayout.getCallSignatureKind(isEntryPoint, (ResolvedJavaType) returnType, metaAccess, target);
         AllocatableValue returnLocation = returnKind == JavaKind.Void ? Value.ILLEGAL : getReturnRegister(returnKind).asValue(valueKindFactory.getValueKind(returnKind.getStackKind()));
-        SubstrateCallingConvention callingConvention = new SubstrateCallingConvention(currentStackOffset, returnLocation, locations);
-        callingConvention.setArgumentStorageKinds(kinds);
-        return callingConvention;
+        return new SubstrateCallingConvention(type, kinds, currentStackOffset, returnLocation, locations);
     }
 
     @Override

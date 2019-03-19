@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -47,6 +49,13 @@ public @interface CEntryPointOptions {
         @Override
         public String apply(String name) {
             return SubstrateOptions.EntryPointNamePrefix.getValue() + name;
+        }
+    }
+
+    final class UnchangedNameTransformation implements Function<String, String> {
+        @Override
+        public String apply(String name) {
+            return name;
         }
     }
 
@@ -130,13 +139,10 @@ public @interface CEntryPointOptions {
     Class<?> epilogue() default LeaveEpilogue.class;
 
     /**
-     * Special placeholder class for {@link #exceptionHandler()} to print the caught exception and
-     * terminate the execution of the process.
+     * @deprecated Moved to {@link CEntryPoint#exceptionHandler()}
      */
-    final class FatalExceptionHandler {
-    }
-
-    Class<?> exceptionHandler() default FatalExceptionHandler.class;
+    @Deprecated
+    Class<?> exceptionHandler() default CEntryPoint.FatalExceptionHandler.class;
 
     enum Publish {
         /**

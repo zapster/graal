@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,6 +24,7 @@
  */
 package com.oracle.svm.hosted;
 
+import java.lang.reflect.Modifier;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -32,6 +35,7 @@ import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration;
 import org.graalvm.compiler.nodes.graphbuilderconf.IntrinsicContext;
 import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.phases.OptimisticOptimizations;
+import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.c.function.CFunction;
@@ -50,9 +54,12 @@ import com.oracle.svm.core.annotate.UnknownPrimitiveField;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallLinkage;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.hub.DynamicHub;
+import com.oracle.svm.core.jdk.JavaLangSubstitutions.ClassLoaderSupport;
+import com.oracle.svm.core.jdk.Target_java_lang_ClassLoader;
 import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.hosted.meta.HostedType;
 import com.oracle.svm.hosted.phases.AnalysisGraphBuilderPhase;
+import com.oracle.svm.hosted.substitute.UnsafeAutomaticSubstitutionProcessor;
 
 import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
@@ -101,6 +108,11 @@ public final class SVMHost implements HostVM {
     }
 
     @Override
+    public String getImageName() {
+        return NativeImageOptions.Name.getValue(options);
+    }
+
+    @Override
     public boolean isRelocatedPointer(Object originalObject) {
         return originalObject instanceof RelocatedPointer;
     }
@@ -143,12 +155,26 @@ public final class SVMHost implements HostVM {
     }
 
     @Override
-    public void registerType(AnalysisType analysisType) {
+    public void registerType(AnalysisType analysisType, ResolvedJavaType hostType) {
+        ClassInitializationFeature.maybeInitializeHosted(analysisType);
+
         DynamicHub hub = createHub(analysisType);
         Object existing = typeToHub.put(analysisType, hub);
         assert existing == null;
         existing = hubToType.put(hub, analysisType);
         assert existing == null;
+
+        /* Compute the automatic substitutions. */
+        UnsafeAutomaticSubstitutionProcessor automaticSubstitutions = ImageSingletons.lookup(UnsafeAutomaticSubstitutionProcessor.class);
+        automaticSubstitutions.computeSubstitutions(hostType, options);
+    }
+
+    @Override
+    public boolean isInitialized(AnalysisType type) {
+        boolean shouldInitializeAtRuntime = ClassInitializationFeature.shouldInitializeAtRuntime(type);
+        assert shouldInitializeAtRuntime || type.getWrapped().isInitialized() : "Types that are not marked for runtime initializations must have been initialized";
+
+        return !shouldInitializeAtRuntime;
     }
 
     @Override
@@ -188,7 +214,12 @@ public final class SVMHost implements HostVM {
         if (type.isArray()) {
             componentHub = dynamicHub(type.getComponentType());
         }
-        return new DynamicHub(type.toClassName(), type.isLocal(), superHub, componentHub, type.getSourceFileName());
+        Class<?> javaClass = type.getJavaClass();
+        boolean isStatic = Modifier.isStatic(javaClass.getModifiers());
+        boolean isSynthetic = javaClass.isSynthetic();
+
+        Target_java_lang_ClassLoader hubClassLoader = ClassLoaderSupport.getInstance().getOrCreate(javaClass.getClassLoader());
+        return new DynamicHub(type.toClassName(), type.isLocal(), superHub, componentHub, type.getSourceFileName(), isStatic, isSynthetic, hubClassLoader);
     }
 
     public static boolean isUnknownClass(ResolvedJavaType resolvedJavaType) {

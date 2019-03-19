@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,9 +26,11 @@ package org.graalvm.compiler.nodes;
 
 import java.util.List;
 
+import org.graalvm.collections.EconomicSet;
 import org.graalvm.compiler.graph.NodeClass;
 
 import jdk.vm.ci.meta.Assumptions;
+import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 /**
@@ -34,7 +38,7 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
  * {@link GraphEncoder} for a description of the encoding format. Use {@link GraphDecoder} for
  * decoding.
  */
-public class EncodedGraph {
+public final class EncodedGraph {
 
     private final byte[] encoding;
     private final int startOffset;
@@ -42,6 +46,9 @@ public class EncodedGraph {
     private final NodeClass<?>[] types;
     private final Assumptions assumptions;
     private final List<ResolvedJavaMethod> inlinedMethods;
+    private final boolean trackNodeSourcePosition;
+    private final EconomicSet<ResolvedJavaField> fields;
+    private final boolean hasUnsafeAccess;
 
     /**
      * The "table of contents" of the encoded graph, i.e., the mapping from orderId numbers to the
@@ -49,13 +56,22 @@ public class EncodedGraph {
      */
     protected int[] nodeStartOffsets;
 
-    public EncodedGraph(byte[] encoding, int startOffset, Object[] objects, NodeClass<?>[] types, Assumptions assumptions, List<ResolvedJavaMethod> inlinedMethods) {
+    public EncodedGraph(byte[] encoding, int startOffset, Object[] objects, NodeClass<?>[] types, StructuredGraph sourceGraph) {
+        this(encoding, startOffset, objects, types, sourceGraph.getAssumptions(), sourceGraph.getMethods(), sourceGraph.getFields(), sourceGraph.hasUnsafeAccess(),
+                        sourceGraph.trackNodeSourcePosition());
+    }
+
+    public EncodedGraph(byte[] encoding, int startOffset, Object[] objects, NodeClass<?>[] types, Assumptions assumptions, List<ResolvedJavaMethod> inlinedMethods,
+                    EconomicSet<ResolvedJavaField> fields, boolean hasUnsafeAccess, boolean trackNodeSourcePosition) {
         this.encoding = encoding;
         this.startOffset = startOffset;
         this.objects = objects;
         this.types = types;
         this.assumptions = assumptions;
         this.inlinedMethods = inlinedMethods;
+        this.trackNodeSourcePosition = trackNodeSourcePosition;
+        this.fields = fields;
+        this.hasUnsafeAccess = hasUnsafeAccess;
     }
 
     public byte[] getEncoding() {
@@ -80,5 +96,17 @@ public class EncodedGraph {
 
     public List<ResolvedJavaMethod> getInlinedMethods() {
         return inlinedMethods;
+    }
+
+    public boolean trackNodeSourcePosition() {
+        return trackNodeSourcePosition;
+    }
+
+    public EconomicSet<ResolvedJavaField> getFields() {
+        return fields;
+    }
+
+    public boolean hasUnsafeAccess() {
+        return hasUnsafeAccess;
     }
 }

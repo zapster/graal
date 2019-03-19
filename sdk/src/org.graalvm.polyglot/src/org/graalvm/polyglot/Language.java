@@ -24,6 +24,8 @@
  */
 package org.graalvm.polyglot;
 
+import java.util.Set;
+
 import org.graalvm.options.OptionDescriptor;
 import org.graalvm.options.OptionDescriptors;
 import org.graalvm.polyglot.impl.AbstractPolyglotImpl.AbstractLanguageImpl;
@@ -33,8 +35,7 @@ import org.graalvm.polyglot.impl.AbstractPolyglotImpl.AbstractLanguageImpl;
  * to the language's meta-data, including the language's {@link #getId() id}, {@link #getName()
  * name}, {@link #getVersion() version} and {@link #getOptions() options}.
  *
- * @see Engine#getLanguages() To return a map of all installed languages
- *
+ * @see Engine#getLanguages()
  * @since 1.0
  */
 public final class Language {
@@ -97,17 +98,6 @@ public final class Language {
     }
 
     /**
-     * Returns <code>true</code> if this language object represents the Java host language.
-     *
-     * @since 1.0
-     * @deprecated no replacement
-     */
-    @Deprecated
-    public boolean isHost() {
-        return impl.isHost();
-    }
-
-    /**
      * Returns the set of options provided by this language. Option values for languages can either
      * be provided while building an {@link Engine.Builder#option(String, String) engine} or a
      * {@link Context.Builder#option(String, String) context}. The option descriptor
@@ -119,8 +109,27 @@ public final class Language {
         return impl.getOptions();
     }
 
-    Engine getEngine() {
-        return impl.getEngineAPI();
+    /**
+     * Returns the default MIME type that is in use by a language. The default MIME type specifies
+     * whether a source is loaded as character or binary based source by default. Returns
+     * <code>null</code> if the language does not specify a default MIME type.
+     *
+     * @see Source#hasBytes()
+     * @see Source#getMimeType()
+     * @since 1.0
+     */
+    public String getDefaultMimeType() {
+        return impl.getDefaultMimeType();
+    }
+
+    /**
+     * Returns the MIME types supported by this language.
+     *
+     * @see Source#getMimeType()
+     * @since 1.0
+     */
+    public Set<String> getMimeTypes() {
+        return impl.getMimeTypes();
     }
 
 }

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,7 +24,7 @@
  */
 package com.oracle.svm.core.heap;
 
-import com.oracle.svm.core.annotate.MustNotAllocate;
+import com.oracle.svm.core.annotate.RestrictHeapAccess;
 
 /**
  * The abstract base class for CollectionWatchers. Clients sub-class this provide their own
@@ -47,7 +49,7 @@ public abstract class CollectionWatcher extends AllocationFreeList.Element<Colle
      * A collection has been requested, so space is not available when this method is called. This
      * method runs inside the collection VMOperation, so taking locks is not allowed.
      */
-    @MustNotAllocate(reason = "Must not allocate before a collection.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate before a collection.")
     public abstract void beforeCollection();
 
     /**
@@ -56,7 +58,7 @@ public abstract class CollectionWatcher extends AllocationFreeList.Element<Colle
      * A collection has finished, but allocation is still disallowed. This method is run inside the
      * collection VMOperation, so taking locks is not allowed.
      */
-    @MustNotAllocate(reason = "Must not allocate after a collection.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate after a collection.")
     public abstract void afterCollection();
 
     /**

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -36,18 +38,18 @@ public class NodeExecutionData {
     private final NodeChildData child;
     private final String name;
     private final int index;
-    private final int childIndex;
+    private final int childArrayIndex;
     private final List<TypeMirror> typeRestrictions = new ArrayList<>();
 
-    public NodeExecutionData(NodeChildData child, int index, int childIndex) {
+    public NodeExecutionData(NodeChildData child, int index, int childArrayIndex) {
         this.child = child;
         this.index = index;
-        this.childIndex = childIndex;
+        this.childArrayIndex = childArrayIndex;
         this.name = createName();
     }
 
     private String createName() {
-        return child != null ? createName(child.getName(), childIndex) : ("arg" + index);
+        return child != null ? createName(child.getName(), childArrayIndex) : ("arg" + index);
     }
 
     public int getIndex() {
@@ -59,6 +61,9 @@ public class NodeExecutionData {
     }
 
     public TypeMirror getNodeType() {
+        if (child == null) {
+            return null;
+        }
         TypeMirror type;
         if (child.getCardinality() == Cardinality.MANY && child.getNodeType().getKind() == TypeKind.ARRAY) {
             type = ((ArrayType) child.getNodeType()).getComponentType();
@@ -76,16 +81,16 @@ public class NodeExecutionData {
         return child;
     }
 
-    public int getChildIndex() {
-        return childIndex;
+    public int getChildArrayIndex() {
+        return childArrayIndex;
     }
 
-    public boolean isIndexed() {
-        return childIndex > -1;
+    public boolean hasChildArrayIndex() {
+        return childArrayIndex > -1;
     }
 
     public String getIndexedName() {
-        return createIndexedName(child, childIndex);
+        return createIndexedName(child, childArrayIndex);
     }
 
     public static String createIndexedName(NodeChildData child, int varArgsIndex) {

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -628,8 +630,7 @@ public abstract class TypeState {
             }
 
             /* Create the types bit set by adding the s2 type to avoid walking the objects. */
-            BitSet typesBitSet = (BitSet) s1.typesBitSet.clone();
-            typesBitSet.set(s2.exactType().getId());
+            BitSet typesBitSet = TypeStateUtils.set(s1.typesBitSet, s2.exactType().getId());
             int properties = bb.analysisPolicy().makePopertiesForUnion(s1, s2);
 
             MultiTypeState result = new MultiTypeState(bb, resultCanBeNull, properties, typesBitSet, resultObjects);

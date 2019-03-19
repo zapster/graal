@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,7 +24,7 @@
  */
 package com.oracle.svm.core.heap;
 
-import com.oracle.svm.core.annotate.MustNotAllocate;
+import com.oracle.svm.core.annotate.RestrictHeapAccess;
 
 /**
  * Supply a closure to be applied to Objects.
@@ -46,11 +48,11 @@ public interface ObjectVisitor {
      * @param o The Object to be visited.
      * @return true if visiting should continue, false if visiting should stop.
      */
-    @MustNotAllocate(reason = "Must not allocate while visiting the heap.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate while visiting the heap.")
     boolean visitObject(Object o);
 
     /** Like visitObject(Object), but inlined for performance. */
-    @MustNotAllocate(reason = "Must not allocate while visiting the heap.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate while visiting the heap.")
     default boolean visitObjectInline(Object o) {
         return visitObject(o);
     }

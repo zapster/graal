@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,7 +26,6 @@ package com.oracle.objectfile.elf;
 
 import static java.lang.Math.toIntExact;
 
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -68,7 +69,6 @@ public class ELFObjectFile extends ObjectFile {
     private char abiVersion;
     private ELFClass fileClass = ELFClass.getSystemNativeValue();
     private ELFMachine machine = ELFMachine.getSystemNativeValue();
-    private ELFSymtab.Entry entryPoint;
     private long processorSpecificFlags; // FIXME: to encapsulate (EF_* in elf.h)
     private final boolean runtimeDebugInfoGeneration;
 
@@ -94,6 +94,10 @@ public class ELFObjectFile extends ObjectFile {
 
     public void setFileClass(ELFClass fileClass) {
         this.fileClass = fileClass;
+    }
+
+    @Override
+    public void setMainEntryPoint(String name) {
     }
 
     /**
@@ -160,7 +164,7 @@ public class ELFObjectFile extends ObjectFile {
     }
 
     @Override
-    public Symbol createDefinedSymbol(String name, Element baseSection, int position, int size, boolean isCode, boolean isGlobal) {
+    public Symbol createDefinedSymbol(String name, Element baseSection, long position, int size, boolean isCode, boolean isGlobal) {
         ELFSymtab symtab = createSymbolTable();
         return symtab.newDefinedEntry(name, (Section) baseSection, position, size, isGlobal, isCode);
     }
@@ -168,9 +172,6 @@ public class ELFObjectFile extends ObjectFile {
     @Override
     public Symbol createUndefinedSymbol(String name, int size, boolean isCode) {
         ELFSymtab symtab = createSymbolTable();
-        // ELFSymtab.Entry sym = symtab.addEntry(name, 0, size, ELFSymtab.SymBinding.GLOBAL, isCode
-        // ? ELFSymtab.SymType.FUNC : ELFSymtab.SymType.OBJECT, PseudoSection.UNDEF);
-        // return sym;
         return symtab.newUndefinedEntry(name, isCode);
     }
 
@@ -569,7 +570,6 @@ public class ELFObjectFile extends ObjectFile {
             // FIXME: is it really appropriate to initialize the owning ELFObjectFile's fields here?
             ELFObjectFile.this.machine = ELFMachine.X86_64;
             ELFObjectFile.this.version = 1;
-            ELFObjectFile.this.entryPoint = null;
             ELFObjectFile.this.processorSpecificFlags = 0;
         }
 
@@ -597,12 +597,6 @@ public class ELFObjectFile extends ObjectFile {
             dependencies.add(BuildDependency.createOrGet(ourContent, shtSize));
             dependencies.add(BuildDependency.createOrGet(ourContent, shtOffset));
 
-            // if we have an entry point, we depend on the vaddr of its section
-            if (entryPoint != null) {
-                ELFSection es = entryPoint.getReferencedSection();
-                dependencies.add(BuildDependency.createOrGet(ourContent, decisions.get(es).getDecision(LayoutDecision.Kind.VADDR)));
-            }
-
             return dependencies;
         }
 
@@ -621,12 +615,7 @@ public class ELFObjectFile extends ObjectFile {
             contents.type = getType();
             contents.machine = getMachine();
             contents.version = getVersion();
-            if (getEntryPointSymbol() != null) {
-                long sectionVaddr = (int) alreadyDecided.get(getEntryPointSymbol().getReferencedSection()).getDecidedValue(LayoutDecision.Kind.VADDR);
-                contents.entry = sectionVaddr + getEntryPointSymbol().value;
-            } else {
-                contents.entry = 0;
-            }
+            contents.entry = 0;
             contents.shoff = (int) alreadyDecided.get(sht).getDecidedValue(LayoutDecision.Kind.OFFSET);
             contents.flags = (int) getFlags();
             // NOTE: header size depends on ident contents (32/64)
@@ -1004,7 +993,7 @@ public class ELFObjectFile extends ObjectFile {
             // -- the shstrtab's contents must already be decided.
             LayoutDecision shstrtabDecision = alreadyDecided.get(shstrtab).getDecision(LayoutDecision.Kind.CONTENT);
             byte[] shstrtabContents = (byte[]) shstrtabDecision.getValue();
-            StringTable strings = new StringTable(AssemblyBuffer.createInputDisassembler(ByteBuffer.wrap(shstrtabContents)), shstrtabContents.length);
+            StringTable strings = new StringTable(shstrtabContents);
             // writing the whole section header table, by iterating over sections in the file
             SectionHeaderEntryStruct ent = new SectionHeaderEntryStruct();
             assert ent.isNullEntry();
@@ -1124,10 +1113,6 @@ public class ELFObjectFile extends ObjectFile {
 
     public void setMachine(ELFMachine machine) {
         this.machine = machine;
-    }
-
-    public ELFSymtab.Entry getEntryPointSymbol() {
-        return entryPoint;
     }
 
     public long getFlags() {

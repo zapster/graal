@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -36,7 +38,7 @@ import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.MemoryWalker;
 import com.oracle.svm.core.annotate.AutomaticFeature;
-import com.oracle.svm.core.annotate.MustNotAllocate;
+import com.oracle.svm.core.annotate.RestrictHeapAccess;
 import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.heap.ObjectHeader;
 import com.oracle.svm.core.heap.ObjectVisitor;
@@ -232,11 +234,11 @@ public class AlignedHeapChunk extends HeapChunk {
     /** Construct the remembered set for all the objects in this chunk. */
     /*
      * This method must not allocate because I might be in the middle of a collection, or in the
-     * middle of detaching a thread, but the @MustNotAllocate checker can not prove that because I
-     * use an ObjectVisitor which, in other cases, might allocate. Therefore, I whitelist this
+     * middle of detaching a thread, but the @RestrictHeapAccess checker can not prove that because
+     * I use an ObjectVisitor which, in other cases, might allocate. Therefore, I whitelist this
      * method.
      */
-    @MustNotAllocate(list = MustNotAllocate.WHITELIST, reason = "Whitelisted because other ObjectVisitors are allowed to allocate.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true, reason = "Whitelisted because other ObjectVisitors are allowed to allocate.")
     static void constructRememberedSetOfAlignedHeapChunk(AlignedHeader that) {
         final GCImpl.RememberedSetConstructor constructor = getRememberedSetConstructor();
         constructor.initialize(that);
@@ -254,25 +256,25 @@ public class AlignedHeapChunk extends HeapChunk {
      *
      * This has to be fast, because it is used by the post-write barrier.
      */
-    public static void dirtyCardForObjectOfAlignedHeapChunk(Object obj) {
-        final AlignedHeader chunk = getEnclosingAlignedHeapChunk(obj);
+    public static void dirtyCardForObjectOfAlignedHeapChunk(Object object) {
+        final Pointer objectPointer = Word.objectToUntrackedPointer(object);
+        final AlignedHeader chunk = getEnclosingAlignedHeapChunkFromPointer(objectPointer);
         final Pointer cardTableStart = getCardTableStart(chunk);
-        final UnsignedWord index = getObjectIndex(chunk, obj);
+        final UnsignedWord index = getObjectIndex(chunk, objectPointer);
         CardTable.dirtyEntryAtIndex(cardTableStart, index);
     }
 
     /** Return the offset of an object within the objects part of a chunk. */
-    private static UnsignedWord getObjectOffset(AlignedHeader that, Object obj) {
+    private static UnsignedWord getObjectOffset(AlignedHeader that, Pointer objectPointer) {
         final Pointer objectsStart = getObjectsStart(that);
-        final Pointer objectPointer = Word.objectToUntrackedPointer(obj);
         assert objectsStart.belowOrEqual(objectPointer);
         assert objectPointer.belowOrEqual(that.getEnd());
         return objectPointer.subtract(objectsStart);
     }
 
     /** Return the index of an object within the tables of a chunk. */
-    private static UnsignedWord getObjectIndex(AlignedHeader that, Object obj) {
-        final UnsignedWord offset = getObjectOffset(that, obj);
+    private static UnsignedWord getObjectIndex(AlignedHeader that, Pointer objectPointer) {
+        final UnsignedWord offset = getObjectOffset(that, objectPointer);
         return CardTable.memoryOffsetToIndex(offset);
     }
 

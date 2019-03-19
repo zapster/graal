@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,7 +26,10 @@ package com.oracle.svm.core.posix.thread;
 
 import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.Isolate;
 import org.graalvm.nativeimage.IsolateThread;
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.annotate.Uninterruptible;
@@ -32,10 +37,13 @@ import com.oracle.svm.core.jdk.UninterruptibleUtils;
 import com.oracle.svm.core.posix.pthread.PthreadThreadLocal;
 import com.oracle.svm.core.posix.pthread.PthreadVMLockSupport;
 import com.oracle.svm.core.thread.VMThreads;
+import com.oracle.svm.core.threadlocal.FastThreadLocalFactory;
+import com.oracle.svm.core.threadlocal.FastThreadLocalWord;
 
 public final class PosixVMThreads extends VMThreads {
 
     public static final PthreadThreadLocal<IsolateThread> VMThreadTL = new PthreadThreadLocal<>();
+    public static final FastThreadLocalWord<Isolate> IsolateTL = FastThreadLocalFactory.createWord();
     private static final int STATE_UNINITIALIZED = 1;
     private static final int STATE_INITIALIZING = 2;
     private static final int STATE_INITIALIZED = 3;
@@ -81,9 +89,15 @@ public final class PosixVMThreads extends VMThreads {
             }
         }
     }
+
+    @Uninterruptible(reason = "Called from uninterruptible code. Too late for safepoints.")
+    public static void finishTearDown() {
+        VMThreadTL.destroy();
+    }
 }
 
 @AutomaticFeature
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
 class PosixVMThreadsFeature implements Feature {
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {

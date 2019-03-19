@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,12 +25,18 @@
 package org.graalvm.compiler.replacements.amd64;
 
 import org.graalvm.compiler.api.replacements.ClassSubstitution;
+import org.graalvm.compiler.api.replacements.Fold;
+import org.graalvm.compiler.api.replacements.Fold.InjectedParameter;
 import org.graalvm.compiler.api.replacements.MethodSubstitution;
+import org.graalvm.compiler.core.common.SuppressFBWarnings;
+import org.graalvm.compiler.core.common.spi.ArrayOffsetProvider;
 import org.graalvm.compiler.graph.Node.ConstantNodeParameter;
+import org.graalvm.compiler.replacements.StringSubstitutions;
+import org.graalvm.compiler.replacements.nodes.ArrayCompareToNode;
 import org.graalvm.compiler.word.Word;
 import org.graalvm.word.Pointer;
 
-import sun.misc.Unsafe;
+import jdk.vm.ci.meta.JavaKind;
 
 // JaCoCo Exclude
 
@@ -37,6 +45,19 @@ import sun.misc.Unsafe;
  */
 @ClassSubstitution(String.class)
 public class AMD64StringSubstitutions {
+
+    @Fold
+    static int charArrayBaseOffset(@InjectedParameter ArrayOffsetProvider arrayOffsetProvider) {
+        return arrayOffsetProvider.arrayBaseOffset(JavaKind.Char);
+    }
+
+    @Fold
+    static int charArrayIndexScale(@InjectedParameter ArrayOffsetProvider arrayOffsetProvider) {
+        return arrayOffsetProvider.arrayScalingFactor(JavaKind.Char);
+    }
+
+    /** Marker value for the {@link InjectedParameter} injected parameter. */
+    static final ArrayOffsetProvider INJECTED = null;
 
     // Only exists in JDK <= 8
     @MethodSubstitution(isStatic = true, optional = true)
@@ -62,12 +83,51 @@ public class AMD64StringSubstitutions {
         }
         assert sourceCount - fromIndex > 0 && targetCount > 0;
 
-        Pointer sourcePointer = Word.objectToTrackedPointer(source).add(Unsafe.ARRAY_CHAR_BASE_OFFSET).add(totalOffset * Unsafe.ARRAY_CHAR_INDEX_SCALE);
-        Pointer targetPointer = Word.objectToTrackedPointer(target).add(Unsafe.ARRAY_CHAR_BASE_OFFSET).add(targetOffset * Unsafe.ARRAY_CHAR_INDEX_SCALE);
+        Pointer sourcePointer = Word.objectToTrackedPointer(source).add(charArrayBaseOffset(INJECTED)).add(totalOffset * charArrayIndexScale(INJECTED));
+        Pointer targetPointer = Word.objectToTrackedPointer(target).add(charArrayBaseOffset(INJECTED)).add(targetOffset * charArrayIndexScale(INJECTED));
         int result = AMD64StringIndexOfNode.optimizedStringIndexPointer(sourcePointer, sourceCount - fromIndex, targetPointer, targetCount);
         if (result >= 0) {
             return result + totalOffset;
         }
         return result;
     }
+
+    // Only exists in JDK <= 8
+    @MethodSubstitution(isStatic = false, optional = true)
+    public static int indexOf(String source, int ch, int origFromIndex) {
+        int fromIndex = origFromIndex;
+        final int sourceCount = source.length();
+        if (fromIndex >= sourceCount) {
+            // Note: fromIndex might be near -1>>>1.
+            return -1;
+        }
+        if (fromIndex < 0) {
+            fromIndex = 0;
+        }
+
+        if (ch < Character.MIN_SUPPLEMENTARY_CODE_POINT) {
+            char[] sourceArray = StringSubstitutions.getValue(source);
+
+            Pointer sourcePointer = Word.objectToTrackedPointer(sourceArray).add(charArrayBaseOffset(INJECTED)).add(fromIndex * charArrayIndexScale(INJECTED));
+            int result = AMD64ArrayIndexOfNode.optimizedArrayIndexOf(sourcePointer, sourceCount - fromIndex, (char) ch, JavaKind.Char);
+            if (result != -1) {
+                return result + fromIndex;
+            }
+            return result;
+        } else {
+            return indexOf(source, ch, origFromIndex);
+        }
+    }
+
+    @MethodSubstitution(isStatic = false)
+    @SuppressFBWarnings(value = "ES_COMPARING_PARAMETER_STRING_WITH_EQ", justification = "reference equality on the receiver is what we want")
+    public static int compareTo(String receiver, String anotherString) {
+        if (receiver == anotherString) {
+            return 0;
+        }
+        char[] value = StringSubstitutions.getValue(receiver);
+        char[] other = StringSubstitutions.getValue(anotherString);
+        return ArrayCompareToNode.compareTo(value, other, value.length << 1, other.length << 1, JavaKind.Char, JavaKind.Char);
+    }
+
 }

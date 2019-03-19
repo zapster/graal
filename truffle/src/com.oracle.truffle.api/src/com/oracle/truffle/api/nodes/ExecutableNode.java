@@ -39,7 +39,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
  */
 public abstract class ExecutableNode extends Node {
 
-    final LanguageInfo languageInfo;
+    final TruffleLanguage<?> language;
 
     /**
      * Creates new executable node with a given language instance. The language instance is
@@ -50,13 +50,9 @@ public abstract class ExecutableNode extends Node {
      */
     protected ExecutableNode(TruffleLanguage<?> language) {
         CompilerAsserts.neverPartOfCompilation();
-        if (language != null) {
-            this.languageInfo = Node.ACCESSOR.languageSupport().getLanguageInfo(language);
-            if (languageInfo == null) {
-                throw new IllegalArgumentException("Truffle language instance is not initialized.");
-            }
-        } else {
-            this.languageInfo = null;
+        this.language = language;
+        if (language != null && getLanguageInfo() == null) {
+            throw new IllegalArgumentException("Truffle language instance is not initialized.");
         }
     }
 
@@ -64,7 +60,8 @@ public abstract class ExecutableNode extends Node {
      * Execute this fragment at the place where it was parsed.
      *
      * @param frame the actual frame valid at the parsed location
-     * @return the result of the execution
+     * @return the result of the execution, must be an interop type (i.e. either implementing
+     *         TruffleObject or be a primitive value), or <code>null</code>.
      * @since 0.31
      */
     public abstract Object execute(VirtualFrame frame);
@@ -77,7 +74,11 @@ public abstract class ExecutableNode extends Node {
      * @since 0.31
      */
     public final LanguageInfo getLanguageInfo() {
-        return languageInfo;
+        if (language != null) {
+            return Node.ACCESSOR.languageSupport().getLanguageInfo(language);
+        } else {
+            return null;
+        }
     }
 
     /**
@@ -90,19 +91,19 @@ public abstract class ExecutableNode extends Node {
      * @see #getLanguageInfo()
      * @since 0.31
      */
-    @SuppressWarnings("rawtypes")
+    @SuppressWarnings({"rawtypes", "unchecked"})
     public final <C extends TruffleLanguage> C getLanguage(Class<C> languageClass) {
-        if (languageInfo == null) {
+        if (language == null) {
             return null;
         }
-        TruffleLanguage<?> language = languageInfo.getSpi();
-        if (language.getClass() != languageClass) {
-            if (!languageClass.isInstance(language) || languageClass == TruffleLanguage.class || !TruffleLanguage.class.isAssignableFrom(languageClass)) {
+        TruffleLanguage<?> spi = this.language;
+        if (spi.getClass() != languageClass) {
+            if (!languageClass.isInstance(spi) || languageClass == TruffleLanguage.class || !TruffleLanguage.class.isAssignableFrom(languageClass)) {
                 CompilerDirectives.transferToInterpreter();
-                throw new ClassCastException("Illegal language class specified. Expected " + language.getClass().getName() + ".");
+                throw new ClassCastException("Illegal language class specified. Expected " + spi.getClass().getName() + ".");
             }
         }
-        return languageClass.cast(language);
+        return (C) spi;
     }
 
 }

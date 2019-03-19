@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,6 +26,9 @@ package com.oracle.svm.jni.access;
 
 // Checkstyle: allow reflection
 
+import static com.oracle.svm.jni.hosted.JNIFeature.Options.JNIConfigurationFiles;
+import static com.oracle.svm.jni.hosted.JNIFeature.Options.JNIConfigurationResources;
+
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -37,6 +42,8 @@ import java.util.stream.Stream;
 import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.impl.ReflectionRegistry;
+import org.graalvm.nativeimage.impl.RuntimeReflectionSupport;
 
 import com.oracle.graal.pointsto.BigBang;
 import com.oracle.graal.pointsto.flow.FieldTypeFlow;
@@ -44,12 +51,13 @@ import com.oracle.graal.pointsto.flow.TypeFlow;
 import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.AnalysisType;
-import com.oracle.svm.core.RuntimeReflection.RuntimeReflectionSupport;
 import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.hosted.FeatureImpl.AfterRegistrationAccessImpl;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
 import com.oracle.svm.hosted.FeatureImpl.CompilationAccessImpl;
 import com.oracle.svm.hosted.FeatureImpl.DuringAnalysisAccessImpl;
 import com.oracle.svm.hosted.c.NativeLibraries;
+import com.oracle.svm.hosted.config.ReflectionConfigurationParser;
 import com.oracle.svm.jni.JNIJavaCallWrappers;
 import com.oracle.svm.jni.hosted.JNICallTrampolineMethod;
 import com.oracle.svm.jni.hosted.JNIJavaCallWrapperMethod;
@@ -94,28 +102,36 @@ public class JNIAccessFeature implements Feature {
     }
 
     @Override
-    public void afterRegistration(AfterRegistrationAccess access) {
+    public void afterRegistration(AfterRegistrationAccess arg) {
+        AfterRegistrationAccessImpl access = (AfterRegistrationAccessImpl) arg;
+
         JNIReflectionDictionary.initialize();
 
-        ImageSingletons.add(JNIRuntimeAccessibilitySupport.class, new JNIRuntimeAccessibilitySupport() {
-            @Override
-            public void register(Class<?>... classes) {
-                abortIfSealed();
-                newClasses.addAll(Arrays.asList(classes));
-            }
+        JNIRuntimeAccessibilitySupportImpl registry = new JNIRuntimeAccessibilitySupportImpl();
+        ImageSingletons.add(JNIRuntimeAccessibilitySupport.class, registry);
 
-            @Override
-            public void register(Executable... methods) {
-                abortIfSealed();
-                newMethods.addAll(Arrays.asList(methods));
-            }
+        ReflectionConfigurationParser parser = new ReflectionConfigurationParser(registry, access.getImageClassLoader());
+        parser.parseAndRegisterConfigurations("JNI", JNIConfigurationFiles, JNIConfigurationResources);
+    }
 
-            @Override
-            public void register(Field... fields) {
-                abortIfSealed();
-                newFields.addAll(Arrays.asList(fields));
-            }
-        });
+    private class JNIRuntimeAccessibilitySupportImpl implements JNIRuntimeAccessibilitySupport, ReflectionRegistry {
+        @Override
+        public void register(Class<?>... classes) {
+            abortIfSealed();
+            newClasses.addAll(Arrays.asList(classes));
+        }
+
+        @Override
+        public void register(Executable... methods) {
+            abortIfSealed();
+            newMethods.addAll(Arrays.asList(methods));
+        }
+
+        @Override
+        public void register(Field... fields) {
+            abortIfSealed();
+            newFields.addAll(Arrays.asList(fields));
+        }
     }
 
     @Override
@@ -199,7 +215,9 @@ public class JNIAccessFeature implements Feature {
     private static JNIAccessibleClass addClass(Class<?> classObj, DuringAnalysisAccessImpl access) {
         return JNIReflectionDictionary.singleton().addClassIfAbsent(classObj, c -> {
             AnalysisType analysisClass = access.getMetaAccess().lookupJavaType(classObj);
-            analysisClass.registerAsAllocated(null);
+            if (analysisClass.isArray() || (analysisClass.isInstanceClass() && !analysisClass.isAbstract())) {
+                analysisClass.registerAsAllocated(null);
+            }
             return new JNIAccessibleClass(classObj);
         });
     }
@@ -218,7 +236,7 @@ public class JNIAccessFeature implements Feature {
             JNIJavaCallWrapperMethod varargsNonvirtualCallWrapper = null;
             JNIJavaCallWrapperMethod arrayNonvirtualCallWrapper = null;
             JNIJavaCallWrapperMethod valistNonvirtualCallWrapper = null;
-            if (!Modifier.isStatic(method.getModifiers())) {
+            if (!Modifier.isStatic(method.getModifiers()) && !Modifier.isAbstract(method.getModifiers())) {
                 varargsNonvirtualCallWrapper = new JNIJavaCallWrapperMethod(method, CallVariant.VARARGS, true, wrappedMetaAccess, nativeLibraries);
                 arrayNonvirtualCallWrapper = new JNIJavaCallWrapperMethod(method, CallVariant.ARRAY, true, wrappedMetaAccess, nativeLibraries);
                 valistNonvirtualCallWrapper = new JNIJavaCallWrapperMethod(method, CallVariant.VA_LIST, true, wrappedMetaAccess, nativeLibraries);
@@ -251,7 +269,7 @@ public class JNIAccessFeature implements Feature {
                 FieldTypeFlow instanceFieldFlow = field.getDeclaringClass().getContextInsensitiveAnalysisObject().getInstanceFieldFlow(bigBang, field, true);
                 declaredTypeFlow.addUse(bigBang, instanceFieldFlow);
             }
-            return new JNIAccessibleField(jniClass, reflField.getName(), field.getModifiers());
+            return new JNIAccessibleField(jniClass, reflField.getName(), field.getJavaKind(), field.getModifiers());
         });
     }
 

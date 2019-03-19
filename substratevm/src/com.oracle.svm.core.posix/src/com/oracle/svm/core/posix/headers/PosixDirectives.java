@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -67,7 +69,9 @@ public class PosixDirectives implements CContext.Directives {
                     "<sys/time.h>",
                     "<sys/times.h>",
                     "<sys/uio.h>",
+                    "<sys/utsname.h>",
                     "<sys/wait.h>",
+                    "<termios.h>",
                     "<time.h>",
                     "<unistd.h>",
                     "<zlib.h>"
@@ -85,8 +89,14 @@ public class PosixDirectives implements CContext.Directives {
                     "<arpa/inet.h>",
                     "<sys/epoll.h>",
                     "<sys/sendfile.h>",
-                    "<mntent.h>"
+                    "<mntent.h>",
+                    "<link.h>",
     };
+
+    @Override
+    public boolean isInConfiguration() {
+        return Platform.includedIn(Platform.LINUX.class) || Platform.includedIn(Platform.DARWIN.class);
+    }
 
     @Override
     public List<String> getHeaderFiles() {

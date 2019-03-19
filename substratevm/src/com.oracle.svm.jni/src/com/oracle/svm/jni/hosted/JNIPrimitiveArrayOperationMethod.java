@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,26 +26,24 @@ package com.oracle.svm.jni.hosted;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.Iterator;
 import java.util.List;
 
 import org.graalvm.compiler.core.common.type.Stamp;
 import org.graalvm.compiler.debug.DebugContext;
-import org.graalvm.compiler.graph.Graph.Mark;
 import org.graalvm.compiler.java.FrameStateBuilder;
+import org.graalvm.compiler.nodes.AbstractMergeNode;
 import org.graalvm.compiler.nodes.ConstantNode;
-import org.graalvm.compiler.nodes.MergeNode;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.ValuePhiNode;
 import org.graalvm.compiler.nodes.calc.IntegerLessThanNode;
 import org.graalvm.compiler.nodes.extended.BranchProbabilityNode;
 import org.graalvm.compiler.nodes.java.NewArrayNode;
+import org.graalvm.nativeimage.c.function.CEntryPoint.FatalExceptionHandler;
 import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.nativeimage.c.type.WordPointer;
 
 import com.oracle.graal.pointsto.meta.HostedProviders;
-import com.oracle.svm.core.c.function.CEntryPointOptions.FatalExceptionHandler;
 import com.oracle.svm.core.c.function.CEntryPointOptions.NoEpilogue;
 import com.oracle.svm.core.c.function.CEntryPointOptions.NoPrologue;
 import com.oracle.svm.core.c.function.CEntryPointOptions.Publish;
@@ -168,7 +168,7 @@ public final class JNIPrimitiveArrayOperationMethod extends JNIGeneratedMethod {
         ValueNode result = null;
         switch (operation) {
             case NEW:
-                result = newArray(providers, kit, graph, arguments);
+                result = newArray(providers, kit, arguments);
                 break;
             case GET_ELEMENTS: {
                 ValueNode arrayHandle = arguments.get(1);
@@ -206,7 +206,7 @@ public final class JNIPrimitiveArrayOperationMethod extends JNIGeneratedMethod {
         return graph;
     }
 
-    private ValueNode newArray(HostedProviders providers, JNIGraphKit kit, StructuredGraph graph, List<ValueNode> arguments) {
+    private ValueNode newArray(HostedProviders providers, JNIGraphKit kit, List<ValueNode> arguments) {
         ResolvedJavaType elementType = providers.getMetaAccess().lookupJavaType(elementKind.toJavaClass());
         ValueNode length = arguments.get(1);
         ConstantNode zero = kit.createInt(0);
@@ -216,11 +216,7 @@ public final class JNIPrimitiveArrayOperationMethod extends JNIGeneratedMethod {
         kit.elsePart();
         ValueNode array = kit.append(new NewArrayNode(elementType, length, true));
         ValueNode arrayHandle = kit.boxObjectInLocalHandle(array);
-        Mark preMergeMark = graph.getMark();
-        kit.endIf();
-        Iterator<MergeNode> mergeNodes = graph.getNewNodes(preMergeMark).filter(MergeNode.class).iterator();
-        MergeNode merge = mergeNodes.next();
-        VMError.guarantee(!mergeNodes.hasNext(), "must have exactly one merge");
+        AbstractMergeNode merge = kit.endIf();
         Stamp handleStamp = providers.getWordTypes().getWordStamp(providers.getMetaAccess().lookupJavaType(JNIObjectHandle.class));
         return kit.unique(new ValuePhiNode(handleStamp, merge, new ValueNode[]{nullHandle, arrayHandle}));
     }

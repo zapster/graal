@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -132,7 +134,7 @@ public class ProfileSnippets implements Snippets {
                 args.add("bci", bci);
                 args.add("targetBci", targetBci);
 
-                SnippetTemplate template = template(graph.getDebug(), args);
+                SnippetTemplate template = template(profileNode, args);
                 template.instantiate(providers.getMetaAccess(), profileNode, DEFAULT_REPLACER, args);
             } else if (profileNode instanceof ProfileInvokeNode) {
                 ProfileInvokeNode profileInvokeNode = (ProfileInvokeNode) profileNode;
@@ -142,7 +144,7 @@ public class ProfileSnippets implements Snippets {
                 args.add("step", step);
                 args.add("stepLog", stepLog);
                 args.addConst("freqLog", profileInvokeNode.getNotificationFreqLog());
-                SnippetTemplate template = template(graph.getDebug(), args);
+                SnippetTemplate template = template(profileNode, args);
                 template.instantiate(providers.getMetaAccess(), profileNode, DEFAULT_REPLACER, args);
             } else {
                 throw new GraalError("Unsupported profile node type: " + profileNode);

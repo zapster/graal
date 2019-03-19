@@ -24,26 +24,35 @@
  */
 package com.oracle.truffle.tools.profiler;
 
+import java.io.Closeable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
+
+import com.oracle.truffle.api.TruffleContext;
+import com.oracle.truffle.api.TruffleLogger;
+import com.oracle.truffle.api.instrumentation.ContextsListener;
 import com.oracle.truffle.api.instrumentation.EventBinding;
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.instrumentation.StandardTags.RootTag;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument.Env;
-import com.oracle.truffle.api.source.Source;
-import com.oracle.truffle.api.vm.PolyglotEngine;
+import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.tools.profiler.impl.CPUSamplerInstrument;
 import com.oracle.truffle.tools.profiler.impl.ProfilerToolFactory;
-
-import java.io.Closeable;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Implementation of a sampling based profiler for
@@ -54,7 +63,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * intervals, i.e. the state of the stack is copied and saved into trees of {@linkplain ProfilerNode
  * nodes}, which represent the profile of the execution.
  * <p>
- * Usage example: {@link CPUSamplerSnippets#example}
+ * Usage example: {@codesnippet CPUSamplerSnippets#example}
  *
  * @since 0.30
  */
@@ -140,6 +149,10 @@ public final class CPUSampler implements Closeable {
         public List<Long> getSelfHitTimes() {
             return Collections.unmodifiableList(selfHitTimes);
         }
+
+        void addSelfHitTime(Long time) {
+            selfHitTimes.add(time);
+        }
     }
 
     /**
@@ -200,24 +213,59 @@ public final class CPUSampler implements Closeable {
 
     private EventBinding<?> stacksBinding;
 
-    private final ProfilerNode<Payload> rootNode = new ProfilerNode<>(this, new Payload());
+    private final Map<Thread, ProfilerNode<Payload>> rootNodes = new HashMap<>();
 
     private final Env env;
 
     private boolean gatherSelfHitTimes = false;
 
+    private volatile boolean nonInternalLanguageContextInitialized = false;
+
+    private boolean delaySamplingUntilNonInternalLangInit = true;
+
     CPUSampler(Env env) {
         this.env = env;
+        env.getInstrumenter().attachContextsListener(new ContextsListener() {
+            @Override
+            public void onContextCreated(TruffleContext context) {
+
+            }
+
+            @Override
+            public void onLanguageContextCreated(TruffleContext context, LanguageInfo language) {
+
+            }
+
+            @Override
+            public void onLanguageContextInitialized(TruffleContext context, LanguageInfo language) {
+                if (!language.isInternal()) {
+                    nonInternalLanguageContextInitialized = true;
+                }
+            }
+
+            @Override
+            public void onLanguageContextFinalized(TruffleContext context, LanguageInfo language) {
+
+            }
+
+            @Override
+            public void onLanguageContextDisposed(TruffleContext context, LanguageInfo language) {
+
+            }
+
+            @Override
+            public void onContextClosed(TruffleContext context) {
+
+            }
+        }, true);
     }
 
     /**
      * Finds {@link CPUSampler} associated with given engine.
      *
-     * @param engine the engine to find debugger for
-     * @return an instance of associated {@link CPUSampler}
-     * @since 0.30
+     * @since 1.0
      */
-    public static CPUSampler find(PolyglotEngine engine) {
+    public static CPUSampler find(Engine engine) {
         return CPUSamplerInstrument.getSampler(engine);
     }
 
@@ -244,7 +292,7 @@ public final class CPUSampler implements Closeable {
 
     /**
      * Sets the {@link Mode mode} for the sampler.
-     * 
+     *
      * @param mode the new mode for the sampler.
      * @since 0.30
      */
@@ -323,6 +371,18 @@ public final class CPUSampler implements Closeable {
     }
 
     /**
+     * Sets the option to delay sampling until a non-internal language is initialized. Useful to
+     * avoid internal language initialisation code in the samples.
+     *
+     * @param delaySamplingUntilNonInternalLangInit Enable or disable this option.
+     * @since 0.31
+     */
+    public synchronized void setDelaySamplingUntilNonInternalLangInit(boolean delaySamplingUntilNonInternalLangInit) {
+        verifyConfigAllowed();
+        this.delaySamplingUntilNonInternalLangInit = delaySamplingUntilNonInternalLangInit;
+    }
+
+    /**
      * @return The filter describing which part of the source code to sample
      * @since 0.30
      */
@@ -347,11 +407,66 @@ public final class CPUSampler implements Closeable {
     }
 
     /**
+     * Merges all the 'per thread' profiles into one set of nodes and returns it.
+     *
      * @return The roots of the trees representing the profile of the execution.
      * @since 0.30
      */
-    public Collection<ProfilerNode<Payload>> getRootNodes() {
-        return rootNode.getChildren();
+    public synchronized Collection<ProfilerNode<Payload>> getRootNodes() {
+        ProfilerNode<Payload> mergedRoot = new ProfilerNode<>();
+        for (ProfilerNode<Payload> node : rootNodes.values()) {
+            mergedRoot.deepMergeChildrenFrom(node, mergePayload, payloadFactory);
+        }
+        return mergedRoot.getChildren();
+    }
+
+    private static Supplier<Payload> payloadFactory = new Supplier<Payload>() {
+        @Override
+        public Payload get() {
+            return new Payload();
+        }
+    };
+
+    private static BiConsumer<Payload, Payload> mergePayload = new BiConsumer<Payload, Payload>() {
+        @Override
+        public void accept(Payload sourcePayload, Payload destinationPayload) {
+            destinationPayload.selfCompiledHitCount += sourcePayload.selfCompiledHitCount;
+            destinationPayload.selfInterpretedHitCount += sourcePayload.selfInterpretedHitCount;
+            destinationPayload.compiledHitCount += sourcePayload.compiledHitCount;
+            destinationPayload.interpretedHitCount += sourcePayload.interpretedHitCount;
+            for (Long timestamp : sourcePayload.getSelfHitTimes()) {
+                destinationPayload.addSelfHitTime(timestamp);
+            }
+        }
+    };
+
+    Function<Payload, Payload> copyPayload = new Function<Payload, Payload>() {
+        @Override
+        public Payload apply(Payload sourcePayload) {
+            Payload destinationPayload = new Payload();
+            destinationPayload.selfCompiledHitCount = sourcePayload.selfCompiledHitCount;
+            destinationPayload.selfInterpretedHitCount = sourcePayload.selfInterpretedHitCount;
+            destinationPayload.compiledHitCount = sourcePayload.compiledHitCount;
+            destinationPayload.interpretedHitCount = sourcePayload.interpretedHitCount;
+            for (Long timestamp : sourcePayload.getSelfHitTimes()) {
+                destinationPayload.addSelfHitTime(timestamp);
+            }
+            return destinationPayload;
+        }
+    };
+
+    /**
+     * @return The roots of the trees representing the profile of the execution per thread.
+     * @since 1.0
+     */
+    public synchronized Map<Thread, Collection<ProfilerNode<Payload>>> getThreadToNodesMap() {
+        Map<Thread, Collection<ProfilerNode<Payload>>> returnValue = new HashMap<>();
+        for (Map.Entry<Thread, ProfilerNode<Payload>> entry : rootNodes.entrySet()) {
+            ProfilerNode<Payload> copy = new ProfilerNode<>();
+            copy.deepCopyChildrenFrom(entry.getValue(), copyPayload);
+            returnValue.put(entry.getKey(), copy.getChildren());
+        }
+        return Collections.unmodifiableMap(returnValue);
     }
 
     /**
@@ -361,9 +476,11 @@ public final class CPUSampler implements Closeable {
      */
     public synchronized void clearData() {
         samplesTaken.set(0);
-        Map<SourceLocation, ProfilerNode<Payload>> rootChildren = rootNode.children;
-        if (rootChildren != null) {
-            rootChildren.clear();
+        for (ProfilerNode<Payload> node : rootNodes.values()) {
+            Map<SourceLocation, ProfilerNode<Payload>> rootChildren = node.children;
+            if (rootChildren != null) {
+                rootChildren.clear();
+            }
         }
     }
 
@@ -372,8 +489,12 @@ public final class CPUSampler implements Closeable {
      * @since 0.30
      */
     public synchronized boolean hasData() {
-        Map<SourceLocation, ProfilerNode<Payload>> rootChildren = rootNode.children;
-        return rootChildren != null && !rootChildren.isEmpty();
+        boolean hasData = false;
+        for (ProfilerNode<Payload> node : rootNodes.values()) {
+            Map<SourceLocation, ProfilerNode<Payload>> rootChildren = node.children;
+            hasData = hasData || (rootChildren != null && !rootChildren.isEmpty());
+        }
+        return hasData;
     }
 
     /**
@@ -401,12 +522,12 @@ public final class CPUSampler implements Closeable {
     /**
      * Sets whether or not to gather timestamp information for the element at the top of the stack
      * for each sample.
-     * 
+     *
      * @param gatherSelfHitTimes new value for whether or not to gather timestamps
      *
      * @since 0.30
      */
-    public void setGatherSelfHitTimes(boolean gatherSelfHitTimes) {
+    public synchronized void setGatherSelfHitTimes(boolean gatherSelfHitTimes) {
         verifyConfigAllowed();
         this.gatherSelfHitTimes = gatherSelfHitTimes;
     }
@@ -428,11 +549,11 @@ public final class CPUSampler implements Closeable {
             f = DEFAULT_FILTER;
         }
         this.stackOverflowed = false;
-        this.shadowStack = new ShadowStack(stackLimit);
+        this.shadowStack = new ShadowStack(stackLimit, f, env.getInstrumenter(), TruffleLogger.getLogger(CPUSamplerInstrument.ID));
         this.stacksBinding = this.shadowStack.install(env.getInstrumenter(), combine(f, mode), mode == Mode.EXCLUDE_INLINED_ROOTS);
 
         this.samplerTask = new SamplingTimerTask();
-        this.samplerThread.schedule(samplerTask, 0, period);
+        this.samplerThread.schedule(samplerTask, delay, period);
 
     }
 
@@ -477,12 +598,9 @@ public final class CPUSampler implements Closeable {
 
     private class SamplingTimerTask extends TimerTask {
 
-        int runcount = 0;
-
         @Override
         public void run() {
-            runcount++;
-            if (runcount < delay / period) {
+            if (delaySamplingUntilNonInternalLangInit && !nonInternalLanguageContextInitialized) {
                 return;
             }
             long timestamp = System.currentTimeMillis();
@@ -490,7 +608,16 @@ public final class CPUSampler implements Closeable {
             ShadowStack localShadowStack = shadowStack;
             if (localShadowStack != null) {
                 for (ShadowStack.ThreadLocalStack stack : localShadowStack.getStacks()) {
-                    sampleTaken |= sample(stack, timestamp);
+                    ProfilerNode<Payload> threadNode;
+                    synchronized (CPUSampler.this) {
+                        threadNode = rootNodes.computeIfAbsent(stack.getThread(), new Function<Thread, ProfilerNode<Payload>>() {
+                            @Override
+                            public ProfilerNode<Payload> apply(Thread thread) {
+                                return new ProfilerNode<>();
+                            }
+                        });
+                    }
+                    sampleTaken |= sample(stack, timestamp, threadNode);
                 }
             }
             if (sampleTaken) {
@@ -498,7 +625,7 @@ public final class CPUSampler implements Closeable {
             }
         }
 
-        boolean sample(ShadowStack.ThreadLocalStack stack, long timestamp) {
+        boolean sample(ShadowStack.ThreadLocalStack stack, long timestamp, ProfilerNode<Payload> threadNode) {
             if (stack.hasStackOverflowed()) {
                 stackOverflowed = true;
                 return false;
@@ -511,30 +638,32 @@ public final class CPUSampler implements Closeable {
             if (correctedStackInfo == null || correctedStackInfo.getLength() == 0) {
                 return false;
             }
-            // now traverse the stack and insert the path into the tree
-            ProfilerNode<Payload> treeNode = rootNode;
-            for (int i = 0; i < correctedStackInfo.getLength(); i++) {
-                SourceLocation location = correctedStackInfo.getStack()[i];
-                boolean isCompiled = correctedStackInfo.getCompiledStack()[i];
+            synchronized (CPUSampler.this) {
+                // now traverse the stack and insert the path into the tree
+                ProfilerNode<Payload> treeNode = threadNode;
+                for (int i = 0; i < correctedStackInfo.getLength(); i++) {
+                    SourceLocation location = correctedStackInfo.getStack()[i];
+                    boolean isCompiled = correctedStackInfo.getCompiledStack()[i];
 
-                treeNode = addOrUpdateChild(treeNode, location);
-                Payload payload = treeNode.getPayload();
-                if (i == correctedStackInfo.getLength() - 1) {
-                    // last element is counted as self time
+                    treeNode = addOrUpdateChild(treeNode, location);
+                    Payload payload = treeNode.getPayload();
+                    if (i == correctedStackInfo.getLength() - 1) {
+                        // last element is counted as self time
+                        if (isCompiled) {
+                            payload.selfCompiledHitCount++;
+                        } else {
+                            payload.selfInterpretedHitCount++;
+                        }
+                        if (gatherSelfHitTimes) {
+                            payload.selfHitTimes.add(timestamp);
+                            assert payload.selfHitTimes.size() == payload.getSelfHitCount();
+                        }
+                    }
                     if (isCompiled) {
-                        payload.selfCompiledHitCount++;
+                        payload.compiledHitCount++;
                     } else {
-                        payload.selfInterpretedHitCount++;
+                        payload.interpretedHitCount++;
                     }
-                    if (gatherSelfHitTimes) {
-                        payload.selfHitTimes.add(timestamp);
-                        assert payload.selfHitTimes.size() == payload.getSelfHitCount();
-                    }
-                }
-                if (isCompiled) {
-                    payload.compiledHitCount++;
-                } else {
-                    payload.interpretedHitCount++;
                 }
             }
             return true;
@@ -567,21 +696,21 @@ class CPUSamplerSnippets {
     public void example() {
         // @formatter:off
         // BEGIN: CPUSamplerSnippets#example
-        PolyglotEngine engine = PolyglotEngine.newBuilder().build();
+        Context context = Context.create();
 
-        CPUSampler sampler = CPUSampler.find(engine);
+        CPUSampler sampler = CPUSampler.find(context.getEngine());
         sampler.setCollecting(true);
-        Source someCode = Source.newBuilder("...").
-                mimeType("...").
-                name("example").build();
-        engine.eval(someCode);
+        context.eval("...", "...");
         sampler.setCollecting(false);
         sampler.close();
-        // Read information about the roots of the tree.
-        for (ProfilerNode<CPUSampler.Payload> node : sampler.getRootNodes()) {
-            final String rootName = node.getRootName();
-            final int selfHitCount = node.getPayload().getSelfHitCount();
-            // ...
+        // Read information about the roots of the tree per thread.
+        for (Collection<ProfilerNode<CPUSampler.Payload>> nodes
+                : sampler.getThreadToNodesMap().values()) {
+            for (ProfilerNode<CPUSampler.Payload> node : nodes) {
+                final String rootName = node.getRootName();
+                final int selfHitCount = node.getPayload().getSelfHitCount();
+                // ...
+            }
         }
         // END: CPUSamplerSnippets#example
         // @formatter:on

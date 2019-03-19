@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -29,12 +31,16 @@ import static org.graalvm.compiler.nodeinfo.NodeSize.SIZE_UNKNOWN;
 import org.graalvm.compiler.api.replacements.MethodSubstitution;
 import org.graalvm.compiler.api.replacements.Snippet;
 import org.graalvm.compiler.core.common.type.StampPair;
+import org.graalvm.compiler.debug.DebugCloseable;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.GraalError;
+import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.graph.NodeClass;
 import org.graalvm.compiler.graph.NodeInputList;
 import org.graalvm.compiler.nodeinfo.NodeInfo;
 import org.graalvm.compiler.nodes.CallTargetNode.InvokeKind;
+import org.graalvm.compiler.nodes.FixedNode;
+import org.graalvm.compiler.nodes.Invokable;
 import org.graalvm.compiler.nodes.FixedWithNextNode;
 import org.graalvm.compiler.nodes.FrameState;
 import org.graalvm.compiler.nodes.InvokeNode;
@@ -75,7 +81,7 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
           size = SIZE_UNKNOWN,
           sizeRationale = "If this node is not optimized away it will be lowered to a call, which we cannot estimate")
 //@formatter:on
-public abstract class MacroNode extends FixedWithNextNode implements Lowerable {
+public abstract class MacroNode extends FixedWithNextNode implements Lowerable, Invokable {
 
     public static final NodeClass<MacroNode> TYPE = NodeClass.create(MacroNode.class);
     @Input protected NodeInputList<ValueNode> arguments;
@@ -108,16 +114,28 @@ public abstract class MacroNode extends FixedWithNextNode implements Lowerable {
         return arguments.toArray(new ValueNode[0]);
     }
 
-    public int getBci() {
+    @Override
+    public int bci() {
         return bci;
     }
 
+    @Override
     public ResolvedJavaMethod getTargetMethod() {
         return targetMethod;
     }
 
     protected FrameState stateAfter() {
         return null;
+    }
+
+    @Override
+    protected void afterClone(Node other) {
+        updateInliningLogAfterClone(other);
+    }
+
+    @Override
+    public FixedNode asFixedNode() {
+        return this;
     }
 
     /**
@@ -173,7 +191,7 @@ public abstract class MacroNode extends FixedWithNextNode implements Lowerable {
                     ((Lowerable) nonNullReceiver).lower(tool);
                 }
             }
-            InliningUtil.inline(invoke, replacementGraph, false, targetMethod);
+            InliningUtil.inline(invoke, replacementGraph, false, targetMethod, "Replace with graph.", "LoweringPhase");
             replacementGraph.getDebug().dump(DebugContext.DETAILED_LEVEL, graph(), "After inlining replacement %s", replacementGraph);
         } else {
             if (isPlaceholderBci(invoke.bci())) {
@@ -196,10 +214,13 @@ public abstract class MacroNode extends FixedWithNextNode implements Lowerable {
         }
     }
 
+    @SuppressWarnings("try")
     public InvokeNode replaceWithInvoke() {
-        InvokeNode invoke = createInvoke();
-        graph().replaceFixedWithFixed(this, invoke);
-        return invoke;
+        try (DebugCloseable context = withNodeSourcePosition()) {
+            InvokeNode invoke = createInvoke();
+            graph().replaceFixedWithFixed(this, invoke);
+            return invoke;
+        }
     }
 
     protected InvokeNode createInvoke() {

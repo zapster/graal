@@ -25,13 +25,13 @@
 package com.oracle.truffle.tools.chromeinspector.instrument;
 
 import com.oracle.truffle.api.instrumentation.EventBinding;
-import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
+import com.oracle.truffle.api.instrumentation.SourceFilter;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 
 import com.oracle.truffle.tools.chromeinspector.ScriptsHandler;
 
-@TruffleInstrument.Registration(id = SourceLoadInstrument.ID, services = {Enabler.class, ScriptsHandler.Provider.class}, internal = true)
-public final class SourceLoadInstrument extends TruffleInstrument implements Enabler, ScriptsHandler.Provider {
+@TruffleInstrument.Registration(id = SourceLoadInstrument.ID, services = SourceLoadInstrument.class, internal = true)
+public final class SourceLoadInstrument extends TruffleInstrument {
 
     public static final String ID = "SourceLoadInstrument";
 
@@ -54,21 +54,18 @@ public final class SourceLoadInstrument extends TruffleInstrument implements Ena
         super.onDispose(e);
     }
 
-    @Override
-    public void enable() {
+    public void enable(boolean internalSources) {
         if (slh == null) {
-            slh = new ScriptsHandler();
-            binding = env.getInstrumenter().attachLoadSourceListener(SourceSectionFilter.ANY, slh, true);
+            slh = new ScriptsHandler(internalSources);
+            binding = env.getInstrumenter().attachLoadSourceListener(SourceFilter.ANY, slh, true);
         }
     }
 
-    @Override
     public void disable() {
         binding.dispose();
         slh = null;
     }
 
-    @Override
     public ScriptsHandler getScriptsHandler() {
         return slh;
     }

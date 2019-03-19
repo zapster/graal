@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -25,10 +27,16 @@ package org.graalvm.compiler.nodes.graphbuilderconf;
 import org.graalvm.compiler.nodes.FrameState;
 import org.graalvm.compiler.nodes.ValueNode;
 
+import jdk.vm.ci.meta.ConstantPool;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
 public interface ClassInitializationPlugin extends GraphBuilderPlugin {
     boolean shouldApply(GraphBuilderContext builder, ResolvedJavaType type);
 
     ValueNode apply(GraphBuilderContext builder, ResolvedJavaType type, FrameState frameState);
+
+    boolean supportsLazyInitialization(ConstantPool cp);
+
+    void loadReferencedType(GraphBuilderContext builder, ConstantPool cp, int cpi, int bytecode);
+
 }

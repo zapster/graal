@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -56,41 +58,30 @@ public class HotSpotDataBuilder extends DataBuilder {
 
     @Override
     public Data createDataItem(Constant constant) {
-        int size;
-        if (constant instanceof VMConstant) {
+        if (JavaConstant.isNull(constant)) {
+            boolean compressed = COMPRESSED_NULL.equals(constant);
+            int size = compressed ? 4 : target.wordSize;
+            return ZeroData.create(size, size);
+        } else if (constant instanceof VMConstant) {
             VMConstant vmConstant = (VMConstant) constant;
-            boolean compressed;
-            if (constant instanceof HotSpotConstant) {
-                HotSpotConstant c = (HotSpotConstant) vmConstant;
-                compressed = c.isCompressed();
-            } else {
+            if (!(constant instanceof HotSpotConstant)) {
                 throw new GraalError(String.valueOf(constant));
             }
 
-            size = compressed ? 4 : target.wordSize;
-            if (size == 4) {
-                return new Data(size, size) {
-
-                    @Override
-                    protected void emit(ByteBuffer buffer, Patches patches) {
-                        patches.registerPatch(vmConstant);
+            HotSpotConstant c = (HotSpotConstant) vmConstant;
+            int size = c.isCompressed() ? 4 : target.wordSize;
+            return new Data(size, size) {
+                @Override
+                protected void emit(ByteBuffer buffer, Patches patches) {
+                    int position = buffer.position();
+                    if (getSize() == Integer.BYTES) {
                         buffer.putInt(0xDEADDEAD);
-                    }
-                };
-            } else {
-                return new Data(size, size) {
-
-                    @Override
-                    protected void emit(ByteBuffer buffer, Patches patches) {
-                        patches.registerPatch(vmConstant);
+                    } else {
                         buffer.putLong(0xDEADDEADDEADDEADL);
                     }
-                };
-            }
-        } else if (JavaConstant.isNull(constant)) {
-            boolean compressed = COMPRESSED_NULL.equals(constant);
-            size = compressed ? 4 : target.wordSize;
-            return ZeroData.create(size, size);
+                    patches.registerPatch(position, vmConstant);
+                }
+            };
         } else if (constant instanceof SerializableConstant) {
             SerializableConstant s = (SerializableConstant) constant;
             return new SerializableData(s);

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -30,6 +32,7 @@ import org.graalvm.compiler.nodes.util.ConstantFoldUtil;
 
 import com.oracle.graal.pointsto.meta.AnalysisMetaAccess;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
+import com.oracle.svm.hosted.ClassInitializationFeature;
 
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
@@ -68,10 +71,18 @@ public final class ConstantFoldLoadFieldPlugin implements NodePlugin {
                 } else {
                     /* Map the constant value to the root field of it's receiver. */
                     root = sReceiver.getRoot();
-                    assert root != null : receiver.toValueString() + " : " + field + " : " + b.getGraph();
+
+                    /*
+                     * String constants are directly embedded in the bytecode without being loaded
+                     * from a field, so we do not have a root.
+                     */
+                    assert root != null || SubstrateObjectConstant.asObject(receiver) instanceof String : receiver.toValueString() + " : " + field + " : " + b.getGraph();
                 }
                 sValue.setRoot(root);
             }
+
+            assert !ClassInitializationFeature.shouldInitializeAtRuntime(field.getDeclaringClass()) ||
+                            value.isDefaultForKind() : "Fields in classes that are marked for initialization at run time must not be constant folded, unless they are not written in the static initializer, i.e., have the default value";
 
             result = b.getGraph().unique(result);
             b.push(field.getJavaKind(), result);

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -33,7 +35,7 @@ import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.test.polyglot.EngineAPITestLanguage.LanguageContext;
 
-@TruffleLanguage.Registration(id = EngineAPITestLanguage.ID, implementationName = EngineAPITestLanguage.IMPL_NAME, name = EngineAPITestLanguage.NAME, version = EngineAPITestLanguage.VERSION, mimeType = EngineAPITestLanguage.MIME)
+@TruffleLanguage.Registration(id = EngineAPITestLanguage.ID, implementationName = EngineAPITestLanguage.IMPL_NAME, name = EngineAPITestLanguage.NAME, version = EngineAPITestLanguage.VERSION, characterMimeTypes = EngineAPITestLanguage.MIME)
 public class EngineAPITestLanguage extends TruffleLanguage<LanguageContext> {
 
     static EngineAPITestLanguage.LanguageContext langContext;
@@ -42,7 +44,7 @@ public class EngineAPITestLanguage extends TruffleLanguage<LanguageContext> {
     static final String NAME = "Name";
     static final String IMPL_NAME = "ImplName";
     static final String VERSION = "Version";
-    static final String MIME = "Mime";
+    static final String MIME = "text/mime";
 
     static final String Option1_HELP = "Option1_HELP";
     static final boolean Option1_DEPRECATED = false;
@@ -97,11 +99,6 @@ public class EngineAPITestLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected void disposeContext(LanguageContext context) {
 
-    }
-
-    @Override
-    protected Object getLanguageGlobal(LanguageContext context) {
-        return null;
     }
 
     @Override

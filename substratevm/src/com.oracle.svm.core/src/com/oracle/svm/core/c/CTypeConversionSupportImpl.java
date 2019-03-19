@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,6 +24,7 @@
  */
 package com.oracle.svm.core.c;
 
+import java.nio.charset.Charset;
 import java.util.Arrays;
 
 import org.graalvm.nativeimage.Feature;
@@ -69,6 +72,23 @@ class CTypeConversionSupportImpl implements CTypeConversionSupport {
         }
     }
 
+    @Override
+    public String toJavaString(CCharPointer cString, UnsignedWord length, Charset charset) {
+        if (cString.isNull()) {
+            return null;
+        } else {
+            return toJavaStringWithCharset(cString, length, charset);
+        }
+    }
+
+    private static String toJavaStringWithCharset(CCharPointer cString, UnsignedWord length, Charset charset) {
+        byte[] bytes = new byte[(int) length.rawValue()];
+        for (int i = 0; i < bytes.length; i++) {
+            bytes[i] = ((Pointer) cString).readByte(i);
+        }
+        return new String(bytes, charset);
+    }
+
     private static String toJavaStringUnchecked(CCharPointer cString, UnsignedWord length) {
         byte[] bytes = new byte[(int) length.rawValue()];
         for (int i = 0; i < bytes.length; i++) {
@@ -78,12 +98,17 @@ class CTypeConversionSupportImpl implements CTypeConversionSupport {
     }
 
     @Override
-    public CCharPointer toCString(CharSequence javaString, CCharPointer buffer, UnsignedWord bufferSize) {
+    public UnsignedWord toCString(CharSequence javaString, CCharPointer buffer, UnsignedWord bufferSize) {
+        return toCString(javaString, Charset.defaultCharset(), buffer, bufferSize);
+    }
+
+    @Override
+    public UnsignedWord toCString(CharSequence javaString, Charset charset, CCharPointer buffer, UnsignedWord bufferSize) {
         if (javaString == null || bufferSize.equal(0)) {
-            return WordFactory.nullPointer();
+            return WordFactory.zero();
         }
 
-        byte[] baseString = javaString.toString().getBytes();
+        byte[] baseString = javaString.toString().getBytes(charset);
 
         /*
          * The array length is always an int, so the truncation of the buffer size to int can never
@@ -95,7 +120,7 @@ class CTypeConversionSupportImpl implements CTypeConversionSupport {
             buffer.write(i, baseString[i]);
         }
 
-        return buffer;
+        return WordFactory.unsigned(len);
     }
 
     @Override

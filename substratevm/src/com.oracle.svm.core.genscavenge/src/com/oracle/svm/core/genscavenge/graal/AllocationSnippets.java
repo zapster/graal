@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -61,17 +63,17 @@ import org.graalvm.compiler.replacements.nodes.ExplodeLoopNode;
 import org.graalvm.compiler.word.BarrieredAccess;
 import org.graalvm.compiler.word.ObjectAccess;
 import org.graalvm.compiler.word.Word;
+import org.graalvm.nativeimage.RuntimeReflection;
 import org.graalvm.word.LocationIdentity;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordBase;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.RuntimeReflection;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.allocationprofile.AllocationCounter;
 import com.oracle.svm.core.allocationprofile.AllocationSite;
-import com.oracle.svm.core.annotate.MustNotAllocate;
+import com.oracle.svm.core.annotate.RestrictHeapAccess;
 import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.genscavenge.HeapPolicy;
@@ -93,6 +95,7 @@ import com.oracle.svm.core.graal.nodes.SubstrateNewArrayNode;
 import com.oracle.svm.core.graal.nodes.SubstrateNewInstanceNode;
 import com.oracle.svm.core.graal.snippets.NodeLoweringProvider;
 import com.oracle.svm.core.graal.snippets.SubstrateTemplates;
+import com.oracle.svm.core.heap.ObjectHeader;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.LayoutEncoding;
 import com.oracle.svm.core.meta.SharedType;
@@ -320,7 +323,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
     private static native Object callNewMultiArray(@ConstantNodeParameter ForeignCallDescriptor descriptor, Class<?> c, int rank, Pointer dimensions, AllocationCounter counter);
 
     /** Foreign call: {@link #NEW_MULTI_ARRAY}. */
-    @MustNotAllocate(reason = "Must not allocate in the implementation of allocation.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate in the implementation of allocation.")
     @SubstrateForeignCallTarget
     private static Object newMultiArray(DynamicHub hub, int rank, Pointer dimensionsStackValue, AllocationCounter counter) {
         /*
@@ -342,9 +345,9 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
 
         if (rank > 1) {
             UnsignedWord offset = LayoutEncoding.getArrayBaseOffset(hub.getLayoutEncoding());
-            UnsignedWord size = LayoutEncoding.getArraySize(hub.getLayoutEncoding(), length);
+            UnsignedWord endOffset = LayoutEncoding.getArrayElementOffset(hub.getLayoutEncoding(), length);
 
-            while (offset.belowThan(size)) {
+            while (offset.belowThan(endOffset)) {
                 // Each newMultiArrayRecursion could create a cross-generational reference.
                 BarrieredAccess.writeObject(result, offset,
                                 newMultiArrayRecursion(hub.getComponentHub(), rank - 1, dimensionsStackValue.add(sizeOfDimensionElement), counter));
@@ -358,32 +361,26 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
     public static Object arraysCopyOfSnippet(DynamicHub hub, Object original, int originalLength, int newLength, AllocationCounter counter) {
         int layoutEncoding = hub.getLayoutEncoding();
         // allocate new array without initializing the new array
-        Object copy = newArraySnippet(hub, newLength, layoutEncoding, false, counter);
+        Object newArray = newArraySnippet(hub, newLength, layoutEncoding, false, counter);
 
-        // copy elements from original
+        int copiedLength = originalLength < newLength ? originalLength : newLength;
+        UnsignedWord copiedEndOffset = LayoutEncoding.getArrayElementOffset(layoutEncoding, copiedLength);
+        UnsignedWord newArrayEndOffset = LayoutEncoding.getArrayElementOffset(layoutEncoding, newLength);
 
-        // The length of the copied section
-        int length = originalLength < newLength ? originalLength : newLength;
-        // The size of the copied section(obtained from the length of the copied section)
-        UnsignedWord size = LayoutEncoding.getArraySize(layoutEncoding, length);
-        // The size of the new array (obtained from the length of the new array)
-        UnsignedWord newSize = LayoutEncoding.getArraySize(layoutEncoding, newLength);
-
-        // We know that the offset is always word aligned
         UnsignedWord offset = LayoutEncoding.getArrayBaseOffset(layoutEncoding);
-        while (offset.belowThan(size)) {
+        while (offset.belowThan(copiedEndOffset)) {
             Object val = ObjectAccess.readObject(original, offset);
-            ObjectAccess.writeObject(copy, offset, val, LocationIdentity.INIT_LOCATION);
+            ObjectAccess.writeObject(newArray, offset, val, LocationIdentity.INIT_LOCATION);
 
-            offset = offset.add(ConfigurationValues.getTarget().wordSize);
+            offset = offset.add(ConfigurationValues.getObjectLayout().getReferenceSize());
         }
 
-        while (offset.belowThan(newSize)) {
-            ObjectAccess.writeObject(copy, offset, null, LocationIdentity.INIT_LOCATION);
-            offset = offset.add(ConfigurationValues.getTarget().wordSize);
+        while (offset.belowThan(newArrayEndOffset)) {
+            ObjectAccess.writeObject(newArray, offset, null, LocationIdentity.INIT_LOCATION);
+            offset = offset.add(ConfigurationValues.getObjectLayout().getReferenceSize());
         }
 
-        return FixedValueAnchorNode.getObject(copy);
+        return FixedValueAnchorNode.getObject(newArray);
     }
 
     private static final CloneNotSupportedException CLONE_NOT_SUPPORTED_EXCEPTION = new CloneNotSupportedException("Object is not instance of Cloneable.");
@@ -414,7 +411,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
         Object thatObject = null;
         if (BranchProbabilityNode.probability(BranchProbabilityNode.FAST_PATH_PROBABILITY, memory.isNonNull())) {
             WordBase header = ObjectHeaderImpl.getObjectHeaderImpl().formatHub(hub, false, false);
-            memory.writeWord(ConfigurationValues.getObjectLayout().getHubOffset(), header, LocationIdentity.INIT_LOCATION);
+            ObjectHeader.initializeHeaderOfNewObject(memory, header);
             /*
              * For arrays the length initialization is handled by doCloneUninterruptibly since the
              * array length offset is the same as the first field offset.
@@ -452,12 +449,15 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
          */
         Pointer thisMemory = Word.objectToUntrackedPointer(thisObject);
         UnsignedWord offset = firstFieldOffset;
+        if (!isWordAligned(offset) && offset.belowThan(size)) { // narrow references
+            thatMemory.writeInt(offset, thisMemory.readInt(offset));
+            offset = offset.add(Integer.BYTES);
+        }
         while (offset.belowThan(size)) {
             thatMemory.writeWord(offset, thisMemory.readWord(offset));
             offset = offset.add(ConfigurationValues.getTarget().wordSize);
         }
-        final Object result = thatMemory.toObjectNonNull();
-        return result;
+        return thatMemory.toObjectNonNull();
     }
 
     private static Object formatObjectImpl(Pointer memory, DynamicHub hub, UnsignedWord size, @ConstantParameter boolean constantSize, @ConstantParameter boolean fillContents, boolean rememberedSet) {
@@ -466,15 +466,25 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
         }
 
         WordBase header = ObjectHeaderImpl.getObjectHeaderImpl().formatHub(hub, rememberedSet, false);
-        memory.writeWord(ConfigurationValues.getObjectLayout().getHubOffset(), header, LocationIdentity.INIT_LOCATION);
+        ObjectHeaderImpl.initializeHeaderOfNewObject(memory, header);
         if (fillContents) {
+            int wordSize = ConfigurationValues.getTarget().wordSize;
             UnsignedWord offset = WordFactory.unsigned(ConfigurationValues.getObjectLayout().getFirstFieldOffset());
-            if (constantSize && ((size.subtract(offset).unsignedDivide(ConfigurationValues.getTarget().wordSize)).belowOrEqual(SubstrateOptions.MaxUnrolledObjectZeroingStores.getValue()))) {
-                ExplodeLoopNode.explodeLoop();
+            Word zeroingStores = WordFactory.zero();
+            if (!isWordAligned(offset) && offset.belowThan(size)) { // narrow references
+                memory.writeInt(offset, 0, LocationIdentity.INIT_LOCATION);
+                offset = offset.add(Integer.BYTES);
+                zeroingStores = zeroingStores.add(1);
+            }
+            if (constantSize) {
+                zeroingStores = zeroingStores.add(size.subtract(offset).unsignedDivide(wordSize));
+                if (zeroingStores.belowOrEqual(SubstrateOptions.MaxUnrolledObjectZeroingStores.getValue())) {
+                    ExplodeLoopNode.explodeLoop();
+                }
             }
             while (offset.belowThan(size)) {
                 memory.writeWord(offset, WordFactory.zero(), LocationIdentity.INIT_LOCATION);
-                offset = offset.add(ConfigurationValues.getTarget().wordSize);
+                offset = offset.add(wordSize);
             }
         }
         return memory.toObjectNonNull();
@@ -496,7 +506,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
     @Uninterruptible(reason = "Manipulates Objects via Pointers", callerMustBe = true)
     private static Object formatArrayImpl(Pointer memory, DynamicHub hub, int length, int layoutEncoding, UnsignedWord size, boolean fillContents, boolean rememberedSet, boolean unaligned) {
         WordBase header = ObjectHeaderImpl.getObjectHeaderImpl().formatHub(hub, rememberedSet, unaligned);
-        memory.writeWord(ConfigurationValues.getObjectLayout().getHubOffset(), header, LocationIdentity.INIT_LOCATION);
+        ObjectHeader.initializeHeaderOfNewObject(memory, header);
         memory.writeInt(ConfigurationValues.getObjectLayout().getArrayLengthOffset(), length, LocationIdentity.INIT_LOCATION);
         if (fillContents) {
             UnsignedWord offset = LayoutEncoding.getArrayBaseOffset(layoutEncoding);
@@ -589,7 +599,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.addConst("encoding", type.getHub().getLayoutEncoding());
             args.addConst("fillContents", node.fillContents());
             addCounterArgs(args, node, type);
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
 
     }
@@ -607,7 +617,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.add("hub", node.getInstanceType());
             args.addConst("fillContents", node.fillContents());
             addCounterArgs(args, node, null);
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -651,7 +661,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.addConst("layoutEncoding", type.getHub().getLayoutEncoding());
             args.addConst("fillContents", node.fillContents());
             addCounterArgs(args, node, type);
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -669,7 +679,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.add("length", node.length());
             args.addConst("fillContents", node.fillContents());
             addCounterArgs(args, node, null);
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -689,7 +699,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.addConst("encoding", type.getHub().getLayoutEncoding());
             args.addConst("fillContents", node.fillContents());
             addCounterArgs(args, node, type);
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -710,7 +720,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.addConst("layoutEncoding", type.getHub().getLayoutEncoding());
             args.addConst("fillContents", node.fillContents());
             addCounterArgs(args, node, type);
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -727,7 +737,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.add("memory", node.getMemory());
             args.add("hub", node.getHub());
             args.add("rememberedSet", node.getRememberedSet());
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -746,7 +756,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.add("length", node.getLength());
             args.add("rememberedSet", node.getRememberedSet());
             args.add("unaligned", node.getUnaligned());
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -771,7 +781,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.addConst("rank", rank);
             args.addVarargs("dimensions", int.class, StampFactory.forKind(JavaKind.Int), dims);
             addCounterArgs(args, node, type);
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -792,7 +802,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             args.add("newLength", node.getNewLength());
 
             addCounterArgs(args, node, null);
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 
@@ -809,7 +819,7 @@ public final class AllocationSnippets extends SubstrateTemplates implements Snip
             Arguments args = new Arguments(doClone, node.graph().getGuardsStage(), tool.getLoweringStage());
             args.add("thisObj", node.getObject());
             AllocationSnippets.addCounterArgs(args, node, null);
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 

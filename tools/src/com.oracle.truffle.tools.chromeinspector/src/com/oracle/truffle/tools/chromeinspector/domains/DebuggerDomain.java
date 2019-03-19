@@ -46,7 +46,9 @@ public abstract class DebuggerDomain extends Domain {
 
     public abstract void setBlackboxPatterns(String[] patterns);
 
-    public abstract void setPauseOnExceptions(String state);
+    public abstract void setPauseOnExceptions(String state) throws CommandProcessException;
+
+    public abstract Params getPossibleBreakpoints(Location start, Location end, boolean restrictToFunction) throws CommandProcessException;
 
     public abstract Params getScriptSource(String scriptId) throws CommandProcessException;
 
@@ -62,6 +64,8 @@ public abstract class DebuggerDomain extends Domain {
 
     public abstract void setBreakpointsActive(Optional<Boolean> breakpointsActive) throws CommandProcessException;
 
+    public abstract void setSkipAllPauses(Optional<Boolean> skip) throws CommandProcessException;
+
     public abstract Params setBreakpointByUrl(String url, String urlRegex, int line, int column, String condition) throws CommandProcessException;
 
     public abstract Params setBreakpoint(Location location, String condition) throws CommandProcessException;
@@ -73,6 +77,8 @@ public abstract class DebuggerDomain extends Domain {
     public abstract Params evaluateOnCallFrame(String callFrameId, String expression, String objectGroup,
                     boolean includeCommandLineAPI, boolean silent, boolean returnByValue, boolean generatePreview,
                     boolean throwOnSideEffect) throws CommandProcessException;
+
+    public abstract Params restartFrame(long cmdId, String callFrameId, CommandPostProcessor postProcessor) throws CommandProcessException;
 
     public abstract void setVariableValue(int scopeNumber, String variableName, CallArgument newValue, String callFrameId) throws CommandProcessException;
 

@@ -14,19 +14,20 @@ sudo: required
 dist: trusty
 
 jdk:
-    - oraclejdk9
+    - oraclejdk11
 
 env:
   global:
-    - JVMCI_VERSION="jvmci-0.39"
-    - JVMCI_BASE_JDK8="openjdk1.8.0_141"
+    - JVMCI_VERSION="jvmci-0.48"
+    - JDK8_UPDATE_VERSION="172"
   matrix:
-    - JDK="jdk8" GATE="style,fullbuild"
-    - JDK="jdk8" GATE="build,test"
-    - JDK="jdk8" GATE="build,bootstraplite"
-    - JDK="jdk9" GATE="style,fullbuild"
-    - JDK="jdk9" GATE="build,test"
-    - JDK="jdk9" GATE="build,bootstraplite"
+    - JDK="jdk8" GATE="style,fullbuild" PRIMARY="compiler"
+    - JDK="jdk8" GATE="build,test" PRIMARY="compiler"
+    - JDK="jdk8" GATE="build,test" PRIMARY="substratevm"
+    - JDK="jdk8" GATE="build,bootstraplite" PRIMARY="compiler"
+    - JDK="jdk11" GATE="style,fullbuild" PRIMARY="compiler"
+    - JDK="jdk11" GATE="build,test" PRIMARY="compiler"
+    - JDK="jdk11" GATE="build,bootstraplite" PRIMARY="compiler"
 install:
   - |
       export MX_PATH=${TRAVIS_BUILD_DIR}/../mx
@@ -48,8 +49,8 @@ install:
   - |
       if [[ ${GATE} == *fullbuild* ]]
       then
-        # JDT is not supported on JDK9
-        if [ "${JDK}" != "jdk9" ]
+        # Only test JDT on JDK8
+        if [ "${JDK}" == "jdk8" ]
         then
           export JDT=${MX_PATH}/ecj.jar
           wget http://archive.eclipse.org/eclipse/downloads/drops4/R-4.5.2-201602121500/ecj-4.5.2.jar -O ${JDT}
@@ -59,14 +60,14 @@ install:
       if [ "${JDK}" == "jdk8" ]
       then
         JDK_TAR=${TRAVIS_BUILD_DIR}/../jdk.tar.gz
-        wget https://github.com/dougxc/openjdk8-jvmci-builder/releases/download/${JVMCI_VERSION}/${JVMCI_BASE_JDK8}-${JVMCI_VERSION}-linux-amd64.tar.gz -O ${JDK_TAR}
+        wget https://github.com/graalvm/openjdk8-jvmci-builder/releases/download/${JVMCI_VERSION}/openjdk-8u${JDK8_UPDATE_VERSION}-${JVMCI_VERSION}-linux-amd64.tar.gz -O ${JDK_TAR}
         tar -C ${TRAVIS_BUILD_DIR}/.. -xzf ${JDK_TAR}
-        export JAVA_HOME=${TRAVIS_BUILD_DIR}/../${JVMCI_BASE_JDK8}-${JVMCI_VERSION}
+        export JAVA_HOME=${TRAVIS_BUILD_DIR}/../openjdk1.8.0_${JDK8_UPDATE_VERSION}-${JVMCI_VERSION}
       fi
 
 script:
   - echo ${JAVA_HOME}
   - ${JAVA_HOME}/bin/java -version
-  - mx -v --primary-suite-path ${TRAVIS_BUILD_DIR}/compiler --java-home=${JAVA_HOME} gate --strict-mode --tags ${GATE}
+  - mx -v --primary-suite-path ${TRAVIS_BUILD_DIR}/${PRIMARY} --java-home=${JAVA_HOME} gate --strict-mode --tags ${GATE}
 after_failure:
   - cat hs_err*

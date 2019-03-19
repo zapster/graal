@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,10 +26,10 @@ package org.graalvm.compiler.virtual.phases.ea;
 
 import java.util.Iterator;
 
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.Equivalence;
 import org.graalvm.compiler.nodes.ValueNode;
-import org.graalvm.util.Equivalence;
 import org.graalvm.word.LocationIdentity;
-import org.graalvm.util.EconomicMap;
 
 /**
  * This class maintains a set of known values, identified by base object, locations and offset.

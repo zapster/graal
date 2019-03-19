@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,9 +24,12 @@
  */
 package com.oracle.truffle.api.test;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+
 import java.util.Iterator;
 
-import org.junit.Assert;
 import org.junit.Test;
 
 import com.oracle.truffle.api.CallTarget;
@@ -64,14 +69,14 @@ public class ChildNodeTest {
         TestChildNode rightChild = new TestChildNode();
         TestRootNode rootNode = new TestRootNode(leftChild, rightChild);
         CallTarget target = runtime.createCallTarget(rootNode);
-        Assert.assertEquals(rootNode, leftChild.getParent());
-        Assert.assertEquals(rootNode, rightChild.getParent());
+        assertEquals(rootNode, leftChild.getParent());
+        assertEquals(rootNode, rightChild.getParent());
         Iterator<Node> iterator = rootNode.getChildren().iterator();
-        Assert.assertEquals(leftChild, iterator.next());
-        Assert.assertEquals(rightChild, iterator.next());
-        Assert.assertFalse(iterator.hasNext());
+        assertEquals(leftChild, iterator.next());
+        assertEquals(rightChild, iterator.next());
+        assertFalse(iterator.hasNext());
         Object result = target.call();
-        Assert.assertEquals(42, result);
+        assertEquals(42, result);
     }
 
     class TestRootNode extends RootNode {
@@ -93,11 +98,70 @@ public class ChildNodeTest {
 
     class TestChildNode extends Node {
 
+        final int index;
+
         TestChildNode() {
+            this.index = 21;
+        }
+
+        TestChildNode(int index) {
+            this.index = index;
         }
 
         public int execute() {
-            return 21;
+            return index;
+        }
+
+        @Override
+        public String toString() {
+            return String.valueOf(index);
         }
     }
+
+    @Test
+    public void testChildTraversalOrder() {
+        TestSubNode node = new TestSubNode();
+        Iterator<Node> iterator = node.getChildren().iterator();
+
+        assertSame(node.getChild(0), iterator.next());
+        assertSame(node.getChild(1), iterator.next());
+        assertSame(node.getChild(2), iterator.next());
+        assertSame(node.getChild(3), iterator.next());
+
+        assertFalse(iterator.hasNext());
+    }
+
+    class TestBaseNode extends Node {
+
+        @Child private Node child = new TestChildNode(0);
+        @Children private final Node[] children = new Node[]{new TestChildNode(1)};
+
+        public Node getChild(int index) {
+            if (index == 0) {
+                return child;
+            } else if (index == 1) {
+                return children[0];
+            }
+            throw new AssertionError();
+        }
+
+    }
+
+    class TestSubNode extends TestBaseNode {
+
+        @Child private Node child = new TestChildNode(2);
+        @Children private final Node[] children = new Node[]{new TestChildNode(3)};
+
+        @Override
+        public Node getChild(int index) {
+            if (index == 2) {
+                return child;
+            } else if (index == 3) {
+                return children[0];
+            }
+            return super.getChild(index);
+        }
+
+    }
+
 }

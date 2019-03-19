@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -38,12 +40,13 @@ import org.graalvm.compiler.phases.util.Providers;
 import org.graalvm.compiler.replacements.SnippetTemplate;
 import org.graalvm.compiler.replacements.SnippetTemplate.Arguments;
 import org.graalvm.compiler.replacements.SnippetTemplate.SnippetInfo;
+import org.graalvm.compiler.replacements.Snippets;
 import org.graalvm.compiler.word.BarrieredAccess;
 import org.graalvm.compiler.word.ObjectAccess;
 import org.graalvm.word.LocationIdentity;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
-import org.graalvm.compiler.replacements.Snippets;
+
 import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.graal.snippets.NodeLoweringProvider;
 import com.oracle.svm.core.graal.snippets.SubstrateTemplates;
@@ -87,7 +90,7 @@ public final class ArraycopySnippets extends SubstrateTemplates implements Snipp
                 boundsCheck(fromArray, fromIndex, toArray, toIndex, length);
                 objectCopyBackward(fromArray, fromIndex, fromArray, toIndex, length, fromHub.getLayoutEncoding());
                 return;
-            } else if (fromHub == toHub || toHub.isAssignableFrom(fromHub)) {
+            } else if (fromHub == toHub || toHub.isAssignableFromHub(fromHub)) {
                 boundsCheck(fromArray, fromIndex, toArray, toIndex, length);
                 objectCopyForward(fromArray, fromIndex, toArray, toIndex, length, fromHub.getLayoutEncoding());
                 return;
@@ -245,7 +248,7 @@ public final class ArraycopySnippets extends SubstrateTemplates implements Snipp
             args.add("toArray", node.getDestination());
             args.add("toIndex", node.getDestinationPosition());
             args.add("length", node.getLength());
-            template(node.getDebug(), args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
+            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, args);
         }
     }
 }

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -112,6 +114,13 @@ public final class SSAUtil {
         return (JumpOp) op;
     }
 
+    public static JumpOp phiOutOrNull(LIR lir, AbstractBlockBase<?> block) {
+        if (block.getSuccessorCount() != 1) {
+            return null;
+        }
+        return phiOut(lir, block);
+    }
+
     public static int phiOutIndex(LIR lir, AbstractBlockBase<?> block) {
         assert block.getSuccessorCount() == 1;
         ArrayList<LIRInstruction> instructions = lir.getLIRforBlock(block);
@@ -179,6 +188,21 @@ public final class SSAUtil {
             }
         }
         return -1;
+    }
+
+    public static int numPhiOut(LIR lir, AbstractBlockBase<?> block) {
+        if (block.getSuccessorCount() != 1) {
+            // cannot be a phi_out block
+            return 0;
+        }
+        return numPhiIn(lir, block.getSuccessors()[0]);
+    }
+
+    private static int numPhiIn(LIR lir, AbstractBlockBase<?> block) {
+        if (!isMerge(block)) {
+            return 0;
+        }
+        return phiIn(lir, block).getPhiSize();
     }
 
 }

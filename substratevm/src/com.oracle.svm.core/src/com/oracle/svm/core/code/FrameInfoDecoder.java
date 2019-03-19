@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -27,7 +29,7 @@ import org.graalvm.compiler.core.common.util.TypeReader;
 import org.graalvm.compiler.core.common.util.UnsafeArrayTypeReader;
 
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.annotate.MustNotAllocate;
+import com.oracle.svm.core.annotate.RestrictHeapAccess;
 import com.oracle.svm.core.code.FrameInfoQueryResult.ValueInfo;
 import com.oracle.svm.core.code.FrameInfoQueryResult.ValueType;
 import com.oracle.svm.core.meta.SharedMethod;
@@ -51,7 +53,7 @@ public class FrameInfoDecoder {
     }
 
     public interface FrameInfoQueryResultAllocator {
-        @MustNotAllocate(reason = "Whitelisted because some implementations can allocate.", list = MustNotAllocate.WHITELIST)
+        @RestrictHeapAccess(reason = "Whitelisted because some implementations can allocate.", access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true)
         FrameInfoQueryResult newFrameInfoQueryResult();
     }
 
@@ -76,25 +78,25 @@ public class FrameInfoDecoder {
 
     static class HeapBasedValueInfoAllocator implements ValueInfoAllocator {
         @Override
-        @MustNotAllocate(reason = "Whitelisted because some implementations can allocate.", list = MustNotAllocate.WHITELIST)
+        @RestrictHeapAccess(reason = "Whitelisted because some implementations can allocate.", access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true)
         public ValueInfo newValueInfo() {
             return new ValueInfo();
         }
 
         @Override
-        @MustNotAllocate(reason = "Whitelisted because some implementations can allocate.", list = MustNotAllocate.WHITELIST)
+        @RestrictHeapAccess(reason = "Whitelisted because some implementations can allocate.", access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true)
         public ValueInfo[] newValueInfoArray(int len) {
             return new ValueInfo[len];
         }
 
         @Override
-        @MustNotAllocate(reason = "Whitelisted because some implementations can allocate.", list = MustNotAllocate.WHITELIST)
+        @RestrictHeapAccess(reason = "Whitelisted because some implementations can allocate.", access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true)
         public ValueInfo[][] newValueInfoArrayArray(int len) {
             return new ValueInfo[len][];
         }
 
         @Override
-        @MustNotAllocate(reason = "Whitelisted because some implementations can allocate.", list = MustNotAllocate.WHITELIST)
+        @RestrictHeapAccess(reason = "Whitelisted because some implementations can allocate.", access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true)
         public void decodeConstant(ValueInfo valueInfo, Object[] frameInfoObjectConstants) {
             switch (valueInfo.type) {
                 case DefaultConstant:

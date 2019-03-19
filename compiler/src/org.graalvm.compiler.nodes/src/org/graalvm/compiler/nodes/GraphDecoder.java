@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -37,6 +39,9 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.EconomicSet;
+import org.graalvm.collections.Equivalence;
 import org.graalvm.compiler.core.common.Fields;
 import org.graalvm.compiler.core.common.PermanentBailoutException;
 import org.graalvm.compiler.core.common.util.TypeReader;
@@ -62,9 +67,6 @@ import org.graalvm.compiler.nodes.calc.FloatingNode;
 import org.graalvm.compiler.nodes.extended.IntegerSwitchNode;
 import org.graalvm.compiler.nodes.graphbuilderconf.LoopExplosionPlugin.LoopExplosionKind;
 import org.graalvm.compiler.options.OptionValues;
-import org.graalvm.util.EconomicMap;
-import org.graalvm.util.EconomicSet;
-import org.graalvm.util.Equivalence;
 
 import jdk.vm.ci.code.Architecture;
 import jdk.vm.ci.meta.DeoptimizationAction;
@@ -146,6 +148,15 @@ public class GraphDecoder {
         public boolean isInlinedMethod() {
             return false;
         }
+
+        public NodeSourcePosition getCallerBytecodePosition() {
+            return getCallerBytecodePosition(null);
+        }
+
+        public NodeSourcePosition getCallerBytecodePosition(NodeSourcePosition position) {
+            return position;
+        }
+
     }
 
     /** Decoding state maintained for each loop in the encoded graph. */
@@ -1001,7 +1012,7 @@ public class GraphDecoder {
     }
 
     protected void readProperties(MethodScope methodScope, Node node) {
-        node.setNodeSourcePosition((NodeSourcePosition) readObject(methodScope));
+        NodeSourcePosition position = (NodeSourcePosition) readObject(methodScope);
         Fields fields = node.getNodeClass().getData();
         for (int pos = 0; pos < fields.getCount(); pos++) {
             if (fields.getType(pos).isPrimitive()) {
@@ -1010,6 +1021,13 @@ public class GraphDecoder {
             } else {
                 Object value = readObject(methodScope);
                 fields.putObject(node, pos, value);
+            }
+        }
+        if (graph.trackNodeSourcePosition() && position != null) {
+            NodeSourcePosition callerBytecodePosition = methodScope.getCallerBytecodePosition(position);
+            node.setNodeSourcePosition(callerBytecodePosition);
+            if (node instanceof DeoptimizingGuard) {
+                ((DeoptimizingGuard) node).addCallerToNoDeoptSuccessorPosition(callerBytecodePosition.getCaller());
             }
         }
     }
@@ -1252,7 +1270,11 @@ public class GraphDecoder {
         long readerByteIndex = methodScope.reader.getByteIndex();
         methodScope.reader.setByteIndex(methodScope.encodedGraph.nodeStartOffsets[nodeOrderId]);
         NodeClass<?> nodeClass = methodScope.encodedGraph.getNodeClasses()[methodScope.reader.getUVInt()];
-        node = (FixedNode) graph.add(nodeClass.allocateInstance());
+        Node stubNode = nodeClass.allocateInstance();
+        if (graph.trackNodeSourcePosition()) {
+            stubNode.setNodeSourcePosition(NodeSourcePosition.placeholder(graph.method()));
+        }
+        node = (FixedNode) graph.add(stubNode);
         /* Properties and edges are not filled yet, the node remains uninitialized. */
         methodScope.reader.setByteIndex(readerByteIndex);
 
@@ -1379,6 +1401,15 @@ class LoopDetector implements Runnable {
     public void run() {
         DebugContext debug = graph.getDebug();
         debug.dump(DebugContext.DETAILED_LEVEL, graph, "Before loop detection");
+
+        if (methodScope.loopExplosionHead == null) {
+            /*
+             * The to-be-exploded loop was not reached during partial evaluation (e.g., because
+             * there was a deoptimization beforehand), or the method might not even contain a loop.
+             * This is an uncommon case, but not an error.
+             */
+            return;
+        }
 
         List<Loop> orderedLoops = findLoops();
         assert orderedLoops.get(orderedLoops.size() - 1) == irreducibleLoopHandler : "outermost loop must be the last element in the list";

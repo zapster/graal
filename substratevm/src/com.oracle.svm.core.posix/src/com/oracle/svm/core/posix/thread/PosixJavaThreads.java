@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -33,6 +35,7 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Isolate;
 import org.graalvm.nativeimage.ObjectHandle;
 import org.graalvm.nativeimage.ObjectHandles;
+import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platform.HOSTED_ONLY;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.StackValue;
@@ -44,30 +47,36 @@ import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.struct.RawField;
 import org.graalvm.nativeimage.c.struct.RawStructure;
 import org.graalvm.nativeimage.c.struct.SizeOf;
+import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.c.type.CTypeConversion.CCharPointerHolder;
 import org.graalvm.word.PointerBase;
 import org.graalvm.word.WordBase;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.UnsafeAccess;
 import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.annotate.Inject;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.TargetClass;
+import com.oracle.svm.core.c.CGlobalData;
+import com.oracle.svm.core.c.CGlobalDataFactory;
 import com.oracle.svm.core.c.function.CEntryPointActions;
 import com.oracle.svm.core.c.function.CEntryPointOptions;
 import com.oracle.svm.core.c.function.CEntryPointOptions.Publish;
 import com.oracle.svm.core.c.function.CEntryPointSetup.LeaveDetachThreadEpilogue;
+import com.oracle.svm.core.log.Log;
+import com.oracle.svm.core.os.IsDefined;
+import com.oracle.svm.core.os.VirtualMemoryProvider;
 import com.oracle.svm.core.posix.PosixUtils;
 import com.oracle.svm.core.posix.headers.Errno;
 import com.oracle.svm.core.posix.headers.LibC;
 import com.oracle.svm.core.posix.headers.Pthread;
 import com.oracle.svm.core.posix.headers.Pthread.pthread_attr_t;
+import com.oracle.svm.core.posix.headers.darwin.DarwinPthread;
 import com.oracle.svm.core.posix.headers.Sched;
 import com.oracle.svm.core.posix.headers.Time;
+import com.oracle.svm.core.posix.headers.linux.LinuxPthread;
 import com.oracle.svm.core.posix.pthread.PthreadConditionUtils;
-import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.thread.JavaThreads;
 import com.oracle.svm.core.thread.ParkEvent;
 import com.oracle.svm.core.thread.ParkEvent.ParkEventFactory;
@@ -91,7 +100,7 @@ public final class PosixJavaThreads extends JavaThreads {
 
     @Override
     protected void start0(Thread thread, long stackSize) {
-        pthread_attr_t attributes = StackValue.get(SizeOf.get(pthread_attr_t.class));
+        pthread_attr_t attributes = StackValue.get(pthread_attr_t.class);
         PosixUtils.checkStatusIs0(
                         Pthread.pthread_attr_init(attributes),
                         "PosixJavaThreads.start0: pthread_attr_init");
@@ -111,14 +120,18 @@ public final class PosixJavaThreads extends JavaThreads {
         }
 
         PosixUtils.checkStatusIs0(
-                        Pthread.pthread_attr_setguardsize(attributes, WordFactory.unsigned(UnsafeAccess.UNSAFE.pageSize())),
+                        Pthread.pthread_attr_setguardsize(attributes, VirtualMemoryProvider.get().getGranularity()),
                         "PosixJavaThreads.start0: pthread_attr_setguardsize");
 
         ThreadStartData startData = UnmanagedMemory.malloc(SizeOf.get(ThreadStartData.class));
-        startData.setVirtualMachine(CEntryPointContext.getCurrentIsolate());
+        startData.setIsolate(CEntryPointContext.getCurrentIsolate());
         startData.setThreadHandle(ObjectHandles.getGlobal().create(thread));
 
-        Pthread.pthread_tPointer newThread = StackValue.get(SizeOf.get(Pthread.pthread_tPointer.class));
+        if (!thread.isDaemon()) {
+            JavaThreads.singleton().signalNonDaemonThreadStart();
+        }
+
+        Pthread.pthread_tPointer newThread = StackValue.get(Pthread.pthread_tPointer.class);
         PosixUtils.checkStatusIs0(
                         Pthread.pthread_create(newThread, attributes, PosixJavaThreads.pthreadStartRoutine.getFunctionPointer(), startData),
                         "PosixJavaThreads.start0: pthread_create");
@@ -139,15 +152,26 @@ public final class PosixJavaThreads extends JavaThreads {
         return toTarget(thread).hasPthreadIdentifier;
     }
 
+    /**
+     * Try to set the native name of the current thread.
+     *
+     * Failures are ignored.
+     */
     @Override
-    protected void setNativeName(Thread thread, String name) {
-        if (hasThreadIdentifier(thread)) {
-            String pthreadName = name.substring(Math.max(0, name.length() - 15), name.length());
+    protected void setNativeName(String name) {
+        if (hasThreadIdentifier(Thread.currentThread())) {
+            /* Use at most 15 characters from the right end of the name. */
+            final int startIndex = Math.max(0, name.length() - 15);
+            final String pthreadName = name.substring(startIndex);
             assert pthreadName.length() < 16 : "thread name for pthread has a maximum length of 16 characters including the terminating 0";
             try (CCharPointerHolder threadNameHolder = CTypeConversion.toCString(pthreadName)) {
-                PosixUtils.checkStatusIs0(
-                                Pthread.pthread_setname_np(getPthreadIdentifier(thread), threadNameHolder.get()),
-                                "PosixJavaThreads.setNativeName: pthread_setname_np");
+                if (IsDefined.isLinux()) {
+                    LinuxPthread.pthread_setname_np(getPthreadIdentifier(Thread.currentThread()), threadNameHolder.get());
+                } else if (IsDefined.isDarwin()) {
+                    DarwinPthread.pthread_setname_np(threadNameHolder.get());
+                } else {
+                    VMError.unsupportedFeature("PosixJavaThreads.setNativeName on unknown OS");
+                }
             }
         }
     }
@@ -167,18 +191,23 @@ public final class PosixJavaThreads extends JavaThreads {
         void setThreadHandle(ObjectHandle handle);
 
         @RawField
-        Isolate getVirtualMachine();
+        Isolate getIsolate();
 
         @RawField
-        void setVirtualMachine(Isolate vm);
+        void setIsolate(Isolate vm);
     }
 
     private static final CEntryPointLiteral<CFunctionPointer> pthreadStartRoutine = CEntryPointLiteral.create(PosixJavaThreads.class, "pthreadStartRoutine", ThreadStartData.class);
 
     private static class PthreadStartRoutinePrologue {
+        private static final CGlobalData<CCharPointer> errorMessage = CGlobalDataFactory.createCString("Failed to attach a newly launched thread.");
+
         @SuppressWarnings("unused")
         static void enter(ThreadStartData data) {
-            CEntryPointActions.enterAttachThread(data.getVirtualMachine());
+            int code = CEntryPointActions.enterAttachThread(data.getIsolate());
+            if (code != 0) {
+                CEntryPointActions.failFatally(code, errorMessage.get());
+            }
         }
     }
 
@@ -190,7 +219,7 @@ public final class PosixJavaThreads extends JavaThreads {
 
         Thread thread = ObjectHandles.getGlobal().get(threadHandle);
 
-        boolean status = JavaThreads.currentThread.compareAndSet(null, thread);
+        boolean status = singleton().assignJavaThread(thread, false);
         VMError.guarantee(status, "currentThread already initialized");
 
         /*
@@ -201,29 +230,45 @@ public final class PosixJavaThreads extends JavaThreads {
 
         /* Complete the initialization of the thread, now that it is (nearly) running. */
         setPthreadIdentifier(thread, Pthread.pthread_self());
-        singleton().setNativeName(thread, thread.getName());
+        singleton().setNativeName(thread.getName());
 
-        boolean daemon = thread.isDaemon();
-        if (!daemon) {
-            singleton().nonDaemonThreads.incrementAndGet();
-        }
+        singleton().noteThreadStart(thread);
 
         try {
             thread.run();
         } catch (Throwable ex) {
-            SnippetRuntime.reportUnhandledExceptionJava(ex);
+            dispatchUncaughtException(thread, ex);
         } finally {
             exit(thread);
-            if (!daemon) {
-                singleton().nonDaemonThreads.decrementAndGet();
-            }
+            singleton().noteThreadFinish(thread);
         }
 
         return WordFactory.nullPointer();
     }
+
+    private void noteThreadStart(Thread thread) {
+        totalThreads.incrementAndGet();
+        int lThreads = liveThreads.incrementAndGet();
+        peakThreads.set(Integer.max(peakThreads.get(), lThreads));
+        if (thread.isDaemon()) {
+            daemonThreads.incrementAndGet();
+        } else {
+            nonDaemonThreads.incrementAndGet();
+        }
+    }
+
+    private void noteThreadFinish(Thread thread) {
+        liveThreads.decrementAndGet();
+        if (thread.isDaemon()) {
+            daemonThreads.decrementAndGet();
+        } else {
+            nonDaemonThreads.decrementAndGet();
+        }
+    }
 }
 
 @TargetClass(Thread.class)
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
 final class Target_java_lang_Thread {
     @Inject @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset)//
     boolean hasPthreadIdentifier;
@@ -302,7 +347,7 @@ class PosixParkEvent extends ParkEvent {
     @Override
     protected WaitResult condTimedWait(long delayNanos) {
         /* Encode the delay as a deadline in a Time.timespec. */
-        Time.timespec deadlineTimespec = StackValue.get(SizeOf.get(Time.timespec.class));
+        Time.timespec deadlineTimespec = StackValue.get(Time.timespec.class);
         PthreadConditionUtils.delayNanosToDeadlineTimespec(delayNanos, deadlineTimespec);
 
         WaitResult result = WaitResult.UNPARKED;
@@ -319,15 +364,28 @@ class PosixParkEvent extends ParkEvent {
                     return result;
                 }
                 final int status = Pthread.pthread_cond_timedwait(cond, mutex, deadlineTimespec);
-                /* If I was awakened because I ran out of time, then do not wait for the ticket. */
                 if (status == Errno.ETIMEDOUT()) {
+                    /* If I was awakened because I ran out of time, do not wait for the ticket. */
                     result = WaitResult.TIMED_OUT;
                     break;
-                } else if (status == Errno.EINTR()) {
+                }
+                if (status == Errno.EINTR()) {
+                    /* If I was awakened because I was interrupted, do not wait for the ticket. */
                     result = WaitResult.INTERRUPTED;
                     break;
                 }
-                PosixUtils.checkStatusIs0(status, "park(long): condition variable timed wait");
+                if (status != 0) {
+                    /* Detailed error message. */
+                    Log.log().newline()
+                                    .string("[PosixParkEvent.condTimedWait(delayNanos: ").signed(delayNanos).string("): Should not reach here.")
+                                    .string("  mutex: ").hex(mutex)
+                                    .string("  cond: ").hex(cond)
+                                    .string("  deadlineTimeSpec.tv_sec: ").signed(deadlineTimespec.tv_sec())
+                                    .string("  deadlineTimespec.tv_nsec: ").signed(deadlineTimespec.tv_nsec())
+                                    .string("  status: ").signed(status).string(" ").string(Errno.strerror(status))
+                                    .string("]").newline();
+                    PosixUtils.checkStatusIs0(status, "park(long): condition variable timed wait");
+                }
             }
 
             if (event) {
@@ -367,6 +425,7 @@ class PosixParkEventFactory implements ParkEventFactory {
 }
 
 @AutomaticFeature
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
 class PosixThreadsFeature implements Feature {
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {

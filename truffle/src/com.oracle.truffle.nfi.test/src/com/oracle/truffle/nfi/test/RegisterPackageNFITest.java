@@ -24,6 +24,16 @@
  */
 package com.oracle.truffle.nfi.test;
 
+import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.hamcrest.CoreMatchers.is;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -35,17 +45,9 @@ import com.oracle.truffle.api.interop.Message;
 import com.oracle.truffle.api.interop.MessageResolution;
 import com.oracle.truffle.api.interop.Resolve;
 import com.oracle.truffle.api.interop.TruffleObject;
-import com.oracle.truffle.api.interop.java.JavaInterop;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.tck.TruffleRunner;
 import com.oracle.truffle.tck.TruffleRunner.Inject;
-import java.util.HashMap;
-import java.util.Map;
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.is;
-import org.junit.Assert;
-import org.junit.Test;
-import org.junit.runner.RunWith;
 
 @RunWith(TruffleRunner.class)
 public class RegisterPackageNFITest extends NFITest {
@@ -81,7 +83,7 @@ public class RegisterPackageNFITest extends NFITest {
         @Resolve(message = "EXECUTE")
         abstract static class ExecuteFunctionRegistry extends Node {
 
-            @Child Node bind = Message.createInvoke(1).createNode();
+            @Child Node bind = Message.INVOKE.createNode();
 
             private void register(FunctionRegistry receiver, String name, String signature, TruffleObject symbol) {
                 try {
@@ -95,7 +97,7 @@ public class RegisterPackageNFITest extends NFITest {
 
             Object access(FunctionRegistry receiver, Object[] args) {
                 register(receiver, (String) args[0], (String) args[1], (TruffleObject) args[2]);
-                return JavaInterop.asTruffleObject(null);
+                return "";
             }
         }
 
@@ -120,7 +122,7 @@ public class RegisterPackageNFITest extends NFITest {
     static class LoadPackageNode extends Node {
 
         private final TruffleObject initializePackage = lookupAndBind("initialize_package", "((string,string,pointer):void):void");
-        @Child Node execute = Message.createExecute(1).createNode();
+        @Child Node execute = Message.EXECUTE.createNode();
 
         FunctionRegistry loadPackage() {
             FunctionRegistry registry = new FunctionRegistry();
@@ -138,8 +140,8 @@ public class RegisterPackageNFITest extends NFITest {
 
         @Child LoadPackageNode loadPackage = new LoadPackageNode();
 
-        @Child Node unary = Message.createExecute(1).createNode();
-        @Child Node binary = Message.createExecute(2).createNode();
+        @Child Node unary = Message.EXECUTE.createNode();
+        @Child Node binary = Message.EXECUTE.createNode();
 
         @Override
         public Object executeTest(VirtualFrame frame) throws InteropException {

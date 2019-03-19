@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -108,6 +110,10 @@ public class UnsupportedFeatures {
                     printStream.println("Call path from entry point to " + entry.method.format("%H.%n(%p)") + ": ");
                     ShortestInvokeChainPrinter.print(bb, entry.method, printStream);
                     printStream.println();
+                }
+                if (entry.originalException != null && !(entry.originalException instanceof UnsupportedFeatureException)) {
+                    printStream.print("Original exception that caused the problem: ");
+                    entry.originalException.printStackTrace(printStream);
                 }
             }
             printStream.close();

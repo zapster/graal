@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,6 +24,7 @@
  */
 package com.oracle.svm.jni.nativeapi;
 
+import org.graalvm.nativeimage.Isolate;
 import org.graalvm.nativeimage.c.CContext;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.struct.CField;
@@ -32,6 +35,18 @@ import org.graalvm.word.PointerBase;
 @CStruct(value = "JNIInvokeInterface_", addStructKeyword = true)
 public interface JNIInvokeInterface extends PointerBase {
 
+    /**
+     * The {@link Isolate} represented by the {@link JNIJavaVM} to which this
+     * {@link JNIInvokeInterface} function table belongs. Because {@link JNIJavaVM} has no spare
+     * fields itself, we use this field and therefore need a separate function table for each
+     * isolate.
+     */
+    @CField("reserved0")
+    Isolate getIsolate();
+
+    @CField("reserved0")
+    void setIsolate(Isolate isolate);
+
     @CField("AttachCurrentThread")
     void setAttachCurrentThread(CFunctionPointer p);
 
@@ -40,4 +55,13 @@ public interface JNIInvokeInterface extends PointerBase {
 
     @CField("DetachCurrentThread")
     void setDetachCurrentThread(CFunctionPointer p);
+
+    @CField("GetEnv")
+    void setGetEnv(CFunctionPointer p);
+
+    @CField("DestroyJavaVM")
+    void setDestroyJavaVM(CFunctionPointer p);
+
+    @CField("DestroyJavaVM")
+    <T extends CFunctionPointer> T getDestroyJavaVM();
 }

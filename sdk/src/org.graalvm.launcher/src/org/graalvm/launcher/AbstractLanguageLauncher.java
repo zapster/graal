@@ -31,7 +31,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.Language;
+import org.graalvm.polyglot.PolyglotException;
 
 public abstract class AbstractLanguageLauncher extends Launcher {
 
@@ -52,6 +54,8 @@ public abstract class AbstractLanguageLauncher extends Launcher {
                 launch(new ArrayList<>(Arrays.asList(args)), null, true);
             } catch (AbortException e) {
                 throw e;
+            } catch (PolyglotException e) {
+                handlePolyglotException(e);
             } catch (Throwable t) {
                 throw abort(t);
             }
@@ -60,6 +64,8 @@ public abstract class AbstractLanguageLauncher extends Launcher {
         }
     }
 
+    protected static final boolean IS_LIBPOLYGLOT = Boolean.getBoolean("graalvm.libpolyglot");
+
     final void launch(List<String> args, Map<String, String> defaultOptions, boolean doNativeSetup) {
         Map<String, String> polyglotOptions = defaultOptions;
         if (polyglotOptions == null) {
@@ -67,13 +73,12 @@ public abstract class AbstractLanguageLauncher extends Launcher {
         }
 
         if (isAOT() && doNativeSetup) {
-            assert nativeAccess != null;
-            nativeAccess.setGraalVMProperties();
+            System.setProperty("org.graalvm.launcher.languageId", getLanguageId());
         }
 
         List<String> unrecognizedArgs = preprocessArguments(args, polyglotOptions);
 
-        if (isAOT() && doNativeSetup) {
+        if (isAOT() && doNativeSetup && !IS_LIBPOLYGLOT) {
             assert nativeAccess != null;
             nativeAccess.maybeExec(args, false, polyglotOptions, getDefaultVMType());
         }
@@ -96,10 +101,7 @@ public abstract class AbstractLanguageLauncher extends Launcher {
         } else {
             builder = Context.newBuilder(getDefaultLanguages()).options(polyglotOptions);
         }
-        if (!isAOT()) {
-            builder.allowHostAccess(true);
-        }
-        builder.allowCreateThread(true);
+        builder.allowAllAccess(true);
 
         launch(builder);
     }
@@ -155,7 +157,39 @@ public abstract class AbstractLanguageLauncher extends Launcher {
 
     @Override
     protected void printVersion() {
-        printPolyglotVersions();
+        printVersion(Engine.create());
+    }
+
+    protected void printVersion(Engine engine) {
+        String languageId = getLanguageId();
+        Language language = engine.getLanguages().get(languageId);
+        if (language == null) {
+            throw abort(String.format("Unknown language: '%s'!", languageId));
+        }
+        String languageImplementationName = language.getImplementationName();
+        if (languageImplementationName == null || languageImplementationName.length() == 0) {
+            String languageName = language.getName();
+            if (languageName == null || languageName.length() == 0) {
+                languageName = languageId;
+            }
+            languageImplementationName = "Graal " + languageName;
+        }
+        String engineImplementationName = engine.getImplementationName();
+        if (isAOT()) {
+            engineImplementationName += " Native";
+        }
+        System.out.println(String.format("%s %s (%s %s)", languageImplementationName, language.getVersion(), engineImplementationName, engine.getVersion()));
+    }
+
+    protected void runVersionAction(VersionAction action, Engine engine) {
+        switch (action) {
+            case PrintAndContinue:
+                printVersion(engine);
+                break;
+            case PrintAndExit:
+                printVersion(engine);
+                throw exit();
+        }
     }
 
     /**

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -35,22 +37,23 @@ import org.graalvm.compiler.core.common.spi.ForeignCallDescriptor;
 import org.graalvm.compiler.graph.NodeSourcePosition;
 import org.graalvm.compiler.replacements.nodes.BinaryMathIntrinsicNode.BinaryOperation;
 import org.graalvm.compiler.replacements.nodes.UnaryMathIntrinsicNode.UnaryOperation;
+import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.LogHandler;
 import org.graalvm.nativeimage.c.function.CodePointer;
 import org.graalvm.word.LocationIdentity;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.annotate.MustNotAllocate;
+import com.oracle.svm.core.annotate.RestrictHeapAccess;
 import com.oracle.svm.core.code.CodeInfoQueryResult;
 import com.oracle.svm.core.code.CodeInfoTable;
 import com.oracle.svm.core.code.DeoptimizationSourcePositionDecoder;
-import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.deopt.DeoptTester;
 import com.oracle.svm.core.deopt.DeoptimizedFrame;
 import com.oracle.svm.core.deopt.Deoptimizer;
 import com.oracle.svm.core.deopt.SubstrateInstalledCode;
-import com.oracle.svm.core.heap.NoAllocationVerifier;
+import com.oracle.svm.core.jdk.JDKUtils;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.stack.JavaStackWalker;
 import com.oracle.svm.core.stack.StackFrameVisitor;
@@ -65,22 +68,6 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.SpeculationLog.SpeculationReason;
 
 public class SnippetRuntime {
-
-    public static final SubstrateForeignCallDescriptor THROW_NULL_POINTER_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwNullPointerException", true);
-    public static final SubstrateForeignCallDescriptor THROW_CLASS_CAST_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwClassCastException", true);
-    public static final SubstrateForeignCallDescriptor THROW_ARRAY_STORE_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwArrayStoreException", true);
-    public static final SubstrateForeignCallDescriptor THROW_ARITHMETIC_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwArithmeticException", true);
-    public static final SubstrateForeignCallDescriptor THROW_ARRAY_INDEX_OUT_OF_BOUNDS_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwArrayIndexOutOfBoundsException", true);
-    public static final SubstrateForeignCallDescriptor THROW_OUT_OF_MEMORY_ERROR = findForeignCall(SnippetRuntime.class, "throwOutOfMemoryError", true);
-    public static final SubstrateForeignCallDescriptor THROW_ASSERTION_ERROR = findForeignCall(SnippetRuntime.class, "throwAssertionError", true);
-
-    public static final SubstrateForeignCallDescriptor THROW_CACHED_NULL_POINTER_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwCachedNullPointerException", true);
-    public static final SubstrateForeignCallDescriptor THROW_CACHED_CLASS_CAST_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwCachedClassCastException", true);
-    public static final SubstrateForeignCallDescriptor THROW_CACHED_ARRAY_STORE_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwCachedArrayStoreException", true);
-    public static final SubstrateForeignCallDescriptor THROW_CACHED_ARITHMETIC_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwCachedArithmeticException", true);
-    public static final SubstrateForeignCallDescriptor THROW_CACHED_ARRAY_INDEX_OUT_OF_BOUNDS_EXCEPTION = findForeignCall(SnippetRuntime.class, "throwCachedArrayIndexOutOfBoundsException", true);
-    public static final SubstrateForeignCallDescriptor THROW_CACHED_OUT_OF_MEMORY_ERROR = findForeignCall(SnippetRuntime.class, "throwCachedOutOfMemoryError", true);
-    public static final SubstrateForeignCallDescriptor THROW_CACHED_ASSERTION_ERROR = findForeignCall(SnippetRuntime.class, "throwCachedAssertionError", true);
 
     public static final SubstrateForeignCallDescriptor REPORT_TYPE_ASSERTION_ERROR = findForeignCall(SnippetRuntime.class, "reportTypeAssertionError", true, LocationIdentity.any());
     public static final SubstrateForeignCallDescriptor UNREACHED_CODE = findForeignCall(SnippetRuntime.class, "unreachedCode", true, LocationIdentity.any());
@@ -199,110 +186,6 @@ public class SnippetRuntime {
         }
     }
 
-    /** Foreign call: {@link #THROW_NULL_POINTER_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwNullPointerException() {
-        throw new NullPointerException();
-    }
-
-    /** Foreign call: {@link #THROW_CLASS_CAST_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwClassCastException() {
-        throw new ClassCastException();
-    }
-
-    /** Foreign call: {@link #THROW_ARRAY_STORE_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwArrayStoreException() {
-        throw new ArrayStoreException();
-    }
-
-    /** Foreign call: {@link #THROW_ARITHMETIC_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwArithmeticException() {
-        throw new ArithmeticException();
-    }
-
-    /** Foreign call: {@link #THROW_ARRAY_INDEX_OUT_OF_BOUNDS_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwArrayIndexOutOfBoundsException() {
-        throw new ArrayIndexOutOfBoundsException();
-    }
-
-    /** Foreign call: {@link #THROW_OUT_OF_MEMORY_ERROR}. */
-    @SubstrateForeignCallTarget
-    private static void throwOutOfMemoryError() {
-        throw new OutOfMemoryError();
-    }
-
-    /** Foreign call: {@link #THROW_ASSERTION_ERROR}. */
-    @SubstrateForeignCallTarget
-    private static void throwAssertionError() {
-        throw new AssertionError();
-    }
-
-    private static <T extends Throwable> T setEmptyStackTrace(T exception) {
-        exception.setStackTrace(new StackTraceElement[0]);
-        return exception;
-    }
-
-    public static final NullPointerException cachedNullPointerException = setEmptyStackTrace(new NullPointerException());
-    private static final ClassCastException cachedClassCastException = setEmptyStackTrace(new ClassCastException());
-    private static final ArrayStoreException cachedArrayStoreException = setEmptyStackTrace(new ArrayStoreException());
-    private static final ArithmeticException cachedArithmeticException = setEmptyStackTrace(new ArithmeticException());
-    public static final ArrayIndexOutOfBoundsException cachedArrayIndexOutOfBoundsException = setEmptyStackTrace(new ArrayIndexOutOfBoundsException());
-    private static final OutOfMemoryError cachedOutOfMemoryError = setEmptyStackTrace(new OutOfMemoryError());
-    public static final AssertionError cachedAssertionError = setEmptyStackTrace(new AssertionError());
-
-    private static <T extends Throwable> T implicitException(T exception) {
-        return exception;
-    }
-
-    /** Foreign call: {@link #THROW_CACHED_NULL_POINTER_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwCachedNullPointerException() {
-        throw implicitException(cachedNullPointerException);
-    }
-
-    /** Foreign call: {@link #THROW_CACHED_CLASS_CAST_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwCachedClassCastException() {
-        throw implicitException(cachedClassCastException);
-    }
-
-    /** Foreign call: {@link #THROW_CACHED_ARRAY_STORE_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwCachedArrayStoreException() {
-        throw implicitException(cachedArrayStoreException);
-    }
-
-    /** Foreign call: {@link #THROW_CACHED_ARITHMETIC_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwCachedArithmeticException() {
-        throw implicitException(cachedArithmeticException);
-    }
-
-    /** Foreign call: {@link #THROW_CACHED_ARRAY_INDEX_OUT_OF_BOUNDS_EXCEPTION}. */
-    @SubstrateForeignCallTarget
-    private static void throwCachedArrayIndexOutOfBoundsException() {
-        throw implicitException(cachedArrayIndexOutOfBoundsException);
-    }
-
-    private static final NoAllocationVerifier outOfMemory = NoAllocationVerifier.factory("SnippetRuntime.outOfMemory", false);
-
-    /** Foreign call: {@link #THROW_CACHED_OUT_OF_MEMORY_ERROR}. */
-    @SubstrateForeignCallTarget
-    private static void throwCachedOutOfMemoryError() {
-        outOfMemory.open();
-        throw implicitException(cachedOutOfMemoryError);
-    }
-
-    /** Foreign call: {@link #THROW_CACHED_ASSERTION_ERROR}. */
-    @SubstrateForeignCallTarget
-    private static void throwCachedAssertionError() {
-        throw implicitException(cachedAssertionError);
-    }
-
     /** Foreign call: {@link #REPORT_TYPE_ASSERTION_ERROR}. */
     @SubstrateForeignCallTarget
     private static void reportTypeAssertionError(byte[] msg, Object object) {
@@ -382,7 +265,7 @@ public class SnippetRuntime {
     }
 
     static class ExceptionStackFrameVisitor implements StackFrameVisitor {
-        @MustNotAllocate(reason = "Must not allocate when unwinding the stack.")
+        @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate when unwinding the stack.")
         @Override
         public boolean visitFrame(Pointer sp, CodePointer ip, DeoptimizedFrame deoptFrame) {
             CodePointer continueIP;
@@ -422,7 +305,7 @@ public class SnippetRuntime {
 
     /** Foreign call: {@link #UNWIND_EXCEPTION}. */
     @SubstrateForeignCallTarget
-    @MustNotAllocate(reason = "Must not allocate when unwinding the stack.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate when unwinding the stack.")
     private static void unwindException(Throwable exception, Pointer callerSP, CodePointer callerIP) {
         if (currentException.get() != null) {
             /*
@@ -432,7 +315,7 @@ public class SnippetRuntime {
              */
             Log.log().string("Fatal error: recursion in exception handling: ").string(exception.getClass().getName());
             Log.log().string(" thrown while unwinding ").string(currentException.get().getClass().getName()).newline();
-            ConfigurationValues.getOSInterface().abort();
+            ImageSingletons.lookup(LogHandler.class).fatalError();
             return;
         }
         currentException.set(exception);
@@ -454,21 +337,12 @@ public class SnippetRuntime {
 
     public static void reportUnhandledExceptionRaw(Throwable exception) {
         Log.log().string(exception.getClass().getName());
-        if (!NoAllocationVerifier.isActive()) {
-            String detail = exception.getMessage();
-            if (detail != null) {
-                Log.log().string(": ").string(detail);
-            }
+        String detail = JDKUtils.getRawMessage(exception);
+        if (detail != null) {
+            Log.log().string(": ").string(detail);
         }
         Log.log().newline();
-        ConfigurationValues.getOSInterface().abort();
-    }
-
-    public static void reportUnhandledExceptionJava(Throwable exception) {
-        // Checkstyle: stop (printStackTrace below is going to write to System.err too)
-        System.err.print("Exception in thread \"" + Thread.currentThread().getName() + "\" ");
-        // Checkstyle: resume
-        exception.printStackTrace();
+        ImageSingletons.lookup(LogHandler.class).fatalError();
     }
 
     /** Foreign call: {@link #REGISTER_FINALIZER}. */

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -27,6 +29,8 @@ import java.util.Deque;
 import java.util.Iterator;
 import java.util.Objects;
 
+import org.graalvm.collections.Pair;
+import org.graalvm.collections.UnmodifiableMapCursor;
 import org.graalvm.compiler.core.common.Fields;
 import org.graalvm.compiler.core.common.util.FrequencyEncoder;
 import org.graalvm.compiler.core.common.util.TypeConversion;
@@ -42,8 +46,6 @@ import org.graalvm.compiler.graph.NodeMap;
 import org.graalvm.compiler.graph.iterators.NodeIterable;
 import org.graalvm.compiler.nodes.StructuredGraph.AllowAssumptions;
 import org.graalvm.compiler.nodes.java.ExceptionObjectNode;
-import org.graalvm.util.Pair;
-import org.graalvm.util.UnmodifiableMapCursor;
 
 import jdk.vm.ci.code.Architecture;
 
@@ -154,7 +156,7 @@ public class GraphEncoder {
         encoder.prepare(graph);
         encoder.finishPrepare();
         int startOffset = encoder.encode(graph);
-        return new EncodedGraph(encoder.getEncoding(), startOffset, encoder.getObjects(), encoder.getNodeClasses(), graph.getAssumptions(), graph.getMethods());
+        return new EncodedGraph(encoder.getEncoding(), startOffset, encoder.getObjects(), encoder.getNodeClasses(), graph);
     }
 
     public GraphEncoder(Architecture architecture) {
@@ -288,8 +290,7 @@ public class GraphEncoder {
         }
 
         /* Check that the decoding of the encode graph is the same as the input. */
-        assert verifyEncoding(graph, new EncodedGraph(getEncoding(), metadataStart, getObjects(), getNodeClasses(), graph.getAssumptions(), graph.getMethods()),
-                        architecture);
+        assert verifyEncoding(graph, new EncodedGraph(getEncoding(), metadataStart, getObjects(), getNodeClasses(), graph), architecture);
 
         return metadataStart;
     }
@@ -436,6 +437,9 @@ public class GraphEncoder {
     public static boolean verifyEncoding(StructuredGraph originalGraph, EncodedGraph encodedGraph, Architecture architecture) {
         DebugContext debug = originalGraph.getDebug();
         StructuredGraph decodedGraph = new StructuredGraph.Builder(originalGraph.getOptions(), debug, AllowAssumptions.YES).method(originalGraph.method()).build();
+        if (originalGraph.trackNodeSourcePosition()) {
+            decodedGraph.setTrackNodeSourcePosition();
+        }
         GraphDecoder decoder = new GraphDecoder(architecture, decodedGraph);
         decoder.decode(encodedGraph);
 

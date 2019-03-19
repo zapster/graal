@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -29,16 +31,15 @@ import java.util.function.BooleanSupplier;
 import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.ImageSingletons;
 
-import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.truffle.TruffleFeature;
 import com.oracle.truffle.nfi.NFILanguage;
 
 /**
- * Support for the application/x-native language ({@link NFILanguage}) on SVM. This is re-using most
- * of the code of the default (libffi based) implementation from the Truffle repository. All
- * substitutions in this package (unless noted otherwise in a separate comment) are direct
- * re-implementations of the original NFI functions with the C interface of Substrate VM. If this
- * feature is enabled, the image is statically linked with libffi.
+ * Support for the default (trufflenfi/native) backend of the {@link NFILanguage} on SVM. This is
+ * re-using most of the code of the default (libffi based) implementation from the Truffle
+ * repository. All substitutions in this package (unless noted otherwise in a separate comment) are
+ * direct re-implementations of the original NFI functions with the C interface of Substrate VM. If
+ * this feature is enabled, the image is statically linked with libffi.
  */
 public final class TruffleNFIFeature implements Feature {
 
@@ -57,15 +58,6 @@ public final class TruffleNFIFeature implements Feature {
     @Override
     public void duringSetup(DuringSetupAccess access) {
         ImageSingletons.add(TruffleNFISupport.class, new TruffleNFISupport());
-    }
-}
-
-@AutomaticFeature
-final class RemoveNFILanguageFeature implements Feature {
-    @Override
-    public void duringSetup(DuringSetupAccess access) {
-        if (ImageSingletons.contains(TruffleFeature.class) && !ImageSingletons.contains(TruffleNFIFeature.class)) {
-            TruffleFeature.removeTruffleLanguage(NFILanguage.MIME_TYPE);
-        }
+        access.registerObjectReplacer(new NativeObjectReplacer(access));
     }
 }

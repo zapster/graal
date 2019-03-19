@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,14 +24,19 @@
  */
 package com.oracle.svm.hosted.meta;
 
+import org.graalvm.compiler.core.common.CompressEncoding;
+
+import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.graal.meta.SubstrateMemoryAccessProvider;
+import com.oracle.svm.core.meta.CompressedNullConstant;
+import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.core.util.VMError;
 
 import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
-import jdk.vm.ci.meta.MemoryAccessProvider;
 
-public class HostedMemoryAccessProvider implements MemoryAccessProvider {
+public class HostedMemoryAccessProvider implements SubstrateMemoryAccessProvider {
 
     private final HostedMetaAccess metaAccess;
 
@@ -68,6 +75,20 @@ public class HostedMemoryAccessProvider implements MemoryAccessProvider {
     @Override
     public JavaConstant readObjectConstant(Constant base, long displacement) {
         return doRead(JavaKind.Object, (JavaConstant) base, displacement);
+    }
+
+    @Override
+    public JavaConstant readNarrowObjectConstant(Constant base, long displacement, CompressEncoding encoding) {
+        assert SubstrateOptions.UseHeapBaseRegister.getValue();
+        // NOTE: the encoding parameter only applies at image runtime, not for hosted execution
+        JavaConstant result = readObjectConstant(base, displacement);
+        if (result == null) {
+            return null;
+        }
+        if (JavaConstant.NULL_POINTER.equals(result)) {
+            return CompressedNullConstant.COMPRESSED_NULL;
+        }
+        return ((SubstrateObjectConstant) result).compress();
     }
 
     /**

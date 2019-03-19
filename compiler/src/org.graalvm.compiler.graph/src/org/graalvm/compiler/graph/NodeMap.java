@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,8 +28,8 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.function.BiFunction;
 
-import org.graalvm.util.EconomicMap;
-import org.graalvm.util.MapCursor;
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.MapCursor;
 
 public class NodeMap<T> extends NodeIdAccessor implements EconomicMap<Node, T> {
 

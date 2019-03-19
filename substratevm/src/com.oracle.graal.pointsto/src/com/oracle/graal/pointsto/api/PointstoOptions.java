@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,9 +26,9 @@ package com.oracle.graal.pointsto.api;
 
 import static jdk.vm.ci.common.JVMCIError.shouldNotReachHere;
 
+import org.graalvm.collections.EconomicMap;
 import org.graalvm.compiler.options.Option;
 import org.graalvm.compiler.options.OptionKey;
-import org.graalvm.util.EconomicMap;
 
 public class PointstoOptions {
 
@@ -95,12 +97,6 @@ public class PointstoOptions {
 
     @Option(help = "Report analysis statistics.")//
     public static final OptionKey<Boolean> ReportAnalysisStatistics = new OptionKey<>(false);
-
-    @Option(help = "Print analysis call tree.")//
-    public static final OptionKey<Boolean> PrintAnalysisCallTree = new OptionKey<>(false);
-
-    @Option(help = "Print analysis type hierarcy.")//
-    public static final OptionKey<Boolean> PrintBootImageHeap = new OptionKey<>(false);
 
     @Option(help = "Path to the contents of the Inspect web server.")//
     public static final OptionKey<String> InspectServerContentPath = new OptionKey<>("inspect");

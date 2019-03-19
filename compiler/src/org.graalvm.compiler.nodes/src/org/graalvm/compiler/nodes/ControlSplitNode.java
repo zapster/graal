@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -49,7 +51,7 @@ public abstract class ControlSplitNode extends FixedNode implements IterableNode
 
     /**
      * Primary successor of the control split. Data dependencies on the node have to be scheduled in
-     * the primary successor.
+     * the primary successor. Returns null if data dependencies are not expected.
      *
      * @return the primary successor
      */

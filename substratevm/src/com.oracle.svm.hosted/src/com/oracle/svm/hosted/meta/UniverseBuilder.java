@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -29,7 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -37,6 +39,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ForkJoinTask;
 
+import org.graalvm.compiler.core.common.NumUtil;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.Indent;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -67,10 +70,8 @@ import com.oracle.svm.core.heap.SubstrateReferenceMap;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.DynamicHubSupport;
 import com.oracle.svm.core.hub.LayoutEncoding;
-import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.hosted.HostedConfiguration;
 import com.oracle.svm.hosted.NativeImageOptions;
-import com.oracle.svm.hosted.base.NumUtil;
 import com.oracle.svm.hosted.config.HybridLayout;
 import com.oracle.svm.hosted.substitute.AnnotationSubstitutionProcessor;
 import com.oracle.svm.hosted.substitute.ComputedValueField;
@@ -134,7 +135,6 @@ public class UniverseBuilder {
 
             collectDeclaredMethods();
             collectMonitorFieldInfo(bb);
-            collectWaitNotifyFieldInfo(bb);
             collectHashCodeFieldInfo(bb);
 
             layoutInstanceFields();
@@ -147,9 +147,9 @@ public class UniverseBuilder {
             setConstantFieldValues();
 
             hUniverse.orderedMethods = new ArrayList<>(hUniverse.methods.values());
-            hUniverse.orderedMethods.sort(METHOD_COMPARATOR);
+            Collections.sort(hUniverse.orderedMethods);
             hUniverse.orderedFields = new ArrayList<>(hUniverse.fields.values());
-            hUniverse.orderedFields.sort(FIELD_COMPARATOR);
+            Collections.sort(hUniverse.orderedFields);
             profilingInformationBuildTask.join();
         }
     }
@@ -295,78 +295,6 @@ public class UniverseBuilder {
         hUniverse.fields.put(aField, hField);
     }
 
-    private static final Comparator<HostedType> TYPE_COMPARATOR = new Comparator<HostedType>() {
-
-        private int idx(HostedType t) {
-            if (t.isInterface()) {
-                return 4;
-            } else if (t.isArray()) {
-                return 3;
-            } else if (t.isInstanceClass()) {
-                return 2;
-            } else if (t.getJavaKind() != JavaKind.Object) {
-                return 1;
-            } else {
-                throw shouldNotReachHere();
-            }
-        }
-
-        @Override
-        public int compare(HostedType t1, HostedType t2) {
-            if (t1.equals(t2)) {
-                return 0;
-            }
-            int result = idx(t1) - idx(t2);
-            if (result == 0) {
-                if (t1.getJavaKind() != JavaKind.Object) {
-                    result = t1.getJavaKind().ordinal() - t2.getJavaKind().ordinal();
-                } else if (t1.isArray()) {
-                    result = compare(t1.getComponentType(), t2.getComponentType());
-                } else {
-                    result = t1.getName().compareTo(t2.getName());
-                }
-            }
-            assert result != 0 : "Types not distinguishable: " + t1 + ", " + t2;
-            return result;
-        }
-    };
-
-    public static final Comparator<HostedMethod> METHOD_COMPARATOR = (m1, m2) -> {
-        if (m1.equals(m2)) {
-            return 0;
-        }
-
-        /*
-         * Sort deoptimization targets towards the end of the code cache. They are rarely executed,
-         * and we do not want a deoptimization target as the first method (because offset 0 means no
-         * deoptimization target available).
-         */
-        int result = Boolean.compare(m1.compilationInfo.isDeoptTarget(), m2.compilationInfo.isDeoptTarget());
-
-        if (result == 0) {
-            result = TYPE_COMPARATOR.compare(m1.getDeclaringClass(), m2.getDeclaringClass());
-        }
-        if (result == 0) {
-            result = m1.getName().compareTo(m2.getName());
-        }
-        if (result == 0) {
-            result = m1.getSignature().getParameterCount(false) - m2.getSignature().getParameterCount(false);
-        }
-        if (result == 0) {
-            for (int i = 0; i < m1.getSignature().getParameterCount(false); i++) {
-                result = TYPE_COMPARATOR.compare((HostedType) m1.getSignature().getParameterType(i, null), (HostedType) m2.getSignature().getParameterType(i, null));
-                if (result != 0) {
-                    break;
-                }
-            }
-        }
-        if (result == 0) {
-            result = TYPE_COMPARATOR.compare((HostedType) m1.getSignature().getReturnType(null), (HostedType) m2.getSignature().getReturnType(null));
-        }
-        assert result != 0;
-        return result;
-    };
-
     private void buildProfilingInformation() {
         /* Convert profiling information after all types and methods have been created. */
         hUniverse.methods.entrySet().parallelStream()
@@ -401,7 +329,7 @@ public class UniverseBuilder {
         for (HostedType type : hUniverse.types.values()) {
             Set<HostedType> subTypesSet = allSubTypes.get(type);
             HostedType[] subTypes = subTypesSet.toArray(new HostedType[subTypesSet.size()]);
-            Arrays.sort(subTypes, TYPE_COMPARATOR);
+            Arrays.sort(subTypes);
             type.subTypes = subTypes;
         }
     }
@@ -591,30 +519,6 @@ public class UniverseBuilder {
         }
     }
 
-    private static final Comparator<HostedField> FIELD_COMPARATOR = (field1, field2) -> {
-        if (field1.equals(field2)) {
-            return 0;
-        }
-        /*
-         * Order by JavaKind. This is required, since we want instance fields of the same size and
-         * kind consecutive.
-         */
-        int result = field2.getJavaKind().ordinal() - field1.getJavaKind().ordinal();
-
-        if (result == 0) {
-            /*
-             * Make the field order deterministic by sorting by name. This is arbitrary, we can come
-             * up with any better ordering.
-             */
-            result = field1.getDeclaringClass().getName().compareTo(field2.getDeclaringClass().getName());
-            if (result == 0) {
-                result = field1.getName().compareTo(field2.getName());
-            }
-        }
-        assert result != 0 : "Fields not distinguishable: " + field1 + ", " + field2;
-        return result;
-    };
-
     // @formatter:off
 //    /**
 //     * New version of the method that uses the static analysis results collected by the static
@@ -684,66 +588,26 @@ public class UniverseBuilder {
 
         TypeState allSynchronizedTypeState = bb.getAllSynchronizedTypeState();
         for (AnalysisType aType : allSynchronizedTypeState.types()) {
-            VMError.guarantee(aType.isInstanceClass(), "Synchronization on non-instance type: " + aType);
-            final HostedInstanceClass hostedInstanceClass = (HostedInstanceClass) hUniverse.lookup(aType);
-            hostedInstanceClass.setNeedMonitorField();
+            if (canHaveMonitorFields(aType)) {
+                final HostedInstanceClass hostedInstanceClass = (HostedInstanceClass) hUniverse.lookup(aType);
+                hostedInstanceClass.setNeedMonitorField();
+            }
         }
     }
 
-    /**
-     * Tag all classes that are used as the receiver of a {@link Object#wait(long)},
-     * {@link Object#notify()}, or {@link Object#notifyAll()} call. Any such class needs to have a
-     * synthetic field added to hold a condition variable.
-     */
-    @SuppressWarnings("try")
-    private void collectWaitNotifyFieldInfo(BigBang bb) {
-        if (!SubstrateOptions.MultiThreaded.getValue()) {
-            /* No locking information needed in single-threaded mode. */
-            return;
+    private boolean canHaveMonitorFields(AnalysisType aType) {
+        if (aType.isArray()) {
+            /* Monitor fields on arrays would increase the array header too much. */
+            return false;
         }
-
-        /*
-         * A list of the wait and notify methods. Fortunately, all of these are instance methods, so
-         * the receiver is parameter 0 on all of them.
-         */
-        final List<AnalysisMethod> waitNotifyAnalysisMethods = new ArrayList<>();
-        try {
-            waitNotifyAnalysisMethods.add(aMetaAccess.lookupJavaMethod(Object.class.getMethod("wait", long.class)));
-            waitNotifyAnalysisMethods.add(aMetaAccess.lookupJavaMethod(Object.class.getMethod("notify", (Class<?>[]) null)));
-            waitNotifyAnalysisMethods.add(aMetaAccess.lookupJavaMethod(Object.class.getMethod("notifyAll", (Class<?>[]) null)));
-        } catch (NoSuchMethodException | SecurityException e) {
-            throw shouldNotReachHere("Could not find wait/notify method.");
+        if (aType.equals(aMetaAccess.lookupJavaType(String.class)) || aType.equals(aMetaAccess.lookupJavaType(DynamicHub.class))) {
+            /*
+             * We want String and DynamicHub instances to be immutable so that they can be in the
+             * read-only part of the image heap.
+             */
+            return false;
         }
-
-        DebugContext debug = bb.getDebug();
-        try (Indent ignore = debug.logAndIndent("check types for which wait or notify is invoked")) {
-
-            for (AnalysisMethod method : waitNotifyAnalysisMethods) {
-
-                // If the method is never called, then I do not have to worry about it.
-                if (method == null) {
-                    continue;
-                }
-
-                // Check which types may be a receiver of this method.
-                TypeState receiverTypeState = method.getTypeFlow().getParameterTypeState(bb, 0);
-                assert receiverTypeState != null;
-
-                Iterable<AnalysisType> typesNeedWaitNotify = receiverTypeState.types();
-                // All receiver types of a wait/notify call need the wait/notify field.
-                for (AnalysisType type : typesNeedWaitNotify) {
-                    debug.log("type %s is a receiver for a wait/notify call", type);
-                    if (type.isInstanceClass()) {
-                        HostedInstanceClass hType = (HostedInstanceClass) hUniverse.lookup(type);
-                        /* Wait and notify need a monitor and a condition. */
-                        hType.setNeedMonitorField();
-                        hType.setNeedWaitNotifyConditionField();
-                    } else {
-                        throw VMError.unsupportedFeature("wait/notify called on non-instance type: " + type.toJavaName(true));
-                    }
-                }
-            }
-        }
+        return true;
     }
 
     @SuppressWarnings("try")
@@ -814,8 +678,8 @@ public class UniverseBuilder {
 
         int startSize = superSize;
         if (clazz.getAnnotation(DeoptimizedFrame.ReserveDeoptScratchSpace.class) != null) {
-            assert startSize == ConfigurationValues.getObjectLayout().getFirstFieldOffset();
-            startSize += ConfigurationValues.getObjectLayout().getDeoptScratchSpace();
+            assert startSize <= DeoptimizedFrame.getScratchSpaceOffset();
+            startSize = DeoptimizedFrame.getScratchSpaceOffset() + ConfigurationValues.getObjectLayout().getDeoptScratchSpace();
         }
 
         if (HybridLayout.isHybrid(clazz)) {
@@ -828,14 +692,14 @@ public class UniverseBuilder {
         }
 
         // Sort so that a) all Object fields are consecutive, and b) bigger types come first.
-        rawFields.sort(FIELD_COMPARATOR);
+        Collections.sort(rawFields);
 
         int nextOffset = startSize;
         while (rawFields.size() > 0) {
             boolean progress = false;
             for (int i = 0; i < rawFields.size(); i++) {
                 HostedField field = rawFields.get(i);
-                int fieldSize = ConfigurationValues.getObjectLayout().sizeInBytes(field.getJavaKind());
+                int fieldSize = ConfigurationValues.getObjectLayout().sizeInBytes(field.getStorageKind());
 
                 if (nextOffset % fieldSize == 0) {
                     field.setLocation(nextOffset);
@@ -872,31 +736,22 @@ public class UniverseBuilder {
         // A reference to a {@link java.util.concurrent.locks.ReentrantLock for "synchronized" or
         // Object.wait() and Object.notify() and friends.
         if (clazz.needMonitorField()) {
-            final int referenceFieldAlignmentAndSize = ConfigurationValues.getObjectLayout().sizeInBytes(JavaKind.Object);
-            nextOffset = ObjectLayout.roundUp(nextOffset, referenceFieldAlignmentAndSize);
+            final int referenceFieldAlignmentAndSize = ConfigurationValues.getObjectLayout().getReferenceSize();
+            nextOffset = NumUtil.roundUp(nextOffset, referenceFieldAlignmentAndSize);
             clazz.setMonitorFieldOffset(nextOffset);
-            nextOffset += referenceFieldAlignmentAndSize;
-        }
-
-        // A reference to a {@link java.util.concurrent.locks.Condition for
-        // Object.wait() and Object.notify().
-        if (clazz.needWaitNotifyConditionField()) {
-            final int referenceFieldAlignmentAndSize = ConfigurationValues.getObjectLayout().sizeInBytes(JavaKind.Object);
-            nextOffset = ObjectLayout.roundUp(nextOffset, referenceFieldAlignmentAndSize);
-            clazz.setWaitNotifyConditionFieldOffset(nextOffset);
             nextOffset += referenceFieldAlignmentAndSize;
         }
 
         // An int to hold the result for System.identityHashCode.
         if (clazz.needHashCodeField()) {
             int intFieldSize = ConfigurationValues.getObjectLayout().sizeInBytes(JavaKind.Int);
-            nextOffset = ObjectLayout.roundUp(nextOffset, intFieldSize);
+            nextOffset = NumUtil.roundUp(nextOffset, intFieldSize);
             clazz.setHashCodeFieldOffset(nextOffset);
             nextOffset += intFieldSize;
         }
 
         clazz.instanceFields = orderedFields.toArray(new HostedField[orderedFields.size()]);
-        clazz.instanceSize = nextOffset;
+        clazz.instanceSize = ConfigurationValues.getObjectLayout().alignUp(nextOffset);
 
         for (HostedType subClass : clazz.subTypes) {
             if (subClass.isInstanceClass()) {
@@ -920,7 +775,7 @@ public class UniverseBuilder {
         }
 
         // Sort so that a) all Object fields are consecutive, and b) bigger types come first.
-        fields.sort(FIELD_COMPARATOR);
+        Collections.sort(fields);
 
         ObjectLayout layout = ConfigurationValues.getObjectLayout();
 
@@ -933,11 +788,11 @@ public class UniverseBuilder {
         for (HostedField field : fields) {
             if (!field.wrapped.isWritten()) {
                 // Constant, does not require memory.
-            } else if (field.getType().getStorageKind() == JavaKind.Object) {
+            } else if (field.getStorageKind() == JavaKind.Object) {
                 field.setLocation(NumUtil.safeToInt(layout.getArrayElementOffset(JavaKind.Object, nextObjectField)));
                 nextObjectField += 1;
             } else {
-                int fieldSize = layout.sizeInBytes(field.getJavaKind());
+                int fieldSize = layout.sizeInBytes(field.getStorageKind());
                 while (layout.getArrayElementOffset(JavaKind.Byte, nextPrimitiveField) % fieldSize != 0) {
                     // Insert padding byte for alignment
                     nextPrimitiveField++;
@@ -985,7 +840,7 @@ public class UniverseBuilder {
         for (HostedType type : hUniverse.orderedTypes) {
             List<HostedMethod> list = methodsOfType[type.getTypeID()];
             if (list != null) {
-                list.sort(METHOD_COMPARATOR);
+                Collections.sort(list);
                 type.allDeclaredMethods = list.toArray(new HostedMethod[list.size()]);
             } else {
                 type.allDeclaredMethods = noMethods;
@@ -998,7 +853,7 @@ public class UniverseBuilder {
 
             // Reuse the implementations from the analysis method.
             method.implementations = hUniverse.lookup(method.wrapped.getImplementations());
-            Arrays.sort(method.implementations, METHOD_COMPARATOR);
+            Arrays.sort(method.implementations);
         }
     }
 
@@ -1171,7 +1026,6 @@ public class UniverseBuilder {
         for (HostedType type : hUniverse.orderedTypes) {
             int layoutHelper;
             int monitorOffset = 0;
-            int waitNotifyOffset = 0;
             int hashCodeOffset = 0;
             if (type.isInstanceClass()) {
                 HostedInstanceClass instanceClass = (HostedInstanceClass) type;
@@ -1179,17 +1033,18 @@ public class UniverseBuilder {
                     layoutHelper = LayoutEncoding.forAbstract();
                 } else if (HybridLayout.isHybrid(type)) {
                     HybridLayout<?> hybridLayout = new HybridLayout<>(instanceClass, ol);
-                    JavaKind kind = hybridLayout.getArrayElementKind();
-                    layoutHelper = LayoutEncoding.forArray(kind == JavaKind.Object, hybridLayout.getArrayBaseOffset(), ol.getArrayIndexShift(kind), ol.getAlignment());
+                    JavaKind storageKind = hybridLayout.getArrayElementStorageKind();
+                    boolean isObject = (storageKind == JavaKind.Object);
+                    layoutHelper = LayoutEncoding.forArray(isObject, hybridLayout.getArrayBaseOffset(), ol.getArrayIndexShift(storageKind), ol.getAlignment());
                 } else {
                     layoutHelper = LayoutEncoding.forInstance(ConfigurationValues.getObjectLayout().alignUp(instanceClass.getInstanceSize()));
                 }
                 monitorOffset = instanceClass.getMonitorFieldOffset();
-                waitNotifyOffset = instanceClass.getWaitNotifyConditionFieldOffset();
                 hashCodeOffset = instanceClass.getHashCodeFieldOffset();
             } else if (type.isArray()) {
-                JavaKind kind = type.getComponentType().getStorageKind();
-                layoutHelper = LayoutEncoding.forArray(kind == JavaKind.Object, ol.getArrayBaseOffset(kind), ol.getArrayIndexShift(kind), ol.getAlignment());
+                JavaKind storageKind = type.getComponentType().getStorageKind();
+                boolean isObject = (storageKind == JavaKind.Object);
+                layoutHelper = LayoutEncoding.forArray(isObject, ol.getArrayBaseOffset(storageKind), ol.getArrayIndexShift(storageKind), ol.getAlignment());
                 hashCodeOffset = ol.getArrayHashCodeOffset();
             } else if (type.isInterface()) {
                 layoutHelper = LayoutEncoding.forInterface();
@@ -1218,7 +1073,7 @@ public class UniverseBuilder {
             long referenceMapIndex = referenceMapEncoder.lookupEncoding(referenceMap);
 
             DynamicHub hub = type.getHub();
-            hub.setData(layoutHelper, type.getTypeID(), monitorOffset, waitNotifyOffset, hashCodeOffset, type.getAssignableFromMatches(), type.instanceOfBits, vtable, referenceMapIndex,
+            hub.setData(layoutHelper, type.getTypeID(), monitorOffset, hashCodeOffset, type.getAssignableFromMatches(), type.instanceOfBits, vtable, referenceMapIndex,
                             type.isInstantiated());
         }
     }
@@ -1229,7 +1084,7 @@ public class UniverseBuilder {
         SubstrateReferenceMap referenceMap = new SubstrateReferenceMap();
         for (HostedField field : fields) {
             if (field.getType().getStorageKind() == JavaKind.Object && field.hasLocation() && field.getAnnotation(ExcludeFromReferenceMap.class) == null) {
-                referenceMap.markReferenceAtIndex(field.getLocation() / ConfigurationValues.getTarget().wordSize);
+                referenceMap.markReferenceAtOffset(field.getLocation(), true);
             }
         }
         if (type.isInstanceClass()) {
@@ -1239,16 +1094,7 @@ public class UniverseBuilder {
              */
             final int monitorOffset = instanceClass.getMonitorFieldOffset();
             if (monitorOffset != 0) {
-                final int monitorIndex = monitorOffset / ConfigurationValues.getTarget().wordSize;
-                referenceMap.markReferenceAtIndex(monitorIndex);
-            }
-            /*
-             * If the instance type has a wait/notify condition field, put it in the reference map.
-             */
-            final int waitNotifyOffset = instanceClass.getWaitNotifyConditionFieldOffset();
-            if (waitNotifyOffset != 0) {
-                final int waitNotifyIndex = waitNotifyOffset / ConfigurationValues.getTarget().wordSize;
-                referenceMap.markReferenceAtIndex(waitNotifyIndex);
+                referenceMap.markReferenceAtOffset(monitorOffset, true);
             }
         }
         return referenceMap;
@@ -1270,8 +1116,8 @@ public class UniverseBuilder {
     private static boolean assertSame(Collection<HostedType> c1, Collection<HostedType> c2) {
         List<HostedType> list1 = new ArrayList<>(c1);
         List<HostedType> list2 = new ArrayList<>(c2);
-        list1.sort(TYPE_COMPARATOR);
-        list2.sort(TYPE_COMPARATOR);
+        Collections.sort(list1);
+        Collections.sort(list2);
 
         for (int i = 0; i < Math.min(list1.size(), list2.size()); i++) {
             assert list1.get(i) == list2.get(i);

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,7 +26,6 @@ package com.oracle.truffle.api.test.source;
 
 import static com.oracle.truffle.api.test.ReflectionUtils.invokeStatic;
 import static com.oracle.truffle.api.test.ReflectionUtils.loadRelative;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
 import java.io.File;
@@ -34,8 +35,9 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.test.polyglot.AbstractPolyglotTest;
 
-public class SourceBuilderDocumentationTest {
+public class SourceBuilderDocumentationTest extends AbstractPolyglotTest {
 
     private static final Class<?> SOURCE_SNIPPETS = loadRelative(SourceBuilderDocumentationTest.class, "SourceSnippets");
 
@@ -44,28 +46,6 @@ public class SourceBuilderDocumentationTest {
     @BeforeClass
     public static void isAvailable() {
         loadedOK = SOURCE_SNIPPETS != null;
-    }
-
-    @Test
-    public void relativeFile() throws Exception {
-        if (!loadedOK) {
-            return;
-        }
-
-        File relative = null;
-        for (File f : new File(".").listFiles()) {
-            if (f.isFile() && f.canRead()) {
-                relative = f;
-                break;
-            }
-        }
-        if (relative == null) {
-            // skip the test
-            return;
-        }
-        Source direct = Source.newBuilder(relative).name(relative.getPath()).build();
-        Source fromBuilder = (Source) invokeStatic(SOURCE_SNIPPETS, "likeFileName", relative.getPath());
-        assertEquals("Both sources are equal", direct, fromBuilder);
     }
 
     @Test

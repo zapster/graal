@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -25,9 +27,7 @@ package com.oracle.svm.core.jdk;
 //Checkstyle: stop
 
 import static com.oracle.svm.core.annotate.RecomputeFieldValue.Kind.ArrayBaseOffset;
-import static com.oracle.svm.core.annotate.RecomputeFieldValue.Kind.ArrayIndexShift;
 import static com.oracle.svm.core.annotate.RecomputeFieldValue.Kind.AtomicFieldUpdaterOffset;
-import static com.oracle.svm.core.annotate.RecomputeFieldValue.Kind.FieldOffset;
 import static com.oracle.svm.core.annotate.RecomputeFieldValue.Kind.FromAlias;
 import static com.oracle.svm.core.annotate.RecomputeFieldValue.Kind.Reset;
 
@@ -37,23 +37,22 @@ import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.nio.MappedByteBuffer;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CoderResult;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinPool.ForkJoinWorkerThreadFactory;
-import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 
+import org.graalvm.compiler.serviceprovider.GraalServices;
 import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -69,11 +68,13 @@ import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.RecomputeFieldValue.Kind;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
+import com.oracle.svm.core.annotate.TargetElement;
 import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.snippets.KnownIntrinsics;
 import com.oracle.svm.core.util.VMError;
 
 import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
 
 /*
@@ -81,97 +82,34 @@ import jdk.vm.ci.meta.ResolvedJavaField;
  * suitable for the Substrate VM. The list is derived from the intercepted fields of the Maxine VM.
  */
 
-@TargetClass(java.util.EnumMap.class)
-final class Target_java_util_EnumMap {
-    @Alias @RecomputeFieldValue(kind = Reset) //
-    private Set<Map.Entry<?, ?>> entrySet;
-}
-
 @TargetClass(sun.util.calendar.ZoneInfoFile.class)
 final class Target_sun_util_calendar_ZoneInfoFile {
     @Alias @RecomputeFieldValue(kind = FromAlias) //
     private static Map<String, String> aliases = new java.util.HashMap<>();
 }
 
-@TargetClass(java.util.Random.class)
-final class Target_java_util_Random {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "seed") //
-    private static long seedOffset;
-}
-
-@TargetClass(java.util.concurrent.ConcurrentSkipListSet.class)
-final class Target_java_util_concurrent_ConcurrentSkipListSet {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "m") //
-    private static long mapOffset;
-}
-
-@TargetClass(java.util.concurrent.ConcurrentSkipListMap.class)
-final class Target_java_util_concurrent_ConcurrentSkipListMap {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "head") //
-    private static long headOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "threadLocalRandomSecondarySeed") //
-    private static long SECONDARY;
-}
-
-@TargetClass(value = java.util.concurrent.ConcurrentSkipListMap.class, innerClass = "Node") //
-final class Target_java_util_concurrent_ConcurrentSkipListMap_Node {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "value") //
-    private static long valueOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "next") //
-    private static long nextOffset;
-}
-
-@TargetClass(value = java.util.concurrent.ConcurrentSkipListMap.class, innerClass = "Index")
-final class Target_java_util_concurrent_ConcurrentSkipListMap_Index {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "right") //
-    private static long rightOffset;
-}
-
-@TargetClass(value = java.util.concurrent.ConcurrentLinkedQueue.class, innerClass = "Node")
-final class Target_java_util_concurrent_ConcurrentLinkedQueue_Node {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "item") //
-    private static long itemOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "next") //
-    private static long nextOffset;
-}
-
-@TargetClass(java.util.concurrent.ConcurrentLinkedQueue.class)
-final class Target_java_util_concurrent_ConcurrentLinkedQueue {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "head") //
-    private static long headOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "tail") //
-    private static long tailOffset;
-}
-
-@TargetClass(java.util.concurrent.CopyOnWriteArrayList.class)
-final class Target_java_util_concurrent_CopyOnWriteArrayList {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "lock") //
-    private static long lockOffset;
-}
-
-@TargetClass(value = java.util.concurrent.ConcurrentLinkedDeque.class, innerClass = "Node")
-final class Target_java_util_concurrent_ConcurrentLinkedDeque_Node {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "prev") //
-    private static long prevOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "item") //
-    private static long itemOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "next") //
-    private static long nextOffset;
-}
-
-@TargetClass(java.util.concurrent.ConcurrentLinkedDeque.class)
-final class Target_java_util_concurrent_ConcurrentLinkedDeque {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "head") //
-    private static long headOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "tail") //
-    private static long tailOffset;
-}
-
+/**
+ * We disallow direct byte buffers ({@link MappedByteBuffer} instances) in the image heap, with one
+ * exception: we allow 0-length non-file-based buffers. For example, Netty has a singleton empty
+ * buffer referenced from a static field, and a lot of Netty classes reference this buffer
+ * statically.
+ *
+ * Such buffers do actually have an address to memory that is allocated during image generation and
+ * therefore no longer available at run time. But since the capacity is 0, no memory can ever be
+ * accessed. We therefore allow this "dangling" address. However, we must never call free() for that
+ * address, so we remove the Cleaner registered for the buffer by resetting the field
+ * {@link #cleaner}.
+ */
 @TargetClass(className = "java.nio.DirectByteBuffer")
 @SuppressWarnings("unused")
 final class Target_java_nio_DirectByteBuffer {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = byte[].class) //
-    private static long arrayBaseOffset;
+    @Alias //
+    @TargetElement(onlyWith = JDK8OrEarlier.class) //
+    @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = byte[].class) //
+    static long arrayBaseOffset;
+
+    @Alias @RecomputeFieldValue(kind = Kind.Reset) //
+    Target_jdk_internal_ref_Cleaner cleaner;
 
     @Alias
     protected Target_java_nio_DirectByteBuffer(int cap, long addr, FileDescriptor fd, Runnable unmapper) {
@@ -186,160 +124,176 @@ final class Target_java_nio_DirectByteBufferR {
     }
 }
 
-@TargetClass(className = "java.nio.DirectCharBufferS")
-final class Target_java_nio_DirectCharBufferS {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = char[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectCharBufferU")
-final class Target_java_nio_DirectCharBufferU {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = char[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectDoubleBufferS")
-final class Target_java_nio_DirectDoubleBufferS {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = double[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectDoubleBufferU")
-final class Target_java_nio_DirectDoubleBufferU {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = double[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectFloatBufferS")
-final class Target_java_nio_DirectFloatBufferS {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = float[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectFloatBufferU")
-final class Target_java_nio_DirectFloatBufferU {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = float[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectIntBufferS")
-final class Target_java_nio_DirectIntBufferS {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = int[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectIntBufferU")
-final class Target_java_nio_DirectIntBufferU {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = int[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectLongBufferS")
-final class Target_java_nio_DirectLongBufferS {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = long[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectLongBufferU")
-final class Target_java_nio_DirectLongBufferU {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = long[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectShortBufferS")
-final class Target_java_nio_DirectShortBufferS {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = short[].class) //
-    private static long arrayBaseOffset;
-}
-
-@TargetClass(className = "java.nio.DirectShortBufferU")
-final class Target_java_nio_DirectShortBufferU {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = short[].class) //
-    private static long arrayBaseOffset;
-}
-
 @TargetClass(java.nio.charset.CharsetEncoder.class)
 final class Target_java_nio_charset_CharsetEncoder {
     @Alias @RecomputeFieldValue(kind = Reset) //
     private WeakReference<CharsetDecoder> cachedDecoder;
 }
 
-@TargetClass(className = "java.nio.charset.CoderResult$Cache")
+@TargetClass(className = "java.nio.charset.CoderResult$Cache", onlyWith = JDK8OrEarlier.class)
 final class Target_java_nio_charset_CoderResult_Cache {
     @Alias @RecomputeFieldValue(kind = Reset) //
     private Map<Integer, WeakReference<CoderResult>> cache;
-}
-
-@TargetClass(java.util.concurrent.atomic.AtomicBoolean.class)
-final class Target_java_util_concurrent_atomic_AtomicBoolean {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "value") //
-    private static long valueOffset;
-}
-
-@TargetClass(java.util.concurrent.atomic.AtomicInteger.class)
-final class Target_java_util_concurrent_atomic_AtomicInteger {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "value") //
-    protected static long valueOffset;
-}
-
-@TargetClass(java.util.concurrent.atomic.AtomicLong.class)
-final class Target_java_util_concurrent_atomic_AtomicLong {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "value") //
-    protected static long valueOffset;
-}
-
-@TargetClass(java.util.concurrent.atomic.AtomicReference.class)
-final class Target_java_util_concurrent_atomic_AtomicReference {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "value") //
-    protected static long valueOffset;
-}
-
-@TargetClass(java.util.concurrent.atomic.AtomicIntegerArray.class)
-final class Target_java_util_concurrent_atomic_AtomicIntegerArray {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = int[].class) //
-    private static int base;
-    @Alias @RecomputeFieldValue(kind = ArrayIndexShift, declClass = int[].class) //
-    private static int shift;
-}
-
-@TargetClass(java.util.concurrent.atomic.AtomicLongArray.class)
-final class Target_java_util_concurrent_atomic_AtomicLongArray {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = long[].class) //
-    private static int base;
-    @Alias @RecomputeFieldValue(kind = ArrayIndexShift, declClass = long[].class) //
-    private static int shift;
-}
-
-@TargetClass(java.util.concurrent.atomic.AtomicReferenceArray.class)
-final class Target_java_util_concurrent_atomic_AtomicReferenceArray {
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = Object[].class) //
-    private static int base;
-    @Alias @RecomputeFieldValue(kind = ArrayIndexShift, declClass = Object[].class) //
-    private static int shift;
 }
 
 @TargetClass(className = "java.util.concurrent.atomic.AtomicReferenceFieldUpdater$AtomicReferenceFieldUpdaterImpl")
 final class Target_java_util_concurrent_atomic_AtomicReferenceFieldUpdater_AtomicReferenceFieldUpdaterImpl {
     @Alias @RecomputeFieldValue(kind = AtomicFieldUpdaterOffset) //
     private long offset;
+
+    /** the same as tclass, used for checks */
+    @Alias private final Class<?> cclass;
+
+    /** class holding the field */
+    @Alias private final Class<?> tclass;
+
+    /** field value type */
+    @Alias private final Class<?> vclass;
+
+    // simplified version of the original constructor
+    @SuppressWarnings("unused")
+    @Substitute
+    Target_java_util_concurrent_atomic_AtomicReferenceFieldUpdater_AtomicReferenceFieldUpdaterImpl(
+                    final Class<?> tclass, final Class<?> vclass, final String fieldName, final Class<?> caller) {
+        final Field field;
+        final Class<?> fieldClass;
+        final int modifiers;
+        try {
+            field = tclass.getDeclaredField(fieldName);
+
+            modifiers = field.getModifiers();
+            fieldClass = field.getType();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+
+        if (vclass != fieldClass) {
+            throw new ClassCastException();
+        }
+        if (vclass.isPrimitive())
+            throw new IllegalArgumentException("Must be reference type");
+
+        if (!Modifier.isVolatile(modifiers))
+            throw new IllegalArgumentException("Must be volatile type");
+
+        // access checks are disabled
+        this.cclass = tclass;
+        this.tclass = tclass;
+        this.vclass = vclass;
+        this.offset = UnsafeAccess.UNSAFE.objectFieldOffset(field);
+    }
 }
 
 @TargetClass(className = "java.util.concurrent.atomic.AtomicIntegerFieldUpdater$AtomicIntegerFieldUpdaterImpl")
 final class Target_java_util_concurrent_atomic_AtomicIntegerFieldUpdater_AtomicIntegerFieldUpdaterImpl {
     @Alias @RecomputeFieldValue(kind = AtomicFieldUpdaterOffset) //
     private long offset;
+
+    /** the same as tclass, used for checks */
+    @Alias private final Class<?> cclass;
+    /** class holding the field */
+    @Alias private final Class<?> tclass;
+
+    // simplified version of the original constructor
+    @SuppressWarnings("unused")
+    @Substitute
+    Target_java_util_concurrent_atomic_AtomicIntegerFieldUpdater_AtomicIntegerFieldUpdaterImpl(final Class<?> tclass,
+                    final String fieldName, final Class<?> caller) {
+        final Field field;
+        final int modifiers;
+        try {
+            field = tclass.getDeclaredField(fieldName);
+            modifiers = field.getModifiers();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+
+        if (field.getType() != int.class)
+            throw new IllegalArgumentException("Must be integer type");
+
+        if (!Modifier.isVolatile(modifiers))
+            throw new IllegalArgumentException("Must be volatile type");
+
+        // access checks are disabled
+        this.cclass = tclass;
+        this.tclass = tclass;
+        this.offset = UnsafeAccess.UNSAFE.objectFieldOffset(field);
+    }
 }
 
 @TargetClass(className = "java.util.concurrent.atomic.AtomicLongFieldUpdater$CASUpdater")
 final class Target_java_util_concurrent_atomic_AtomicLongFieldUpdater_CASUpdater {
     @Alias @RecomputeFieldValue(kind = AtomicFieldUpdaterOffset) //
     private long offset;
+
+    /** the same as tclass, used for checks */
+    @Alias private final Class<?> cclass;
+    /** class holding the field */
+    @Alias private final Class<?> tclass;
+
+    // simplified version of the original constructor
+    @SuppressWarnings("unused")
+    @Substitute
+    Target_java_util_concurrent_atomic_AtomicLongFieldUpdater_CASUpdater(final Class<?> tclass,
+                    final String fieldName, final Class<?> caller) {
+        final Field field;
+        final int modifiers;
+        try {
+            field = tclass.getDeclaredField(fieldName);
+            modifiers = field.getModifiers();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+
+        if (field.getType() != long.class)
+            throw new IllegalArgumentException("Must be long type");
+
+        if (!Modifier.isVolatile(modifiers))
+            throw new IllegalArgumentException("Must be volatile type");
+
+        // access checks are disabled
+        this.cclass = tclass;
+        this.tclass = tclass;
+        this.offset = UnsafeAccess.UNSAFE.objectFieldOffset(field);
+    }
+
 }
 
 @TargetClass(className = "java.util.concurrent.atomic.AtomicLongFieldUpdater$LockedUpdater")
 final class Target_java_util_concurrent_atomic_AtomicLongFieldUpdater_LockedUpdater {
     @Alias @RecomputeFieldValue(kind = AtomicFieldUpdaterOffset) //
     private long offset;
+
+    /** the same as tclass, used for checks */
+    @Alias private final Class<?> cclass;
+    /** class holding the field */
+    @Alias private final Class<?> tclass;
+
+    // simplified version of the original constructor
+    @SuppressWarnings("unused")
+    @Substitute
+    Target_java_util_concurrent_atomic_AtomicLongFieldUpdater_LockedUpdater(final Class<?> tclass,
+                    final String fieldName, final Class<?> caller) {
+        Field field = null;
+        int modifiers = 0;
+        try {
+            field = tclass.getDeclaredField(fieldName);
+            modifiers = field.getModifiers();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+
+        if (field.getType() != long.class)
+            throw new IllegalArgumentException("Must be long type");
+
+        if (!Modifier.isVolatile(modifiers))
+            throw new IllegalArgumentException("Must be volatile type");
+
+        // access checks are disabled
+        this.cclass = tclass;
+        this.tclass = tclass;
+        this.offset = UnsafeAccess.UNSAFE.objectFieldOffset(field);
+    }
 }
 
 /**
@@ -360,7 +314,7 @@ class AtomicFieldUpdaterFeature implements Feature {
 
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
-        markAsUnsafeAccessed = (field -> access.registerAsUnsafeWritten(field));
+        markAsUnsafeAccessed = (field -> access.registerAsUnsafeAccessed(field));
     }
 
     @Override
@@ -412,153 +366,27 @@ class AtomicFieldUpdaterFeature implements Feature {
     }
 }
 
-@TargetClass(java.util.concurrent.locks.AbstractQueuedSynchronizer.class)
-final class Target_java_util_concurrent_locks_AbstractQueuedSynchronizer {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "state") //
-    private static long stateOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "head") //
-    private static long headOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "tail") //
-    private static long tailOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.locks.AbstractQueuedSynchronizer$Node", name = "waitStatus") //
-    private static long waitStatusOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.locks.AbstractQueuedSynchronizer$Node", name = "next") //
-    private static long nextOffset;
-}
-
-@TargetClass(java.util.concurrent.locks.AbstractQueuedLongSynchronizer.class)
-final class Target_java_util_concurrent_locks_AbstractQueuedLongSynchronizer {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "state") //
-    private static long stateOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "head") //
-    private static long headOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "tail") //
-    private static long tailOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.locks.AbstractQueuedLongSynchronizer$Node", name = "waitStatus") //
-    private static long waitStatusOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.locks.AbstractQueuedLongSynchronizer$Node", name = "next") //
-    private static long nextOffset;
-}
-
-@TargetClass(java.util.concurrent.locks.LockSupport.class)
-final class Target_java_util_concurrent_locks_LockSupport {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = java.lang.Thread.class, name = "parkBlocker") //
-    private static long parkBlockerOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = java.lang.Thread.class, name = "threadLocalRandomSeed") //
-    private static long SEED;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = java.lang.Thread.class, name = "threadLocalRandomProbe") //
-    private static long PROBE;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = java.lang.Thread.class, name = "threadLocalRandomSecondarySeed") //
-    private static long SECONDARY;
-}
-
-@TargetClass(java.util.concurrent.locks.ReentrantReadWriteLock.class)
-final class Target_java_util_concurrent_locks_ReentrantReadWriteLock {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "tid") //
-    private static long TID_OFFSET;
-}
-
-@TargetClass(java.util.concurrent.locks.StampedLock.class)
-final class Target_java_util_concurrent_locks_StampedLock {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = StampedLock.class, name = "state") //
-    private static long STATE;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = StampedLock.class, name = "whead") //
-    private static long WHEAD;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = StampedLock.class, name = "wtail") //
-    private static long WTAIL;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.locks.StampedLock$WNode", name = "status") //
-    private static long WSTATUS;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.locks.StampedLock$WNode", name = "next") //
-    private static long WNEXT;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.locks.StampedLock$WNode", name = "cowait") //
-    private static long WCOWAIT;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "parkBlocker") //
-    private static long PARKBLOCKER;
-}
-
-@TargetClass(value = java.math.BigInteger.class, innerClass = "UnsafeHolder")
-final class Target_java_math_BigInteger_UnsafeHolder {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = java.math.BigInteger.class, name = "signum") //
-    private static long signumOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = java.math.BigInteger.class, name = "mag") //
-    private static long magOffset;
-}
-
-@TargetClass(java.util.concurrent.ConcurrentHashMap.class)
-final class Target_java_util_concurrent_ConcurrentHashMap {
-
-    @Substitute
-    private static Class<?> comparableClassFor(Object x) {
-        if (x instanceof Comparable) {
-            /*
-             * We cannot do all the generic interface checks that the original implementation is
-             * doing, because we do not have the necessary metadata at run time.
-             */
-            return x.getClass();
-        }
-        return null;
-    }
-
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "sizeCtl") //
-    private static long SIZECTL;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "transferIndex") //
-    private static long TRANSFERINDEX;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "baseCount") //
-    private static long BASECOUNT;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "cellsBusy") //
-    private static long CELLSBUSY;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.ConcurrentHashMap$CounterCell", name = "value") //
-    private static long CELLVALUE;
-    /*
-     * TODO: This should use Node[].class, but that class is not visible, so I use Object[].class.
-     */
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = Object[].class) //
-    private static long ABASE;
-    @Alias @RecomputeFieldValue(kind = ArrayIndexShift, declClass = Object[].class) //
-    private static int ASHIFT;
-}
-
-@TargetClass(className = "java.util.concurrent.ConcurrentHashMap$TreeBin")
-final class Target_java_util_concurrent_ConcurrentHashMap_TreeBin {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "lockState") //
-    private static long LOCKSTATE;
-}
-
 @TargetClass(java.util.concurrent.ForkJoinPool.class)
 final class Target_java_util_concurrent_ForkJoinPool {
 
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "ctl") //
-    private static long CTL;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "runState") //
-    private static long RUNSTATE;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "stealCounter") //
-    private static long STEALCOUNTER;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "parkBlocker") //
-    private static long PARKBLOCKER;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.ForkJoinPool$WorkQueue", name = "top") //
-    private static long QTOP;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.ForkJoinPool$WorkQueue", name = "qlock") //
-    private static long QLOCK;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.ForkJoinPool$WorkQueue", name = "scanState") //
-    private static long QSCANSTATE;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.ForkJoinPool$WorkQueue", name = "parker") //
-    private static long QPARKER;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.ForkJoinPool$WorkQueue", name = "currentSteal") //
-    private static long QCURRENTSTEAL;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.ForkJoinPool$WorkQueue", name = "currentJoin") //
-    private static long QCURRENTJOIN;
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = ForkJoinTask[].class) //
-    private static int ABASE;
-    @Alias @RecomputeFieldValue(kind = ArrayIndexShift, declClass = Object[].class) //
-    private static int ASHIFT;
-
     @Alias static /* final */ int MAX_CAP;
-    @Alias static /* final */ int LIFO_QUEUE;
+
+    @Alias //
+    @TargetElement(onlyWith = JDK8OrEarlier.class) //
+    static /* final */ int LIFO_QUEUE;
+
     @Alias static /* final */ ForkJoinWorkerThreadFactory defaultForkJoinWorkerThreadFactory;
 
-    @Alias
-    @SuppressWarnings("unused")
+    @Alias //
+    @TargetElement(onlyWith = JDK8OrEarlier.class) //
+    @SuppressWarnings("unused") //
     protected Target_java_util_concurrent_ForkJoinPool(int parallelism, ForkJoinWorkerThreadFactory factory, UncaughtExceptionHandler handler, int mode, String workerNamePrefix) {
+    }
+
+    @Alias //
+    @TargetElement(onlyWith = JDK9OrLater.class) //
+    @SuppressWarnings("unused") //
+    private Target_java_util_concurrent_ForkJoinPool(byte forCommonPoolOnly) {
     }
 
     /**
@@ -578,8 +406,14 @@ final class Target_java_util_concurrent_ForkJoinPool {
      */
     @Alias @InjectAccessors(CommonInjector.class) //
     static /* final */ ForkJoinPool common;
+
     @Alias //
+    @TargetElement(onlyWith = JDK8OrEarlier.class) //
     static /* final */ int commonParallelism;
+
+    @Alias //
+    @TargetElement(onlyWith = JDK9OrLater.class) //
+    static /* final */ int COMMON_PARALLELISM;
 
     /**
      * An injected field to replace ForkJoinPool.common.
@@ -605,34 +439,54 @@ final class Target_java_util_concurrent_ForkJoinPool {
         /** Ensure that the common pool variables are initialized. */
         protected static void ensureCommonPoolIsInitialized() {
             if (injectedCommon.get() == null) {
-                /* "common" and "commonParallelism" have to be set together. */
-                /*
-                 * This is a simplified version of ForkJoinPool.makeCommonPool(), without the
-                 * dynamic class loading for factory and handler based on system properties.
-                 */
-                int parallelism = Runtime.getRuntime().availableProcessors() - 1;
-                if (!SubstrateOptions.MultiThreaded.getValue()) {
-                    /*
-                     * Using "parallelism = 0" gets me a ForkJoinPool that does not try to start any
-                     * threads, which is what I want if I am not multi-threaded.
-                     */
-                    parallelism = 0;
+                if (GraalServices.Java8OrEarlier) {
+                    initializeCommonPool_JDK8OrEarlier();
+                } else {
+                    initializeCommonPool_JDK9OrLater();
                 }
-                if (parallelism > MAX_CAP) {
-                    parallelism = MAX_CAP;
-                }
-                final Target_java_util_concurrent_ForkJoinPool proposedPool = //
-                                new Target_java_util_concurrent_ForkJoinPool(parallelism, defaultForkJoinWorkerThreadFactory, null, LIFO_QUEUE, "ForkJoinPool.commonPool-worker-");
-                /* The assignment to "injectedCommon" is atomic to prevent races. */
-                injectedCommon.compareAndSet(null, proposedPool);
-                final ForkJoinPool actualPool = Util_java_util_concurrent_ForkJoinPool.as_ForkJoinPool(injectedCommon.get());
-                /*
-                 * The assignment to "commonParallelism" can race because multiple assignments are
-                 * idempotent once "injectedCommon" is set. This code is a copy of the relevant part
-                 * of the static initialization block in ForkJoinPool.
-                 */
-                commonParallelism = actualPool.getParallelism();
             }
+        }
+
+        protected static void initializeCommonPool_JDK8OrEarlier() {
+            /* "common" and "commonParallelism" have to be set together. */
+            /*
+             * This is a simplified version of ForkJoinPool.makeCommonPool(), without the dynamic
+             * class loading for factory and handler based on system properties.
+             */
+            int parallelism = Runtime.getRuntime().availableProcessors() - 1;
+            if (!SubstrateOptions.MultiThreaded.getValue()) {
+                /*
+                 * Using "parallelism = 0" gets me a ForkJoinPool that does not try to start any
+                 * threads, which is what I want if I am not multi-threaded.
+                 */
+                parallelism = 0;
+            }
+            if (parallelism > MAX_CAP) {
+                parallelism = MAX_CAP;
+            }
+            final Target_java_util_concurrent_ForkJoinPool proposedPool = new Target_java_util_concurrent_ForkJoinPool(parallelism, defaultForkJoinWorkerThreadFactory, null, LIFO_QUEUE,
+                            "ForkJoinPool.commonPool-worker-");
+            /* The assignment to "injectedCommon" is atomic to prevent races. */
+            injectedCommon.compareAndSet(null, proposedPool);
+            final ForkJoinPool actualPool = Util_java_util_concurrent_ForkJoinPool.as_ForkJoinPool(injectedCommon.get());
+            /*
+             * The assignment to "commonParallelism" can race because multiple assignments are
+             * idempotent once "injectedCommon" is set. This code is a copy of the relevant part of
+             * the static initialization block in ForkJoinPool.
+             */
+            commonParallelism = actualPool.getParallelism();
+        }
+
+        protected static void initializeCommonPool_JDK9OrLater() {
+            /* "common" and "commonParallelism" have to be set together. */
+            /*
+             * TODO: This should be a simplified version of ForkJoinPool(byte), , without the
+             * dynamic class loading for factory and handler based on system properties.
+             *
+             * Among the problems is that the public ForkJoinPool constructor that takes a
+             * `parallelism` argument now throws an `IllegalArgumentException` if passed a `0`.
+             */
+            throw VMError.unsupportedFeature("Target_java_util_concurrent_ForkJoinPool.CommonInjector.initializeCommonPool_JDK9OrLater()");
         }
     }
 
@@ -648,22 +502,9 @@ final class Target_java_util_concurrent_ForkJoinPool {
     }
 }
 
-@TargetClass(java.util.concurrent.ForkJoinWorkerThread.class)
-final class Target_java_util_concurrent_ForkJoinWorkerThread {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "threadLocals") //
-    private static long THREADLOCALS;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "inheritableThreadLocals") //
-    private static long INHERITABLETHREADLOCALS;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "inheritedAccessControlContext") //
-    private static long INHERITEDACCESSCONTROLCONTEXT;
-}
-
 @TargetClass(java.util.concurrent.ForkJoinTask.class)
 @SuppressWarnings("static-method")
 final class Target_java_util_concurrent_ForkJoinTask {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "status") //
-    private static long STATUS;
-
     @Alias @RecomputeFieldValue(kind = Kind.FromAlias) //
     private static final Target_java_util_concurrent_ForkJoinTask_ExceptionNode[] exceptionTable;
     @Alias @RecomputeFieldValue(kind = Kind.FromAlias) //
@@ -672,18 +513,13 @@ final class Target_java_util_concurrent_ForkJoinTask {
     private static final ReferenceQueue<Object> exceptionTableRefQueue;
 
     static {
-        int exceptionMapCapacity;
-        try {
-            Field field = ForkJoinTask.class.getDeclaredField("EXCEPTION_MAP_CAPACITY");
-            field.setAccessible(true);
-            exceptionMapCapacity = field.getInt(null);
-        } catch (IllegalArgumentException | IllegalAccessException | NoSuchFieldException ex) {
-            throw VMError.shouldNotReachHere(ex);
-        }
-
         exceptionTableLock = new ReentrantLock();
         exceptionTableRefQueue = new ReferenceQueue<>();
-        exceptionTable = new Target_java_util_concurrent_ForkJoinTask_ExceptionNode[exceptionMapCapacity];
+        /*
+         * JDK 8 has a static final field EXCEPTION_MAP_CAPACITY with value 32, later versions just
+         * use 32 hardcoded. To be JDK version independent, we duplicate the hardcoded value.
+         */
+        exceptionTable = new Target_java_util_concurrent_ForkJoinTask_ExceptionNode[32];
     }
 
     @Substitute
@@ -696,96 +532,12 @@ final class Target_java_util_concurrent_ForkJoinTask {
 final class Target_java_util_concurrent_ForkJoinTask_ExceptionNode {
 }
 
-@TargetClass(className = "java.util.concurrent.SynchronousQueue$TransferStack")
-final class Target_java_util_concurrent_SynchronousQueue_TransferStack {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "head") //
-    private static long headOffset;
-}
-
-@TargetClass(className = "java.util.concurrent.SynchronousQueue$TransferStack$SNode")
-final class Target_java_util_concurrent_SynchronousQueue_TransferStack_SNode {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "match") //
-    private static long matchOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "next") //
-    private static long nextOffset;
-}
-
-@TargetClass(className = "java.util.concurrent.SynchronousQueue$TransferQueue")
-final class Target_java_util_concurrent_SynchronousQueue_TransferQueue {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "head") //
-    private static long headOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "tail") //
-    private static long tailOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "cleanMe") //
-    private static long cleanMeOffset;
-}
-
-@TargetClass(className = "java.util.concurrent.SynchronousQueue$TransferQueue$QNode")
-final class Target_java_util_concurrent_SynchronousQueue_TransferQueue_QNode {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "item") //
-    private static long itemOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "next") //
-    private static long nextOffset;
-}
-
-@TargetClass(java.util.concurrent.atomic.AtomicStampedReference.class)
-final class Target_java_util_concurrent_atomic_AtomicStampedReference {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "pair") //
-    private static long pairOffset;
-}
-
-@TargetClass(java.util.concurrent.atomic.AtomicMarkableReference.class)
-final class Target_java_util_concurrent_atomic_AtomicMarkableReference {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "pair") //
-    private static long pairOffset;
-}
-
-@TargetClass(java.lang.invoke.MethodType.class)
-final class Target_java_lang_invoke_MethodType {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "ptypes") //
-    private static long ptypesOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "rtype") //
-    private static long rtypeOffset;
-}
-
-@TargetClass(java.util.concurrent.ThreadLocalRandom.class)
-final class Target_java_util_concurrent_ThreadLocalRandom {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "threadLocalRandomSeed") //
-    private static long SEED;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "threadLocalRandomProbe") //
-    private static long PROBE;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "threadLocalRandomSecondarySeed") //
-    private static long SECONDARY;
-
-}
-
-@TargetClass(java.util.concurrent.CompletableFuture.class)
-final class Target_java_util_concurrent_CompletableFuture {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "result") //
-    private static long RESULT;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "stack") //
-    private static long STACK;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.CompletableFuture$Completion", name = "next") //
-    private static long NEXT;
-}
-
-@TargetClass(java.util.concurrent.CountedCompleter.class)
-final class Target_java_util_concurrent_CountedCompleter {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "pending") //
-    private static long PENDING;
-}
-
 @TargetClass(java.util.concurrent.Exchanger.class)
 final class Target_java_util_concurrent_Exchanger {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "bound") //
-    private static long BOUND;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "slot") //
-    private static long SLOT;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClassName = "java.util.concurrent.Exchanger$Node", name = "match") //
-    private static long MATCH;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, declClass = Thread.class, name = "parkBlocker") //
-    private static long BLOCKER;
-    @Alias @RecomputeFieldValue(kind = Kind.Custom, declClass = ExchangerABASEComputer.class) //
+
+    @Alias //
+    @TargetElement(onlyWith = JDK8OrEarlier.class) //
+    @RecomputeFieldValue(kind = Kind.Custom, declClass = ExchangerABASEComputer.class) //
     private static /* final */ int ABASE;
 
 }
@@ -799,7 +551,7 @@ final class Target_java_util_concurrent_Exchanger {
 class ExchangerABASEComputer implements RecomputeFieldValue.CustomFieldValueComputer {
 
     @Override
-    public Object compute(ResolvedJavaField original, ResolvedJavaField annotated, Object receiver) {
+    public Object compute(MetaAccessProvider metaAccess, ResolvedJavaField original, ResolvedJavaField annotated, Object receiver) {
         try {
             ObjectLayout layout = ImageSingletons.lookup(ObjectLayout.class);
 
@@ -847,62 +599,6 @@ final class Target_java_util_concurrent_ForkJoinWorkerThread_InnocuousForkJoinWo
      */
     @Delete //
     private static ThreadGroup innocuousThreadGroup;
-}
-
-@TargetClass(className = "java.util.concurrent.ForkJoinPool$WorkQueue")
-final class Target_java_util_concurrent_ForkJoinPool_WorkQueue {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "top") //
-    private static long QTOP;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "qlock") //
-    private static long QLOCK;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "currentSteal") //
-    private static long QCURRENTSTEAL;
-    @Alias @RecomputeFieldValue(kind = ArrayBaseOffset, declClass = ForkJoinTask[].class) //
-    private static int ABASE;
-    @Alias @RecomputeFieldValue(kind = ArrayIndexShift, declClass = ForkJoinTask[].class) //
-    private static /* final */ int ASHIFT;
-}
-
-@TargetClass(java.util.concurrent.FutureTask.class)
-final class Target_java_util_concurrent_FutureTask {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "state") //
-    private static long stateOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "runner") //
-    private static long runnerOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "waiters") //
-    private static long waitersOffset;
-}
-
-@TargetClass(java.util.concurrent.LinkedTransferQueue.class)
-final class Target_java_util_concurrent_LinkedTransferQueue {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "head") //
-    private static long headOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "tail") //
-    private static long tailOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "sweepVotes") //
-    private static long sweepVotesOffset;
-}
-
-@TargetClass(className = "java.util.concurrent.LinkedTransferQueue$Node")
-final class Target_java_util_concurrent_LinkedTransferQueue_Node {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "item") //
-    private static long itemOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "next") //
-    private static long nextOffset;
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "waiter") //
-    private static long waiterOffset;
-}
-
-@TargetClass(java.util.concurrent.Phaser.class)
-final class Target_java_util_concurrent_Phaser {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "state") //
-    private static long stateOffset;
-}
-
-@TargetClass(java.util.concurrent.PriorityBlockingQueue.class)
-final class Target_java_util_concurrent_PriorityBlockingQueue {
-    @Alias @RecomputeFieldValue(kind = FieldOffset, name = "allocationSpinLock") //
-    private static long allocationSpinLockOffset;
 }
 
 /** Dummy class to have a class with the file's name. */

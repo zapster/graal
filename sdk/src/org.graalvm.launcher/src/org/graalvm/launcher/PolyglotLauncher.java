@@ -43,23 +43,20 @@ import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.Language;
 import org.graalvm.polyglot.PolyglotException;
+import org.graalvm.polyglot.PolyglotException.StackFrame;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
 
 public final class PolyglotLauncher extends Launcher {
 
     private String mainLanguage = null;
-
-    static {
-        // TODO remove temporary hack to initialize engine if not yet initialized.
-        Source.create("js", "");
-    }
+    private boolean verbose;
 
     @Override
     protected void printHelp(OptionCategory maxCategory) {
         Engine engine = Engine.create();
         // @formatter:off
-        System.out.println("GraalVM polyglot launcher version " + engine.getVersion());
+        printVersion(engine);
         System.out.println();
         System.out.println("Usage: polyglot [OPTION]... [FILE] [ARGS]...");
         List<Language> languages = sortedLanguages(engine);
@@ -76,6 +73,7 @@ public final class PolyglotLauncher extends Launcher {
         printOption("--file [<lang>:]FILE",   "Additional file to execute.");
         printOption("--eval [<lang>:]CODE",   "Evaluates code snippets, for example, '--eval js:42'.");
         printOption("--shell",                "Start a multi language shell.");
+        printOption("--verbose",              "Enable verbose stack trace for internal errors.");
         // @formatter:on
     }
 
@@ -90,20 +88,28 @@ public final class PolyglotLauncher extends Launcher {
 
     @Override
     protected void printVersion() {
-        printPolyglotVersions();
+        printVersion(Engine.create());
+    }
+
+    protected static void printVersion(Engine engine) {
+        String engineImplementationName = engine.getImplementationName();
+        if (isAOT()) {
+            engineImplementationName += " Native";
+        }
+        System.out.println(String.format("%s polyglot launcher %s", engineImplementationName, engine.getVersion()));
     }
 
     private void launch(String[] args) {
         List<String> arguments = new ArrayList<>(Arrays.asList(args));
         if (isAOT()) {
             nativeAccess.maybeExec(arguments, true, Collections.emptyMap(), VMType.Native);
-            nativeAccess.setGraalVMProperties();
         }
 
         Map<String, String> options = new HashMap<>();
 
         List<Script> scripts = new ArrayList<>();
         int i = 0;
+        boolean version = false;
         boolean shell = false;
         boolean eval = false;
         boolean file = false;
@@ -145,8 +151,12 @@ public final class PolyglotLauncher extends Launcher {
             } else if (!arg.startsWith("-")) {
                 scripts.add(new FileScript(mainLanguage, arg, true));
                 break;
+            } else if (arg.equals("--version")) {
+                version = true;
             } else if (arg.equals("--shell")) {
                 shell = true;
+            } else if (arg.equals("--verbose")) {
+                verbose = true;
             } else if (arg.equals("--eval")) {
                 eval = true;
             } else if (arg.equals("--file")) {
@@ -166,12 +176,13 @@ public final class PolyglotLauncher extends Launcher {
         if (runPolyglotAction()) {
             return;
         }
-
         Context.Builder contextBuilder = Context.newBuilder().options(options).in(System.in).out(System.out).err(System.err);
-        if (!isAOT()) {
-            contextBuilder.allowHostAccess(true);
+        contextBuilder.allowAllAccess(true);
+
+        if (version) {
+            printVersion(Engine.newBuilder().options(options).build());
+            throw exit();
         }
-        contextBuilder.allowCreateThread(true);
 
         if (shell) {
             runShell(contextBuilder);
@@ -217,10 +228,10 @@ public final class PolyglotLauncher extends Launcher {
             launcherClass = getLauncherClass(launcherName);
         }
         try {
-            AbstractLanguageLauncher launcher = launcherClass.newInstance();
+            AbstractLanguageLauncher launcher = launcherClass.getDeclaredConstructor().newInstance();
             launcher.setPolyglot(true);
             launcher.launch(args, options, false);
-        } catch (IllegalAccessException | InstantiationException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to instanciate launcher class " + launcherName, e);
         }
     }
@@ -249,20 +260,52 @@ public final class PolyglotLauncher extends Launcher {
                         System.out.println(result);
                     }
                 } catch (PolyglotException e) {
-                    if (e.isExit()) {
-                        throw exit(e.getExitStatus());
-                    } else if (e.isGuestException()) {
-                        e.printStackTrace();
-                        throw exit(1);
-                    } else {
-                        throw abort(e);
-                    }
+                    throw abort(e);
                 } catch (IOException e) {
                     throw abort(e);
                 } catch (Throwable t) {
                     throw abort(t);
                 }
             }
+        }
+    }
+
+    AbortException abort(PolyglotException e) {
+        if (e.isInternalError()) {
+            System.err.println("Internal error occured: " + e.toString());
+            if (verbose) {
+                e.printStackTrace(System.err);
+            } else {
+                System.err.println("Run with --verbose to see the full stack trace.");
+            }
+            throw exit(1);
+        } else if (e.isExit()) {
+            throw exit(e.getExitStatus());
+        } else if (e.isSyntaxError()) {
+            throw abort(e.getMessage(), 1);
+        } else {
+            List<StackFrame> trace = new ArrayList<>();
+            for (StackFrame stackFrame : e.getPolyglotStackTrace()) {
+                trace.add(stackFrame);
+            }
+            // remove trailing host frames
+            for (int i = trace.size() - 1; i >= 0; i--) {
+                if (trace.get(i).isHostFrame()) {
+                    trace.remove(i);
+                } else {
+                    break;
+                }
+            }
+            if (e.isHostException()) {
+                System.err.println(e.asHostException().toString());
+            } else {
+                System.err.println(e.getMessage());
+            }
+            for (StackFrame stackFrame : trace) {
+                System.err.print("        at ");
+                System.err.println(stackFrame.toString());
+            }
+            throw exit(1);
         }
     }
 
@@ -277,7 +320,16 @@ public final class PolyglotLauncher extends Launcher {
 
     public static void main(String[] args) {
         try {
-            new PolyglotLauncher().launch(args);
+            PolyglotLauncher launcher = new PolyglotLauncher();
+            try {
+                launcher.launch(args);
+            } catch (AbortException e) {
+                throw e;
+            } catch (PolyglotException e) {
+                handlePolyglotException(e);
+            } catch (Throwable t) {
+                throw launcher.abort(t);
+            }
         } catch (AbortException e) {
             handleAbortException(e);
         }

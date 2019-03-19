@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -36,8 +38,8 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 /**
  * Represents the installed code of a runtime compiled method. Note that Truffle uses its own
- * subclass of InstalledCode, so no code within Substrate VM must assume that this is the only
- * representation of runtime compiled code.
+ * implementation of {@link SubstrateInstalledCode}, so no code within Substrate VM must assume that
+ * this is the only representation of runtime compiled code.
  *
  * Metadata for the code is maintained by the class {@link RuntimeMethodInfo}.
  */

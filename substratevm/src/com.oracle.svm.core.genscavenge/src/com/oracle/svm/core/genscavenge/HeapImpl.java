@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,35 +26,41 @@ package com.oracle.svm.core.genscavenge;
 
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
 
 import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.compiler.word.Word;
+import org.graalvm.nativeimage.Feature.FeatureAccess;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
-import org.graalvm.nativeimage.Feature.FeatureAccess;
+import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 import org.graalvm.word.UnsignedWord;
+import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.MemoryWalker;
-import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.MemoryWalker.NativeImageHeapRegionAccess;
 import com.oracle.svm.core.MemoryWalker.HeapChunkAccess;
 import com.oracle.svm.core.MemoryWalker.ImageCodeAccess;
+import com.oracle.svm.core.MemoryWalker.NativeImageHeapRegionAccess;
 import com.oracle.svm.core.MemoryWalker.RuntimeCompiledMethodAccess;
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
-import com.oracle.svm.core.heap.NativeImageInfo;
 import com.oracle.svm.core.heap.GC;
 import com.oracle.svm.core.heap.Heap;
+import com.oracle.svm.core.heap.NativeImageInfo;
 import com.oracle.svm.core.heap.NoAllocationVerifier;
 import com.oracle.svm.core.heap.ObjectHeader;
 import com.oracle.svm.core.heap.ObjectVisitor;
 import com.oracle.svm.core.heap.PinnedAllocator;
+import com.oracle.svm.core.hub.LayoutEncoding;
+import com.oracle.svm.core.jdk.UninterruptibleUtils.AtomicReference;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.option.RuntimeOptionValues;
 import com.oracle.svm.core.snippets.KnownIntrinsics;
@@ -80,6 +88,9 @@ public class HeapImpl extends Heap {
     /** A singleton instance, created during image generation. */
     private final MemoryMXBean memoryMXBean;
 
+    /** A list of all the classes, if someone asks for it. */
+    private List<Class<?>> classList;
+
     /** Constructor for subclasses. */
     @Platforms(Platform.HOSTED_ONLY.class)
     public HeapImpl(FeatureAccess access) {
@@ -101,6 +112,7 @@ public class HeapImpl extends Heap {
         this.pinnedAllocatorListHead = null;
         this.objectVisitorWalkerOperation = new ObjectVisitorWalkerOperation();
         this.memoryMXBean = new HeapImplMemoryMXBean();
+        this.classList = null;
     }
 
     @Fold
@@ -147,7 +159,7 @@ public class HeapImpl extends Heap {
         return objectVisitorWalkerOperation;
     }
 
-    /* Walk the objects of the generations. */
+    /* Walk the objects of the heap. */
     @Override
     public void walkObjects(ObjectVisitor visitor) {
         try (ObjectVisitorWalkerOperation operation = getObjectVisitorWalkerOperation().open(visitor)) {
@@ -182,6 +194,10 @@ public class HeapImpl extends Heap {
     }
 
     private void doWalkObjects(ObjectVisitor visitor) {
+        /* Walk the native image heap. */
+        if (!NativeImageInfo.walkNativeImageHeap(visitor)) {
+            return;
+        }
         /* Walk all the Generations that might have objects in them. */
         if (!getYoungGeneration().walkObjects(visitor)) {
             return;
@@ -245,7 +261,9 @@ public class HeapImpl extends Heap {
 
     /** A guard to place before an allocation, giving the call site and the allocation type. */
     static void exitIfAllocationDisallowed(final String callSite, final String typeName) {
-        NoAllocationVerifier.DisallowedAllocationError.exitIf(HeapImpl.getHeapImpl().isAllocationDisallowed(), callSite, typeName);
+        if (HeapImpl.getHeapImpl().isAllocationDisallowed()) {
+            NoAllocationVerifier.exit(callSite, typeName);
+        }
     }
 
     /*
@@ -373,24 +391,52 @@ public class HeapImpl extends Heap {
         return false;
     }
 
+    public boolean isImageHeapObject(Object obj) {
+        return (NativeImageInfo.isObjectInReadOnlyPrimitivePartition(obj) ||
+                        NativeImageInfo.isObjectInReadOnlyReferencePartition(obj) ||
+                        NativeImageInfo.isObjectInWritablePrimitivePartition(obj) ||
+                        NativeImageInfo.isObjectInWritableReferencePartition(obj));
+    }
+
     /**
      * Returns the size (in bytes) of the heap currently used for aligned and unaligned chunks. It
      * excludes chunks that are unused.
      */
     UnsignedWord getUsedChunkBytes() {
-        final Space.Accounting young = getYoungGeneration().getSpace().getAccounting();
-        final UnsignedWord youngBytes = young.getAlignedChunkBytes().add(young.getUnalignedChunkBytes());
+        final UnsignedWord youngBytes = getYoungUsedChunkBytes();
         final UnsignedWord oldBytes = getOldUsedChunkBytes();
-        final UnsignedWord result = youngBytes.add(oldBytes);
-        return result;
+        return youngBytes.add(oldBytes);
+    }
+
+    UnsignedWord getYoungUsedChunkBytes() {
+        final Space.Accounting young = getYoungGeneration().getSpace().getAccounting();
+        return young.getAlignedChunkBytes().add(young.getUnalignedChunkBytes());
     }
 
     UnsignedWord getOldUsedChunkBytes() {
+        final Log trace = Log.noopLog().string("[HeapImpl.getOldUsedChunkBytes:");
         final Space.Accounting from = getOldGeneration().getFromSpace().getAccounting();
         final UnsignedWord fromBytes = from.getAlignedChunkBytes().add(from.getUnalignedChunkBytes());
-        final Space.Accounting pinned = getOldGeneration().getPinnedFromSpace().getAccounting();
-        final UnsignedWord pinnedBytes = pinned.getAlignedChunkBytes().add(pinned.getUnalignedChunkBytes());
-        return fromBytes.add(pinnedBytes);
+        final Space.Accounting to = getOldGeneration().getToSpace().getAccounting();
+        final UnsignedWord toBytes = to.getAlignedChunkBytes().add(to.getUnalignedChunkBytes());
+        final Space.Accounting pinnedFrom = getOldGeneration().getPinnedFromSpace().getAccounting();
+        final UnsignedWord pinnedFromBytes = pinnedFrom.getAlignedChunkBytes().add(pinnedFrom.getUnalignedChunkBytes());
+        final Space.Accounting pinnedTo = getOldGeneration().getPinnedFromSpace().getAccounting();
+        final UnsignedWord pinnedToBytes = pinnedTo.getAlignedChunkBytes().add(pinnedTo.getUnalignedChunkBytes());
+        final UnsignedWord result = fromBytes.add(toBytes).add(pinnedFromBytes).add(pinnedToBytes);
+        if (trace.isEnabled()) {
+            trace
+                            .string("  fromAligned: ").unsigned(from.getAlignedChunkBytes())
+                            .string("  fromUnaligned: ").signed(from.getUnalignedChunkBytes())
+                            .string("  toAligned: ").unsigned(to.getAlignedChunkBytes())
+                            .string("  toUnaligned: ").signed(to.getUnalignedChunkBytes())
+                            .string("  pinnedFromAligned: ").unsigned(pinnedFrom.getAlignedChunkBytes())
+                            .string("  pinnedFromUnaligned: ").signed(pinnedFrom.getUnalignedChunkBytes())
+                            .string("  pinnedToAligned: ").unsigned(pinnedTo.getAlignedChunkBytes())
+                            .string("  pinnedToUnaligned: ").signed(pinnedTo.getUnalignedChunkBytes())
+                            .string("  returns: ").unsigned(result).string(" ]").newline();
+        }
+        return result;
     }
 
     /** Return the size, in bytes, of the actual used memory, not the committed memory. */
@@ -437,6 +483,30 @@ public class HeapImpl extends Heap {
     @Override
     public MemoryMXBean getMemoryMXBean() {
         return memoryMXBean;
+    }
+
+    /** Return a list of all the classes in the heap. */
+    @Override
+    public List<Class<?>> getClassList() {
+        if (classList == null) {
+            /* Two threads might race to set classList, but they compute the same result. */
+            final List<Class<?>> list = new ArrayList<>(1024);
+            final Object firstObject = NativeImageInfo.firstReadOnlyReferenceObject;
+            final Object lastObject = NativeImageInfo.lastReadOnlyReferenceObject;
+            final Pointer firstPointer = Word.objectToUntrackedPointer(firstObject);
+            final Pointer lastPointer = Word.objectToUntrackedPointer(lastObject);
+            Pointer currentPointer = firstPointer;
+            while (currentPointer.belowOrEqual(lastPointer)) {
+                final Object currentObject = KnownIntrinsics.convertUnknownValue(currentPointer.toObject(), Object.class);
+                if (currentObject instanceof Class<?>) {
+                    final Class<?> asClass = (Class<?>) currentObject;
+                    list.add(asClass);
+                }
+                currentPointer = LayoutEncoding.getObjectEnd(currentObject);
+            }
+            classList = Collections.unmodifiableList(list);
+        }
+        return classList;
     }
 
     /*
@@ -530,12 +600,6 @@ public class HeapImpl extends Heap {
     public UnsignedWord freeMemory() {
         /*
          * Report "chunk bytes" rather than the slower but more accurate "object bytes".
-         *
-         * Note that this will not count chunks that are currently in thread-local allocation
-         * chunks, which would require a VMOperation to count them.
-         *
-         * Note that more memory can be allocated than `totalMemory()` reports, as long as the
-         * objects are unreachable when a collection happens.
          */
         return maxMemory().subtract(HeapPolicy.getBytesAllocatedSinceLastCollection()).subtract(getOldUsedChunkBytes());
     }
@@ -557,7 +621,7 @@ public class HeapImpl extends Heap {
          * This only reports the memory that will be used for heap-allocated objects. For example,
          * it does not include memory in the chunk free list, or memory in the image heap.
          */
-        return HeapPolicy.getYoungGenerationSize().add(HeapPolicy.getOldGenerationSize());
+        return HeapPolicy.getMaximumHeapSize();
     }
 }
 
@@ -673,10 +737,10 @@ final class MemoryMXBeanMemoryVisitor implements MemoryWalker.Visitor {
     }
 
     public void reset() {
-        heapUsed = Word.zero();
-        heapCommitted = Word.zero();
-        nonHeapUsed = Word.zero();
-        nonHeapCommitted = Word.zero();
+        heapUsed = WordFactory.zero();
+        heapCommitted = WordFactory.zero();
+        nonHeapUsed = WordFactory.zero();
+        nonHeapCommitted = WordFactory.zero();
     }
 
     /*

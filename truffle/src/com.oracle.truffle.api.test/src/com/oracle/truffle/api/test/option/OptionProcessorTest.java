@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -43,6 +45,7 @@ import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleLanguage.Registration;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.api.test.ExpectError;
+import org.graalvm.options.OptionValues;
 
 public class OptionProcessorTest {
 
@@ -120,6 +123,35 @@ public class OptionProcessorTest {
         assertNotNull(descriptors.get("foobar"));
     }
 
+    @Test
+    public void testOptionValues() {
+        Engine engine = Engine.create();
+        OptionDescriptors descriptors = engine.getInstruments().get("optiontestinstr1").getOptions();
+        OptionValues optionValues = engine.getInstruments().get("optiontestinstr1").lookup(OptionValues.class);
+        assertSame(descriptors, optionValues.getDescriptors());
+        assertFalse(optionValues.hasSetOptions());
+        OptionKey<?> optionKey1 = descriptors.get("optiontestinstr1.StringOption1").getKey();
+        OptionKey<?> optionKey2 = descriptors.get("optiontestinstr1.StringOption2").getKey();
+        assertFalse(optionValues.hasBeenSet(optionKey1));
+        assertEquals("defaultValue", optionValues.get(optionKey1));
+        assertEquals("defaultValue", optionValues.get(optionKey2));
+
+        engine = Engine.newBuilder().option("optiontestinstr1.StringOption1", "test").build();
+        optionValues = engine.getInstruments().get("optiontestinstr1").lookup(OptionValues.class);
+        assertTrue(optionValues.hasSetOptions());
+        optionKey1 = descriptors.get("optiontestinstr1.StringOption1").getKey();
+        optionKey2 = descriptors.get("optiontestinstr1.StringOption2").getKey();
+        assertTrue(optionValues.hasBeenSet(optionKey1));
+        assertFalse(optionValues.hasBeenSet(optionKey2));
+        assertEquals("test", optionValues.get(optionKey1));
+        assertEquals("defaultValue", optionValues.get(optionKey2));
+
+        engine = Engine.newBuilder().option("optiontestlang1.StringOption1", "testLang").build();
+        optionValues = engine.getInstruments().get("optiontestinstr1").lookup(OptionValues.class);
+        // A language option was set, not the instrument one. Instrument sees no option set:
+        assertFalse(optionValues.hasSetOptions());
+    }
+
     @Option.Group("foobar")
     public static class OptionError {
 
@@ -160,7 +192,7 @@ public class OptionProcessorTest {
 
     }
 
-    @Registration(id = "optiontestlang1", version = "1.0", name = "optiontestlang1", mimeType = "optiontestlang1")
+    @Registration(id = "optiontestlang1", version = "1.0", name = "optiontestlang1")
     public static class OptionTestLang1 extends TruffleLanguage<Object> {
 
         @Option(help = "StringOption1 help", deprecated = true, category = OptionCategory.USER) //
@@ -180,18 +212,13 @@ public class OptionProcessorTest {
         }
 
         @Override
-        protected Object getLanguageGlobal(Object context) {
-            return null;
-        }
-
-        @Override
         protected boolean isObjectOfLanguage(Object object) {
             return false;
         }
 
     }
 
-    @TruffleInstrument.Registration(id = "optiontestinstr1")
+    @TruffleInstrument.Registration(id = "optiontestinstr1", services = OptionValues.class)
     public static class OptionTestInstrument1 extends TruffleInstrument {
 
         @Option(help = "StringOption1 help", deprecated = true, category = OptionCategory.USER) //
@@ -202,6 +229,7 @@ public class OptionProcessorTest {
 
         @Override
         protected void onCreate(Env env) {
+            env.registerService(env.getOptions());
         }
 
         @Override

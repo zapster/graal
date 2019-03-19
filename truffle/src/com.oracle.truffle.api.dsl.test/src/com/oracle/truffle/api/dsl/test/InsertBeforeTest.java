@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -67,33 +69,6 @@ public class InsertBeforeTest {
     static class InsertBefore1T3 extends InsertBefore1Base {
 
         @Specialization(guards = "a == 0", insertBefore = "f3")
-        int f0(int a) {
-            return a;
-        }
-
-    }
-
-    @NodeChild("a")
-    @ExpectError({"Method f3(int) at annotation @Specialization is erroneous: Specialization is not reachable. It is shadowed by f0(int).",
-                    "Method f1(int) at annotation @Specialization is erroneous: Specialization is not reachable. It is shadowed by f0(int)."})
-    static class InsertBefore1T4 extends InsertBefore1Base {
-
-        @Specialization(insertBefore = "f1")
-        int f0(int a) {
-            return a;
-        }
-
-    }
-
-    @NodeChild("a")
-    @ExpectError({"Method f3(int) at annotation @Specialization is erroneous: Specialization is not reachable. It is shadowed by f0(int)."})
-    static class InsertBefore1T5 extends InsertBefore1Base {
-
-        boolean g0(int a) {
-            return a == 0;
-        }
-
-        @Specialization(insertBefore = "f3")
         int f0(int a) {
             return a;
         }

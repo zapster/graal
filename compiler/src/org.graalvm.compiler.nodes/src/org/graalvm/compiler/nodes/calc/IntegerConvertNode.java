@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -137,6 +139,15 @@ public abstract class IntegerConvertNode<OP, REV> extends UnaryNode implements A
 
     public static ValueNode convertUnsigned(ValueNode input, Stamp stamp, NodeView view) {
         return convert(input, stamp, true, view);
+    }
+
+    public static ValueNode convertUnsigned(ValueNode input, Stamp stamp, StructuredGraph graph, NodeView view) {
+        ValueNode convert = convert(input, stamp, true, view);
+        if (!convert.isAlive()) {
+            assert !convert.isDeleted();
+            convert = graph.addOrUniqueWithInputs(convert);
+        }
+        return convert;
     }
 
     public static ValueNode convert(ValueNode input, Stamp stamp, boolean zeroExtend, NodeView view) {

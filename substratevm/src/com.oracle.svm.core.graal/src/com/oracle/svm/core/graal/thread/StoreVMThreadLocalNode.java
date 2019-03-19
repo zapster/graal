@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -31,15 +33,13 @@ import org.graalvm.compiler.nodeinfo.NodeInfo;
 import org.graalvm.compiler.nodes.AbstractStateSplit;
 import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.ValueNode;
+import org.graalvm.compiler.nodes.extended.JavaWriteNode;
 import org.graalvm.compiler.nodes.memory.HeapAccess.BarrierType;
-import org.graalvm.compiler.nodes.memory.WriteNode;
 import org.graalvm.compiler.nodes.memory.address.AddressNode;
 import org.graalvm.compiler.nodes.memory.address.OffsetAddressNode;
 import org.graalvm.compiler.nodes.spi.Lowerable;
 import org.graalvm.compiler.nodes.spi.LoweringTool;
 
-import com.oracle.svm.core.amd64.FrameAccess;
-import com.oracle.svm.core.graal.nodes.CInterfaceWriteNode;
 import com.oracle.svm.core.threadlocal.VMThreadLocalInfo;
 
 @NodeInfo(cycles = CYCLES_2, size = SIZE_1)
@@ -63,10 +63,11 @@ public class StoreVMThreadLocalNode extends AbstractStateSplit implements Lowera
     public void lower(LoweringTool tool) {
         assert threadLocalInfo.offset >= 0;
 
-        ConstantNode offset = ConstantNode.forIntegerKind(FrameAccess.getWordKind(), threadLocalInfo.offset, holder.graph());
+        ConstantNode offset = ConstantNode.forLong(threadLocalInfo.offset, graph());
         AddressNode address = graph().unique(new OffsetAddressNode(holder, offset));
-        WriteNode write = graph().add(new CInterfaceWriteNode(address, threadLocalInfo.locationIdentity, value, barrierType, threadLocalInfo.name));
+        JavaWriteNode write = graph().add(new JavaWriteNode(threadLocalInfo.storageKind, address, threadLocalInfo.locationIdentity, value, barrierType, true));
         write.setStateAfter(stateAfter());
         graph().replaceFixedWithFixed(this, write);
+        tool.getLowerer().lower(write, tool);
     }
 }

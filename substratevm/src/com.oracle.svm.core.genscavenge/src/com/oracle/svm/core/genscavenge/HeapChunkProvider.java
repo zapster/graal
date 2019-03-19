@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -33,12 +35,12 @@ import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.amd64.FrameAccess;
 import com.oracle.svm.core.annotate.AlwaysInline;
 import com.oracle.svm.core.annotate.Uninterruptible;
-import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.genscavenge.AlignedHeapChunk.AlignedHeader;
 import com.oracle.svm.core.genscavenge.HeapChunk.Header;
 import com.oracle.svm.core.genscavenge.UnalignedHeapChunk.UnalignedHeader;
 import com.oracle.svm.core.jdk.UninterruptibleUtils;
 import com.oracle.svm.core.log.Log;
+import com.oracle.svm.core.os.CommittedMemoryProvider;
 import com.oracle.svm.core.thread.VMThreads;
 import com.oracle.svm.core.util.AtomicUnsigned;
 
@@ -47,7 +49,7 @@ import com.oracle.svm.core.util.AtomicUnsigned;
  * thread-safe, so no locking is necessary when calling them.
  *
  * Memory for aligned chunks is not immediately released to the OS. Up to
- * {@link HeapPolicy#getFreeSpaceSize()} chunks are saved in an unused chunk list. Memory for
+ * {@link HeapPolicy#getMinimumHeapSize()} chunks are saved in an unused chunk list. Memory for
  * unaligned chunks is released immediately.
  */
 class HeapChunkProvider {
@@ -129,7 +131,7 @@ class HeapChunkProvider {
         if (result.isNull()) {
             /* Unused list was empty, need to allocate memory. */
             noteFirstAllocationTime();
-            result = (AlignedHeader) ConfigurationValues.getOSInterface().allocateVirtualMemoryAligned(chunkSize, HeapPolicy.getAlignedHeapChunkAlignment());
+            result = (AlignedHeader) CommittedMemoryProvider.get().allocate(chunkSize, HeapPolicy.getAlignedHeapChunkAlignment(), false);
             if (result.isNull()) {
                 throw AllocatorOutOfMemoryError.throwError("No virtual memory for aligned chunk");
             }
@@ -142,7 +144,7 @@ class HeapChunkProvider {
         assert result.getEnd().equal(HeapChunk.asPointer(result).add(chunkSize));
 
         if (HeapPolicy.getZapProducedHeapChunks()) {
-            zap(result, HeapPolicy.getProducedHeapChunkZapValue());
+            zap(result, HeapPolicy.getProducedHeapChunkZapWord());
         }
 
         HeapPolicy.bytesAllocatedSinceLastCollection.addAndGet(chunkSize);
@@ -151,31 +153,45 @@ class HeapChunkProvider {
         return result;
     }
 
-    /**
-     * Recycle an AlignedHeapChunk, either to the free list or back to the operating system.
-     */
+    /** Recycle an AlignedHeapChunk, either to the free list or back to the operating system. */
     void consumeAlignedChunk(AlignedHeader chunk) {
         log().string("[HeapChunkProvider.consumeAlignedChunk  chunk: ").hex(chunk).newline();
 
         /* Policy: Only keep a limited number of unused chunks. */
-        if (bytesInUnusedAlignedChunks.get().belowThan(HeapPolicy.getFreeSpaceSize())) {
-
+        if (keepAlignedChunk()) {
             cleanAlignedChunk(chunk);
             pushUnusedAlignedChunk(chunk);
-
         } else {
             log().string("  release memory to the OS").newline();
-            ConfigurationValues.getOSInterface().freeVirtualMemoryAligned(chunk, HeapPolicy.getAlignedHeapChunkSize(), HeapPolicy.getAlignedHeapChunkAlignment());
+            CommittedMemoryProvider.get().free(chunk, HeapPolicy.getAlignedHeapChunkSize(), HeapPolicy.getAlignedHeapChunkAlignment(), false);
         }
-
         log().string("  ]").newline();
+    }
+
+    /** Should I keep another aligned chunk on the free list? */
+    private boolean keepAlignedChunk() {
+        final Log trace = Log.noopLog().string("[HeapChunkProvider.keepAlignedChunk:");
+        final UnsignedWord minimumHeapSize = HeapPolicy.getMinimumHeapSize();
+        final UnsignedWord heapChunkBytes = HeapImpl.getHeapImpl().getUsedChunkBytes();
+        final UnsignedWord unusedChunkBytes = bytesInUnusedAlignedChunks.get();
+        final UnsignedWord bytesInUse = heapChunkBytes.add(unusedChunkBytes);
+        /* If I am under the minimum heap size, then I can keep this chunk. */
+        final boolean result = bytesInUse.belowThan(minimumHeapSize);
+        trace
+                        .string("  minimumHeapSize: ").unsigned(minimumHeapSize)
+                        .string("  heapChunkBytes: ").unsigned(heapChunkBytes)
+                        .string("  unusedBytes: ").unsigned(unusedChunkBytes)
+                        .string("  bytesInUse: ").unsigned(bytesInUse)
+                        .string("  returns: ").bool(result)
+                        .string(" ]").newline();
+        return result;
     }
 
     /** Clean a chunk before putting it on a free list. */
     private static void cleanAlignedChunk(AlignedHeader alignedChunk) {
         resetAlignedHeapChunk(alignedChunk);
         if (HeapPolicy.getZapConsumedHeapChunks()) {
-            zap(alignedChunk, HeapPolicy.getConsumedHeapChunkZapValue());
+            zap(alignedChunk, HeapPolicy.getConsumedHeapChunkZapWord());
         }
     }
 
@@ -260,7 +276,7 @@ class HeapChunkProvider {
         log().string("[HeapChunkProvider.produceUnalignedChunk  objectSize: ").unsigned(objectSize).string("  chunkSize: ").hex(chunkSize).newline();
 
         noteFirstAllocationTime();
-        UnalignedHeader result = (UnalignedHeader) ConfigurationValues.getOSInterface().allocateVirtualMemory(chunkSize, false);
+        UnalignedHeader result = (UnalignedHeader) CommittedMemoryProvider.get().allocate(chunkSize, CommittedMemoryProvider.UNALIGNED, false);
         if (result.isNull()) {
             throw AllocatorOutOfMemoryError.throwError("No virtual memory for unaligned chunk");
         }
@@ -270,7 +286,7 @@ class HeapChunkProvider {
         assert objectSize.belowOrEqual(HeapChunk.availableObjectMemory(result)) : "UnalignedHeapChunk insufficient for requested object";
 
         if (HeapPolicy.getZapProducedHeapChunks()) {
-            zap(result, HeapPolicy.getProducedHeapChunkZapValue());
+            zap(result, HeapPolicy.getProducedHeapChunkZapWord());
         }
 
         HeapPolicy.bytesAllocatedSinceLastCollection.addAndGet(chunkSize);
@@ -287,7 +303,7 @@ class HeapChunkProvider {
         final UnsignedWord chunkSize = chunk.getEnd().subtract(HeapChunk.asPointer(chunk));
         log().string("[HeapChunkProvider.consumeUnalignedChunk  chunk: ").hex(chunk).string("  chunkSize: ").hex(chunkSize).newline();
 
-        ConfigurationValues.getOSInterface().freeVirtualMemory(chunk, chunkSize);
+        CommittedMemoryProvider.get().free(chunk, chunkSize, CommittedMemoryProvider.UNALIGNED, false);
 
         log().string(" ]").newline();
     }

@@ -27,8 +27,8 @@ package com.oracle.truffle.tools.chromeinspector;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -42,9 +42,11 @@ public final class ScriptsHandler implements LoadSourceListener {
 
     private final Map<Source, Integer> sourceIDs = new HashMap<>(100);
     private final List<Script> scripts = new ArrayList<>(100);
-    private final List<LoadScriptListener> listeners = new LinkedList<>();
+    private final List<LoadScriptListener> listeners = new ArrayList<>();
+    private final boolean reportInternal;
 
-    public ScriptsHandler() {
+    public ScriptsHandler(boolean reportInternal) {
+        this.reportInternal = reportInternal;
     }
 
     public int getScriptId(Source source) {
@@ -63,21 +65,34 @@ public final class ScriptsHandler implements LoadSourceListener {
         }
     }
 
+    public List<Script> getScripts() {
+        synchronized (sourceIDs) {
+            return Collections.unmodifiableList(scripts);
+        }
+    }
+
     void addLoadScriptListener(LoadScriptListener listener) {
-        listeners.add(listener);
         List<Script> scriptsToNotify;
         synchronized (sourceIDs) {
             scriptsToNotify = new ArrayList<>(scripts);
+            listeners.add(listener);
         }
         for (Script scr : scriptsToNotify) {
             listener.loadedScript(scr);
         }
     }
 
-    int assureLoaded(Source source) {
+    void removeLoadScriptListener(LoadScriptListener listener) {
+        synchronized (sourceIDs) {
+            listeners.remove(listener);
+        }
+    }
+
+    public int assureLoaded(Source source) {
         Script scr;
         URI uri = source.getURI();
         int id;
+        LoadScriptListener[] listenersToNotify;
         synchronized (sourceIDs) {
             Integer eid = sourceIDs.get(source);
             if (eid != null) {
@@ -88,8 +103,9 @@ public final class ScriptsHandler implements LoadSourceListener {
             scr = new Script(id, sourceUrl, source);
             sourceIDs.put(source, id);
             scripts.add(scr);
+            listenersToNotify = listeners.toArray(new LoadScriptListener[listeners.size()]);
         }
-        for (LoadScriptListener l : listeners) {
+        for (LoadScriptListener l : listenersToNotify) {
             l.loadedScript(scr);
         }
         return id;
@@ -278,9 +294,25 @@ public final class ScriptsHandler implements LoadSourceListener {
     @Override
     public void onLoad(LoadSourceEvent event) {
         Source source = event.getSource();
-        if (!source.isInternal()) {
+        if (reportInternal || !source.isInternal()) {
             assureLoaded(source);
         }
+    }
+
+    static boolean compareURLs(String url1, String url2) {
+        String surl1 = stripScheme(url1);
+        String surl2 = stripScheme(url2);
+        // Either equals,
+        // or equals while ignoring the initial slash (workaround for Chromium bug #851853)
+        return surl1.equals(surl2) || surl1.startsWith("/") && surl1.substring(1).equals(surl2);
+    }
+
+    private static String stripScheme(String url) {
+        // we can strip the scheme part iff it's "file"
+        if (url.startsWith("file://")) {
+            return url.substring("file://".length());
+        }
+        return url;
     }
 
     interface LoadScriptListener {
@@ -288,8 +320,4 @@ public final class ScriptsHandler implements LoadSourceListener {
         void loadedScript(Script script);
     }
 
-    public interface Provider {
-
-        ScriptsHandler getScriptsHandler();
-    }
 }

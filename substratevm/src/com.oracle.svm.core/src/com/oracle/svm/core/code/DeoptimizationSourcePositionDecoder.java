@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -25,10 +27,8 @@ package com.oracle.svm.core.code;
 import org.graalvm.compiler.core.common.util.UnsafeArrayTypeReader;
 import org.graalvm.compiler.graph.NodeSourcePosition;
 
-import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.core.util.ByteArrayReader;
 
-import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 public class DeoptimizationSourcePositionDecoder {
@@ -65,19 +65,14 @@ public class DeoptimizationSourcePositionDecoder {
     private static NodeSourcePosition decodeSourcePosition(long startOffset, Object[] deoptimizationObjectConstants, UnsafeArrayTypeReader readBuffer) {
         readBuffer.setByteIndex(startOffset);
         long callerRelativeOffset = readBuffer.getUV();
-        int bci = readBuffer.getUVInt();
+        int bci = readBuffer.getSVInt();
         ResolvedJavaMethod method = (ResolvedJavaMethod) deoptimizationObjectConstants[readBuffer.getUVInt()];
-        Object receiver = deoptimizationObjectConstants[readBuffer.getUVInt()];
 
         NodeSourcePosition caller = null;
         if (callerRelativeOffset != NO_CALLER) {
             caller = decodeSourcePosition(startOffset - callerRelativeOffset, deoptimizationObjectConstants, readBuffer);
         }
 
-        return new NodeSourcePosition(wrapReceiver(receiver), caller, method, bci);
-    }
-
-    private static JavaConstant wrapReceiver(Object receiver) {
-        return receiver == null ? null : SubstrateObjectConstant.forObject(receiver);
+        return new NodeSourcePosition(caller, method, bci);
     }
 }

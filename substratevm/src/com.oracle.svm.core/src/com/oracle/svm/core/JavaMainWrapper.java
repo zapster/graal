@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,13 +24,20 @@
  */
 package com.oracle.svm.core;
 
+import static com.oracle.svm.core.option.RuntimeOptionParser.DEFAULT_OPTION_PREFIX;
+import static com.oracle.svm.core.option.RuntimeOptionParser.GRAAL_OPTION_PREFIX;
+import static com.oracle.svm.core.option.SubstrateOptionsParser.BooleanOptionFormat.NAME_VALUE;
+import static com.oracle.svm.core.option.SubstrateOptionsParser.BooleanOptionFormat.PLUS_MINUS;
+
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+//Checkstyle: allow reflection
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 
-import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.compiler.word.Word;
 import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -43,18 +52,15 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.allocationprofile.AllocationSite;
 import com.oracle.svm.core.amd64.AMD64CPUFeatureAccess;
 import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.c.function.CEntryPointOptions;
 import com.oracle.svm.core.c.function.CEntryPointSetup.EnterCreateIsolatePrologue;
-import com.oracle.svm.core.heap.Heap;
 import com.oracle.svm.core.jdk.RuntimeFeature;
 import com.oracle.svm.core.jdk.RuntimeSupport;
-import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.option.RuntimeOptionParser;
+import com.oracle.svm.core.option.XOptions;
 import com.oracle.svm.core.properties.RuntimePropertyParser;
-import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.thread.JavaThreads;
 import com.oracle.svm.core.util.Counter;
 import com.oracle.svm.core.util.VMError;
@@ -75,94 +81,104 @@ public class JavaMainWrapper {
     }
     private static UnsignedWord argvLength = WordFactory.zero();
 
+    private static String[] mainArgs;
+
     public static class JavaMainSupport {
 
-        public static void executeStartupHooks() {
-            RuntimeSupport runtimeSupport = RuntimeSupport.getRuntimeSupport();
-            executeHooks(runtimeSupport.getStartupHooks(), runtimeSupport::removeStartupHook);
-        }
-
-        public static void executeShutdownHooks() {
-            RuntimeSupport runtimeSupport = RuntimeSupport.getRuntimeSupport();
-            executeHooks(runtimeSupport.getShutdownHooks(), runtimeSupport::removeShutdownHook);
-        }
-
-        private static void executeHooks(List<Runnable> hooks, Consumer<Runnable> deleteHookAction) {
-            List<Throwable> hookExceptions = new ArrayList<>();
-
-            for (Runnable hook : hooks) {
-                deleteHookAction.accept(hook);
-                try {
-                    hook.run();
-                } catch (Throwable ex) {
-                    hookExceptions.add(ex);
-                }
-            }
-
-            // report all hook exceptions, but do not re-throw
-            if (hookExceptions.size() > 0) {
-                for (Throwable ex : hookExceptions) {
-                    ex.printStackTrace(Log.logStream());
-                }
-            }
-        }
-
-        private final MethodHandle javaMainHandle;
+        final MethodHandle javaMainHandle;
+        final String javaMainClassName;
 
         @Platforms(Platform.HOSTED_ONLY.class)
-        public JavaMainSupport(MethodHandle javaMainHandle) {
-            this.javaMainHandle = javaMainHandle;
+        public JavaMainSupport(Method javaMainMethod) throws IllegalAccessException {
+            this.javaMainHandle = MethodHandles.lookup().unreflect(javaMainMethod);
+            this.javaMainClassName = javaMainMethod.getDeclaringClass().getName();
         }
 
-        @Fold
-        public MethodHandle getJavaMainHandle() {
-            assert javaMainHandle != null;
-            return javaMainHandle;
+        public String getJavaCommand() {
+            if (mainArgs != null) {
+                StringBuilder commandLine = new StringBuilder(javaMainClassName);
+
+                for (String arg : mainArgs) {
+                    commandLine.append(' ');
+                    commandLine.append(arg);
+                }
+                return commandLine.toString();
+            }
+            return null;
+        }
+
+        public List<String> getInputArguments() {
+            if (argv.isNonNull() && argc > 0) {
+                String[] unmodifiedArgs = SubstrateUtil.getArgs(argc, argv);
+                List<String> inputArgs = new ArrayList<>(Arrays.asList(unmodifiedArgs));
+
+                if (mainArgs != null) {
+                    inputArgs.removeAll(Arrays.asList(mainArgs));
+                }
+                return Collections.unmodifiableList(inputArgs);
+            }
+            return Collections.emptyList();
         }
     }
 
-    /** A shutdown hook to print the PrintGCSummary output. */
-    public static class PrintGCSummaryShutdownHook implements Runnable {
-        @Override
-        public void run() {
-            Heap.getHeap().getGC().printGCSummary();
-        }
+    private static final Thread preallocatedThread;
+    static {
+        preallocatedThread = new Thread("main");
+        preallocatedThread.setDaemon(false);
     }
 
     @CEntryPoint
     @CEntryPointOptions(prologue = EnterCreateIsolatePrologue.class, include = CEntryPointOptions.NotIncludedAutomatically.class)
     public static int run(int paramArgc, CCharPointerPointer paramArgv) throws Exception {
+        JavaThreads.singleton().assignJavaThread(preallocatedThread, true);
+
         JavaMainWrapper.argc = paramArgc;
         JavaMainWrapper.argv = paramArgv;
         Architecture imageArchitecture = ImageSingletons.lookup(TargetDescription.class).arch;
         AMD64CPUFeatureAccess.verifyHostSupportsArchitecture(imageArchitecture);
         String[] args = SubstrateUtil.getArgs(paramArgc, paramArgv);
         if (SubstrateOptions.ParseRuntimeOptions.getValue()) {
-            args = RuntimeOptionParser.singleton().parse(args, RuntimeOptionParser.DEFAULT_OPTION_PREFIX);
-            args = RuntimeOptionParser.singleton().parse(args, "-Dgraal.");
+            args = RuntimeOptionParser.singleton().parse(args, DEFAULT_OPTION_PREFIX, PLUS_MINUS, true);
+            args = RuntimeOptionParser.singleton().parse(args, GRAAL_OPTION_PREFIX, NAME_VALUE, true);
+            args = XOptions.singleton().parse(args);
             args = RuntimePropertyParser.parse(args);
         }
+        mainArgs = args;
+
         try {
-            final RuntimeSupport rs = RuntimeSupport.getRuntimeSupport();
-            if (AllocationSite.Options.AllocationProfiling.getValue()) {
-                rs.addShutdownHook(new AllocationSite.AllocationProfilingShutdownHook());
+            if (SubstrateOptions.ParseRuntimeOptions.getValue()) {
+                /*
+                 * When options are not parsed yet, it is also too early to run the startup hooks
+                 * because they often depend on option values. The user is expected to manually run
+                 * the startup hooks after setting all option values.
+                 */
+                RuntimeSupport.getRuntimeSupport().executeStartupHooks();
             }
-            if (SubstrateOptions.PrintGCSummary.getValue()) {
-                rs.addShutdownHook(new PrintGCSummaryShutdownHook());
-            }
-            try {
-                JavaMainSupport.executeStartupHooks();
-                ImageSingletons.lookup(JavaMainSupport.class).getJavaMainHandle().invokeExact(args);
-            } finally { // always execute the shutdown hooks
-                JavaMainSupport.executeShutdownHooks();
-            }
+
+            /*
+             * Invoke the application's main method. Invoking the main method via a method handle
+             * preserves exceptions, while invoking the main method via reflection would wrap
+             * exceptions in a InvocationTargetException.
+             */
+            ImageSingletons.lookup(JavaMainSupport.class).javaMainHandle.invokeExact(args);
+
         } catch (Throwable ex) {
-            SnippetRuntime.reportUnhandledExceptionJava(ex);
+            JavaThreads.dispatchUncaughtException(Thread.currentThread(), ex);
+
+        } finally {
+            /*
+             * Shutdown sequence: First wait for all non-daemon threads to exit.
+             */
+            JavaThreads.singleton().joinAllNonDaemons();
+            /*
+             * Run shutdown hooks (both our own hooks and application-registered hooks. Note that
+             * this can start new non-daemon threads. We are not responsible to wait until they have
+             * exited.
+             */
+            RuntimeSupport.getRuntimeSupport().shutdown();
+
+            Counter.logValues();
         }
-
-        JavaThreads.singleton().joinAllNonDaemons();
-        Counter.logValues();
-
         return 0;
     }
 

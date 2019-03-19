@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,6 +26,7 @@ package com.oracle.svm.core.graal.meta;
 
 import static com.oracle.svm.core.util.VMError.unimplemented;
 
+import org.graalvm.compiler.code.CompilationResult;
 import org.graalvm.compiler.core.common.SuppressFBWarnings;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -56,8 +59,14 @@ public class SubstrateCodeCacheProvider implements CodeCacheProvider {
     public InstalledCode installCode(ResolvedJavaMethod method, CompiledCode compiledCode, InstalledCode predefinedInstalledCode, SpeculationLog log, boolean isDefault) {
         VMError.guarantee(!isDefault);
 
-        InstalledCodeBuilder builder = new InstalledCodeBuilder((SharedRuntimeMethod) method, ((SubstrateCompiledCode) compiledCode).getCompilationResult(),
-                        (SubstrateInstalledCode) predefinedInstalledCode, null);
+        SubstrateInstalledCode substrateInstalledCode;
+        if (predefinedInstalledCode instanceof SubstrateInstalledCode.Access) {
+            substrateInstalledCode = ((SubstrateInstalledCode.Access) predefinedInstalledCode).getSubstrateInstalledCode();
+        } else {
+            substrateInstalledCode = (SubstrateInstalledCode) predefinedInstalledCode;
+        }
+        CompilationResult compResult = ((SubstrateCompiledCode) compiledCode).getCompilationResult();
+        InstalledCodeBuilder builder = new InstalledCodeBuilder((SharedRuntimeMethod) method, compResult, substrateInstalledCode, null);
         builder.install();
         return predefinedInstalledCode;
     }

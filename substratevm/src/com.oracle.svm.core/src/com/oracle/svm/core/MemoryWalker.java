@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,7 +28,7 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.word.PointerBase;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.annotate.MustNotAllocate;
+import com.oracle.svm.core.annotate.RestrictHeapAccess;
 
 /** A walker over different kinds of allocated memory. */
 public abstract class MemoryWalker {
@@ -46,24 +48,24 @@ public abstract class MemoryWalker {
     public interface Visitor {
 
         /** Visit a region from the native image heap. */
-        @MustNotAllocate(reason = "Must not allocate while visiting memory.")
+        @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate while visiting memory.")
         <T> boolean visitNativeImageHeapRegion(T bootImageHeapRegion, NativeImageHeapRegionAccess<T> access);
 
         /**
          * Visit a heap chunk, using the provided access methods. Return true if visiting should
          * continue, else false.
          */
-        @MustNotAllocate(reason = "Must not allocate while visiting memory.")
+        @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate while visiting memory.")
         <T extends PointerBase> boolean visitHeapChunk(T heapChunk, HeapChunkAccess<T> access);
 
-        @MustNotAllocate(reason = "Must not allocate while visiting memory.")
+        @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate while visiting memory.")
         <T> boolean visitImageCode(T imageCode, ImageCodeAccess<T> access);
 
         /**
          * Visit a runtime compiled method, using the provided access methods. Return true if
          * visiting should continue, else false.
          */
-        @MustNotAllocate(reason = "Must not allocate while visiting memory.")
+        @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate while visiting memory.")
         <T> boolean visitRuntimeCompiledMethod(T runtimeMethod, RuntimeCompiledMethodAccess<T> access);
     }
 

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,33 +25,17 @@
 package com.oracle.svm.core.genscavenge;
 
 import org.graalvm.compiler.options.Option;
-import org.graalvm.word.UnsignedWord;
-import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.genscavenge.HeapPolicy.AlwaysCollectCompletely;
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.option.RuntimeOptionKey;
 
 public class HeapPolicyOptions {
+
     /* Memory configuration */
 
-    @Option(help = "How big is the young generation?") //
-    public static final RuntimeOptionKey<Long> YoungGenerationSize = new RuntimeOptionKey<>(256L * 1024L * 1024L);
-
-    /** The YoungGenerationSize option as an Unsigned. */
-    public static UnsignedWord getYoungGenerationSize() {
-        return WordFactory.unsigned(YoungGenerationSize.getValue());
-    }
-
-    @Option(help = "How big is the old generation?") //
-    public static final RuntimeOptionKey<Long> OldGenerationSize = new RuntimeOptionKey<>(512L * 1024L * 1024L);
-
-    @Option(help = "Old generation size as percent of physical memory, has priority over OldGenerationSize unless set to a negative value") //
-    public static final RuntimeOptionKey<Integer> OldGenerationSizePercent = new RuntimeOptionKey<>(-1);
-
-    /* For good performance, this should be somewhat larger than the young generation size. */
-    @Option(help = "How many bytes should be kept as free space?  0 implies (YoungGenerationSize + OldGenerationSize).") //
-    static final RuntimeOptionKey<Long> FreeSpaceSize = new RuntimeOptionKey<>(0L);
+    @Option(help = "The maximum heap size as percent of physical memory") //
+    public static final RuntimeOptionKey<Integer> MaximumHeapSizePercent = new RuntimeOptionKey<>(80);
 
     @Option(help = "The size of an aligned chunk.") //
     public static final HostedOptionKey<Long> AlignedHeapChunkSize = new HostedOptionKey<>(1L * 1024L * 1024L);
@@ -74,7 +60,7 @@ public class HeapPolicyOptions {
     public static final HostedOptionKey<Boolean> ZapConsumedHeapChunks = new HostedOptionKey<>(false);
 
     /* Should heap chunks be traced during collections? */
-    @Option(help = "Trace heap chunks during collections") //
+    @Option(help = "Trace heap chunks during collections, if +VerboseGC and +PrintHeapShape.") //
     public static final RuntimeOptionKey<Boolean> TraceHeapChunks = new RuntimeOptionKey<>(false);
 
     @Option(help = "Policy used when users request garbage collection.")//

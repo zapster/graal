@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -103,14 +105,6 @@ import jdk.vm.ci.meta.Value;
  */
 public class CheckGraalInvariants extends GraalCompilerTest {
 
-    public CheckGraalInvariants() {
-        try {
-            Class.forName("java.lang.management.ManagementFactory");
-        } catch (ClassNotFoundException ex) {
-            Assume.assumeNoException("cannot run without java.management JDK9 module", ex);
-        }
-    }
-
     private static boolean shouldVerifyEquals(ResolvedJavaMethod m) {
         if (m.getName().equals("identityEquals")) {
             ResolvedJavaType c = m.getDeclaringClass();
@@ -148,7 +142,30 @@ public class CheckGraalInvariants extends GraalCompilerTest {
         }
 
         protected boolean shouldLoadClass(String className) {
-            return !className.equals("module-info");
+            if (className.equals("module-info") || className.startsWith("META-INF.versions.")) {
+                return false;
+            }
+            if (!Java8OrEarlier) {
+                // @formatter:off
+                /*
+                 * Work around to prevent:
+                 *
+                 * org.graalvm.compiler.debug.GraalError: java.lang.IllegalAccessError: class org.graalvm.compiler.serviceprovider.GraalServices$Lazy (in module
+                 * jdk.internal.vm.compiler) cannot access class java.lang.management.ManagementFactory (in module java.management) because module
+                 * jdk.internal.vm.compiler does not read module java.management
+                 *     at jdk.internal.vm.compiler/org.graalvm.compiler.debug.GraalError.shouldNotReachHere(GraalError.java:55)
+                 *     at org.graalvm.compiler.core.test.CheckGraalInvariants$InvariantsTool.handleClassLoadingException(CheckGraalInvariants.java:149)
+                 *     at org.graalvm.compiler.core.test.CheckGraalInvariants.initializeClasses(CheckGraalInvariants.java:321)
+                 *     at org.graalvm.compiler.core.test.CheckGraalInvariants.runTest(CheckGraalInvariants.java:239)
+                 *
+                 * which occurs because JDK8 overlays are in modular jars. They are never used normally.
+                 */
+                // @formatter:on
+                if (className.equals("org.graalvm.compiler.serviceprovider.GraalServices$Lazy")) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         protected void handleClassLoadingException(Throwable t) {
@@ -191,7 +208,7 @@ public class CheckGraalInvariants extends GraalCompilerTest {
                     for (final Enumeration<? extends ZipEntry> entry = zipFile.entries(); entry.hasMoreElements();) {
                         final ZipEntry zipEntry = entry.nextElement();
                         String name = zipEntry.getName();
-                        if (name.endsWith(".class")) {
+                        if (name.endsWith(".class") && !name.startsWith("META-INF/versions/")) {
                             String className = name.substring(0, name.length() - ".class".length()).replace('/', '.');
                             if (isInNativeImage(className)) {
                                 /*

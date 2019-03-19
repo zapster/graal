@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -31,7 +33,7 @@ import org.graalvm.compiler.nodes.type.StampTool;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
-public interface Invoke extends StateSplit, Lowerable, DeoptimizingNode.DeoptDuring, FixedNodeInterface {
+public interface Invoke extends StateSplit, Lowerable, DeoptimizingNode.DeoptDuring, FixedNodeInterface, Invokable {
 
     FixedNode next();
 
@@ -39,6 +41,7 @@ public interface Invoke extends StateSplit, Lowerable, DeoptimizingNode.DeoptDur
 
     CallTargetNode callTarget();
 
+    @Override
     int bci();
 
     Node predecessor();
@@ -59,6 +62,11 @@ public interface Invoke extends StateSplit, Lowerable, DeoptimizingNode.DeoptDur
     boolean isPolymorphic();
 
     void setPolymorphic(boolean value);
+
+    @Override
+    default ResolvedJavaMethod getTargetMethod() {
+        return callTarget() != null ? callTarget().targetMethod() : null;
+    }
 
     /**
      * Returns the {@linkplain ResolvedJavaMethod method} from which this invoke is executed. This

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -34,6 +36,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import jdk.vm.ci.meta.MetaAccessProvider;
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.EconomicSet;
+import org.graalvm.collections.Equivalence;
 import org.graalvm.compiler.core.common.SuppressFBWarnings;
 import org.graalvm.compiler.core.gen.NodeLIRBuilder;
 import org.graalvm.compiler.core.match.MatchStatement;
@@ -59,9 +65,6 @@ import org.graalvm.compiler.phases.BasePhase;
 import org.graalvm.compiler.phases.common.CanonicalizerPhase;
 import org.graalvm.compiler.phases.tiers.HighTierContext;
 import org.graalvm.compiler.printer.NoDeadCodeVerifyHandler;
-import org.graalvm.util.EconomicMap;
-import org.graalvm.util.EconomicSet;
-import org.graalvm.util.Equivalence;
 
 import com.oracle.svm.core.annotate.Alias;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
@@ -98,10 +101,11 @@ final class Target_org_graalvm_compiler_nodes_graphbuilderconf_InvocationPlugins
 final class Target_org_graalvm_compiler_phases_common_inlining_info_elem_InlineableGraph {
 
     @Substitute
-    private static StructuredGraph parseBytecodes(ResolvedJavaMethod method, HighTierContext context, CanonicalizerPhase canonicalizer, StructuredGraph caller) {
+    private static StructuredGraph parseBytecodes(ResolvedJavaMethod method, HighTierContext context, CanonicalizerPhase canonicalizer, StructuredGraph caller, boolean trackNodeSourcePosition) {
         DebugContext debug = caller.getDebug();
         StructuredGraph result = GraalSupport.decodeGraph(debug, null, null, (SubstrateMethod) method);
         assert result != null : "should not try to inline method when no graph is in the native image";
+        assert !trackNodeSourcePosition || result.trackNodeSourcePosition();
         return result;
     }
 }
@@ -133,7 +137,7 @@ final class Target_org_graalvm_compiler_debug_DebugContext_Immutable {
     static class ClearImmutableCache implements RecomputeFieldValue.CustomFieldValueComputer {
 
         @Override
-        public Object compute(ResolvedJavaField original, ResolvedJavaField annotated, Object receiver) {
+        public Object compute(MetaAccessProvider metaAccess, ResolvedJavaField original, ResolvedJavaField annotated, Object receiver) {
             for (Class<?> c : DebugContext.class.getDeclaredClasses()) {
                 if (c.getSimpleName().equals("Immutable")) {
                     try {
@@ -167,7 +171,7 @@ final class Target_org_graalvm_compiler_debug_DebugHandlersFactory {
     static class CachedFactories implements RecomputeFieldValue.CustomFieldValueComputer {
 
         @Override
-        public Object compute(ResolvedJavaField original, ResolvedJavaField annotated, Object receiver) {
+        public Object compute(MetaAccessProvider metaAccess, ResolvedJavaField original, ResolvedJavaField annotated, Object receiver) {
             return GraalSupport.get().debugHandlersFactories;
         }
     }
@@ -211,7 +215,7 @@ final class Target_org_graalvm_compiler_debug_DebugContext {
 @TargetClass(value = TimeSource.class, onlyWith = GraalFeature.IsEnabled.class)
 final class Target_org_graalvm_compiler_debug_TimeSource {
     @Alias @RecomputeFieldValue(kind = FromAlias)//
-    private static final boolean USING_BEAN = false;
+    private static final boolean USING_THREAD_CPU_TIME = false;
 }
 
 @TargetClass(value = org.graalvm.compiler.debug.TTY.class, onlyWith = GraalFeature.IsEnabled.class)
@@ -256,7 +260,7 @@ final class Target_org_graalvm_compiler_debug_KeyRegistry {
     static class EconomicMapResetter implements RecomputeFieldValue.CustomFieldValueComputer {
 
         @Override
-        public Object compute(ResolvedJavaField original, ResolvedJavaField annotated, Object receiver) {
+        public Object compute(MetaAccessProvider metaAccess, ResolvedJavaField original, ResolvedJavaField annotated, Object receiver) {
             return EconomicMap.create();
         }
     }

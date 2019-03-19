@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,7 +24,6 @@
  */
 package com.oracle.truffle.api.debug;
 
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -37,11 +36,11 @@ import com.oracle.truffle.api.debug.DebugValue.HeapValue;
 import com.oracle.truffle.api.frame.FrameInstance;
 import com.oracle.truffle.api.frame.FrameInstance.FrameAccess;
 import com.oracle.truffle.api.frame.MaterializedFrame;
-import com.oracle.truffle.api.instrumentation.EventContext;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.SourceSection;
+import java.util.Objects;
 
 /**
  * Represents a frame in the guest language stack. A guest language stack frame consists of a
@@ -67,10 +66,12 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
 
     final SuspendedEvent event;
     private final FrameInstance currentFrame;
+    private final int depth;    // The frame depth on stack. 0 is the top frame
 
-    DebugStackFrame(SuspendedEvent session, FrameInstance instance) {
+    DebugStackFrame(SuspendedEvent session, FrameInstance instance, int depth) {
         this.event = session;
         this.currentFrame = instance;
+        this.depth = depth;
     }
 
     /**
@@ -117,7 +118,7 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
      *
      * @since 0.17
      */
-    public String getName() {
+    public String getName() throws DebugException {
         verifyValidState(true);
         RootNode root = findCurrentRoot();
         if (root == null) {
@@ -125,14 +126,11 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
         }
         try {
             return root.getName();
-        } catch (Throwable e) {
-            /* Throw error if assertions are enabled. */
-            try {
-                assert false;
-            } catch (AssertionError e1) {
-                throw e;
-            }
-            return null;
+        } catch (ThreadDeath td) {
+            throw td;
+        } catch (Throwable ex) {
+            Debugger debugger = event.getSession().getDebugger();
+            throw new DebugException(debugger, ex, root.getLanguageInfo(), null, true, null);
         }
     }
 
@@ -148,7 +146,7 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
     public SourceSection getSourceSection() {
         verifyValidState(true);
         if (currentFrame == null) {
-            EventContext context = getContext();
+            SuspendedContext context = getContext();
             return context.getInstrumentedSourceSection();
         } else {
             Node callNode = currentFrame.getCallNode();
@@ -157,6 +155,22 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
             }
             return null;
         }
+    }
+
+    /**
+     * Returns public information about the language of this frame.
+     *
+     * @return the language info, or <code>null</code> when no language is associated with this
+     *         frame.
+     * @since 1.0
+     */
+    public LanguageInfo getLanguage() {
+        verifyValidState(true);
+        RootNode root = findCurrentRoot();
+        if (root == null) {
+            return null;
+        }
+        return root.getLanguageInfo();
     }
 
     /**
@@ -170,11 +184,12 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
      *
      * @return the scope, or <code>null</code> when no language is associated with this frame
      *         location, or when no local scope exists.
+     * @throws DebugException when guest language code throws an exception
      * @since 0.26
      */
-    public DebugScope getScope() {
+    public DebugScope getScope() throws DebugException {
         verifyValidState(false);
-        EventContext context = getContext();
+        SuspendedContext context = getContext();
         RootNode root = findCurrentRoot();
         if (root == null) {
             return null;
@@ -185,18 +200,25 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
         } else {
             node = currentFrame.getCallNode();
         }
-        if (node.getRootNode().getLanguageInfo() == null) {
+        LanguageInfo languageInfo = node.getRootNode().getLanguageInfo();
+        if (languageInfo == null) {
             // no language, no scopes
             return null;
         }
         Debugger debugger = event.getSession().getDebugger();
         MaterializedFrame frame = findTruffleFrame();
-        Iterable<Scope> scopes = debugger.getEnv().findLocalScopes(node, frame);
-        Iterator<Scope> it = scopes.iterator();
-        if (!it.hasNext()) {
-            return null;
+        try {
+            Iterable<Scope> scopes = debugger.getEnv().findLocalScopes(node, frame);
+            Iterator<Scope> it = scopes.iterator();
+            if (!it.hasNext()) {
+                return null;
+            }
+            return new DebugScope(it.next(), it, debugger, event, frame, root);
+        } catch (ThreadDeath td) {
+            throw td;
+        } catch (Throwable ex) {
+            throw new DebugException(debugger, ex, languageInfo, null, true, null);
         }
-        return new DebugScope(it.next(), it, debugger, event, frame, root);
     }
 
     /**
@@ -253,16 +275,15 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
      *
      * @param code the code to evaluate
      * @return the return value of the expression
+     * @throws DebugException when guest language code throws an exception
+     * @throws IllegalStateException if called on another thread than this frame was created with,
+     *             or if {@link #getLanguage() language} of this frame is not
+     *             {@link LanguageInfo#isInteractive() interactive}.
      * @since 0.17
      */
-    public DebugValue eval(String code) {
+    public DebugValue eval(String code) throws DebugException {
         verifyValidState(false);
-        Object result;
-        try {
-            result = DebuggerSession.evalInContext(event, code, currentFrame);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        Object result = DebuggerSession.evalInContext(event, code, currentFrame);
         return wrapHeapValue(result);
     }
 
@@ -339,6 +360,28 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
         };
     }
 
+    /**
+     * @since 1.0
+     */
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof DebugStackFrame) {
+            DebugStackFrame other = (DebugStackFrame) obj;
+            return event == other.event &&
+                            (currentFrame == other.currentFrame ||
+                                            currentFrame != null && other.currentFrame != null && currentFrame.getFrame(FrameAccess.READ_ONLY) == other.currentFrame.getFrame(FrameAccess.READ_ONLY));
+        }
+        return false;
+    }
+
+    /**
+     * @since 1.0
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(event, currentFrame);
+    }
+
     MaterializedFrame findTruffleFrame() {
         if (currentFrame == null) {
             return event.getMaterializedFrame();
@@ -347,8 +390,12 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
         }
     }
 
-    private EventContext getContext() {
-        EventContext context = event.getContext();
+    int getDepth() {
+        return depth;
+    }
+
+    private SuspendedContext getContext() {
+        SuspendedContext context = event.getContext();
         if (context == null) {
             // there is a race condition here if the event
             // got disposed between the parent verifyValidState and getContext.
@@ -361,7 +408,7 @@ public final class DebugStackFrame implements Iterable<DebugValue> {
     }
 
     RootNode findCurrentRoot() {
-        EventContext context = getContext();
+        SuspendedContext context = getContext();
         if (currentFrame == null) {
             return context.getInstrumentedNode().getRootNode();
         } else {

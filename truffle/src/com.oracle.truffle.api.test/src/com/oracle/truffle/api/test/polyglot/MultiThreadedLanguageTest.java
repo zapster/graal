@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -129,6 +131,9 @@ public class MultiThreadedLanguageTest {
         try {
             valueConsumer.accept(value);
         } catch (UnsupportedOperationException e) {
+        } catch (ClassCastException e) {
+        } catch (IllegalArgumentException e) {
+        } catch (NullPointerException e) {
         }
     }
 
@@ -571,6 +576,7 @@ public class MultiThreadedLanguageTest {
         }).asHostObject();
         try {
             engine.close();
+            Assert.fail();
         } catch (PolyglotException e) {
             assertTrue(e.isInternalError());
             assertTrue(e.getMessage().contains("The language did not complete all polyglot threads but should have"));
@@ -684,9 +690,7 @@ public class MultiThreadedLanguageTest {
         executors.clear();
         for (Entry<Object, Set<Thread>> entry : initializedThreadsPerContext.entrySet()) {
             if (!entry.getValue().isEmpty()) {
-                // throw new AssertionError("Threads initialized but not disposed for context " +
-                // entry.getKey() +
-                // ": " + entry.getValue());
+                throw new AssertionError("Threads initialized but not disposed for context " + entry.getKey() + ": " + entry.getValue());
             }
         }
     }

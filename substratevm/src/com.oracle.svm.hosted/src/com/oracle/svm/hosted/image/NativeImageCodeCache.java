@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -34,6 +36,7 @@ import java.util.TreeMap;
 
 import org.graalvm.compiler.code.CompilationResult;
 import org.graalvm.compiler.code.DataSection;
+import org.graalvm.compiler.core.common.NumUtil;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.Indent;
 import org.graalvm.compiler.options.Option;
@@ -41,6 +44,7 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.word.WordFactory;
 
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.code.CodeInfoEncoder;
 import com.oracle.svm.core.code.CodeInfoQueryResult;
 import com.oracle.svm.core.code.CodeInfoTable;
@@ -48,8 +52,8 @@ import com.oracle.svm.core.code.FrameInfoDecoder;
 import com.oracle.svm.core.code.FrameInfoEncoder;
 import com.oracle.svm.core.code.ImageCodeInfo;
 import com.oracle.svm.core.config.ConfigurationValues;
-import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.deopt.DeoptEntryInfopoint;
+import com.oracle.svm.core.graal.code.CGlobalDataReference;
 import com.oracle.svm.core.graal.code.SubstrateDataBuilder;
 import com.oracle.svm.core.graal.code.amd64.AMD64InstructionPatcher;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
@@ -65,9 +69,12 @@ import com.oracle.svm.hosted.meta.MethodPointer;
 
 import jdk.vm.ci.code.BytecodeFrame;
 import jdk.vm.ci.code.site.Call;
+import jdk.vm.ci.code.site.ConstantReference;
 import jdk.vm.ci.code.site.DataPatch;
 import jdk.vm.ci.code.site.DataSectionReference;
 import jdk.vm.ci.code.site.Infopoint;
+import jdk.vm.ci.code.site.Reference;
+import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
@@ -232,7 +239,7 @@ public class NativeImageCodeCache {
                 CompilationResult compilation = entry.getValue();
                 compilationsByStart.put(codeCacheSize, compilation);
                 method.setCodeAddressOffset(codeCacheSize);
-                codeCacheSize = ObjectLayout.roundUp(codeCacheSize + compilation.getTargetCodeSize(), CODE_ALIGNMENT);
+                codeCacheSize = NumUtil.roundUp(codeCacheSize + compilation.getTargetCodeSize(), CODE_ALIGNMENT);
             }
 
             // Build run-time metadata.
@@ -340,15 +347,26 @@ public class NativeImageCodeCache {
         for (DataSection.Data data : dataSection) {
             if (data instanceof SubstrateDataBuilder.ObjectData) {
                 JavaConstant constant = ((SubstrateDataBuilder.ObjectData) data).getConstant();
-                Object obj = SubstrateObjectConstant.asObject(constant);
-
-                if (!imageHeap.getMetaAccess().lookupJavaType(obj.getClass()).getWrapped().isInstantiated()) {
-                    throw VMError.shouldNotReachHere("Non-instantiated type referenced by a compiled method: " + obj.getClass().getName());
-                }
-
-                imageHeap.addObject(debug, obj, false, false, constantReasons.get(constant));
+                addConstantToHeap(debug, constant);
             }
         }
+        for (CompilationResult compilationResult : compilations.values()) {
+            for (DataPatch patch : compilationResult.getDataPatches()) {
+                if (patch.reference instanceof ConstantReference) {
+                    addConstantToHeap(debug, ((ConstantReference) patch.reference).getConstant());
+                }
+            }
+        }
+    }
+
+    private void addConstantToHeap(DebugContext debug, Constant constant) {
+        Object obj = SubstrateObjectConstant.asObject(constant);
+
+        if (!imageHeap.getMetaAccess().lookupJavaType(obj.getClass()).getWrapped().isInstantiated()) {
+            throw VMError.shouldNotReachHere("Non-instantiated type referenced by a compiled method: " + obj.getClass().getName());
+        }
+
+        imageHeap.addObject(debug, obj, false, false, constantReasons.get(constant));
     }
 
     /**
@@ -414,11 +432,11 @@ public class NativeImageCodeCache {
             }
             // ... and patch references to constant data
             for (DataPatch dataPatch : compilation.getDataPatches()) {
+                Reference ref = dataPatch.reference;
                 /*
                  * Constants are allocated offsets in a separate space, which can be emitted as
                  * read-only (.rodata) section.
                  */
-                int constStart = ((DataSectionReference) dataPatch.reference).getOffset();
                 AMD64InstructionPatcher.PatchData patchData = patcher.findPatchData(dataPatch.pcOffset, 0);
                 /*
                  * The relocation site is some offset into the instruction, which is some offset
@@ -428,13 +446,21 @@ public class NativeImageCodeCache {
                  * offset.
                  */
                 long siteOffset = compStart + patchData.operandPosition;
-                /*
-                 * Do we have an addend? Yes; it's constStart. BUT x86/x86-64 PC-relative references
-                 * are relative to the *next* instruction. So, if the next instruction starts n
-                 * bytes from the relocation site, we want to subtract n bytes from our addend.
-                 */
-                long addend = constStart - (patchData.nextInstructionPosition - patchData.operandPosition);
-                relocs.addPCRelativeRelocationWithAddend((int) siteOffset, patchData.operandSize, addend, dataPatch.reference);
+                if (ref instanceof DataSectionReference || ref instanceof CGlobalDataReference) {
+                    /*
+                     * Do we have an addend? Yes; it's constStart. BUT x86/x86-64 PC-relative
+                     * references are relative to the *next* instruction. So, if the next
+                     * instruction starts n bytes from the relocation site, we want to subtract n
+                     * bytes from our addend.
+                     */
+                    long addend = (patchData.nextInstructionPosition - patchData.operandPosition);
+                    relocs.addPCRelativeRelocationWithAddend((int) siteOffset, patchData.operandSize, addend, ref);
+                } else if (ref instanceof ConstantReference) {
+                    assert SubstrateOptions.UseHeapBaseRegister.getValue() : "Inlined object references must be base-relative";
+                    relocs.addDirectRelocationWithoutAddend((int) siteOffset, patchData.operandSize, ref);
+                } else {
+                    throw VMError.shouldNotReachHere("Unknown type of reference in code");
+                }
             }
         }
     }
@@ -447,10 +473,8 @@ public class NativeImageCodeCache {
 
     public void writeConstants(RelocatableBuffer buffer) {
         ByteBuffer bb = buffer.getBuffer();
-        dataSection.buildDataSection(bb, constant -> {
-            int bbOffset = bb.position();
-            String label = "";
-            WriteUtils.writeReference(buffer, bbOffset, SubstrateObjectConstant.asObject(constant), imageHeap, label, "VMConstant: " + constant);
+        dataSection.buildDataSection(bb, (position, constant) -> {
+            imageHeap.writeReference(buffer, position, SubstrateObjectConstant.asObject(constant), "VMConstant: " + constant);
         });
     }
 
@@ -469,7 +493,7 @@ public class NativeImageCodeCache {
             int codeSize = compilation.getTargetCodeSize();
             buffer.putBytes(compilation.getTargetCode(), 0, codeSize);
 
-            for (int i = codeSize; i < ObjectLayout.roundUp(codeSize, CODE_ALIGNMENT); i++) {
+            for (int i = codeSize; i < NumUtil.roundUp(codeSize, CODE_ALIGNMENT); i++) {
                 buffer.putByte(CODE_FILLER_BYTE);
             }
         }

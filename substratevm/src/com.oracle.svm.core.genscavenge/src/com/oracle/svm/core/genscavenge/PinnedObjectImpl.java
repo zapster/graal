@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,8 +24,6 @@
  */
 package com.oracle.svm.core.genscavenge;
 
-import java.util.concurrent.atomic.AtomicReference;
-
 import org.graalvm.compiler.word.Word;
 import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -38,6 +38,7 @@ import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.heap.ObjectHeader;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.LayoutEncoding;
+import com.oracle.svm.core.jdk.UninterruptibleUtils.AtomicReference;
 import com.oracle.svm.core.log.Log;
 
 /**
@@ -57,7 +58,7 @@ import com.oracle.svm.core.log.Log;
  *
  * TODO: Is pinning a service of all collectors, or just the one I have now?
  */
-public class PinnedObjectImpl extends PinnedObject {
+public class PinnedObjectImpl implements PinnedObject {
 
     static class PinnedObjectSupportImpl implements PinnedObjectSupport {
         @Override
@@ -85,11 +86,8 @@ public class PinnedObjectImpl extends PinnedObject {
     @Override
     @Uninterruptible(reason = "Called from uninterruptible code.")
     public void close() {
-        final Log trace = Log.noopLog().string("[PinnedObject.close:").string(" this: ").object(this);
-        trace.string("  referent: ").object(referent);
         assert open : "Should not call close() on a closed PinnedObject.";
         open = false;
-        trace.string("]").newline();
     }
 
     /*

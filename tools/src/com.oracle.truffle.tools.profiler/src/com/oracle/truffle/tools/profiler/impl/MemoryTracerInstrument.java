@@ -24,20 +24,21 @@
  */
 package com.oracle.truffle.tools.profiler.impl;
 
+import org.graalvm.options.OptionDescriptors;
+import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.Instrument;
+
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
-import com.oracle.truffle.api.vm.PolyglotEngine;
-import com.oracle.truffle.api.vm.PolyglotRuntime;
 import com.oracle.truffle.tools.profiler.CPUTracer;
 import com.oracle.truffle.tools.profiler.MemoryTracer;
-import org.graalvm.options.OptionDescriptors;
 
 /**
  * The {@linkplain TruffleInstrument instrument} for the memory tracer.
  *
  * @since 0.30
  */
-@TruffleInstrument.Registration(id = MemoryTracerInstrument.ID, name = "Memory Tracer", version = "0.1", services = {MemoryTracer.class})
+@TruffleInstrument.Registration(id = MemoryTracerInstrument.ID, name = "Memory Tracer", version = "0.2", services = {MemoryTracer.class})
 public class MemoryTracerInstrument extends TruffleInstrument {
 
     /**
@@ -83,15 +84,14 @@ public class MemoryTracerInstrument extends TruffleInstrument {
     /**
      * Does a lookup in the runtime instruments of the engine and returns an instance of the
      * {@link CPUTracer}.
-     * 
-     * @since 0.30
+     *
+     * @since 0.33
      */
-    public static MemoryTracer getTracer(PolyglotEngine engine) {
-        PolyglotRuntime.Instrument instrument = engine.getRuntime().getInstruments().get(ID);
+    public static MemoryTracer getTracer(Engine engine) {
+        Instrument instrument = engine.getInstruments().get(ID);
         if (instrument == null) {
             throw new IllegalStateException("Memory Tracer is not installed.");
         }
-        instrument.setEnabled(true);
         return instrument.lookup(MemoryTracer.class);
     }
 

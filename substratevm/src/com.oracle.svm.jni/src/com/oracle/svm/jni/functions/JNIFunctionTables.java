@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,6 +26,7 @@ package com.oracle.svm.jni.functions;
 
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.UnmanagedMemory;
+import org.graalvm.nativeimage.c.function.CEntryPointContext;
 import org.graalvm.nativeimage.c.struct.SizeOf;
 
 import com.oracle.svm.core.annotate.UnknownObjectField;
@@ -63,6 +66,7 @@ public final class JNIFunctionTables {
         if (globalJavaVM.isNull()) {
             JNIInvokeInterface invokes = UnmanagedMemory.calloc(SizeOf.get(JNIInvokeInterface.class));
             invokesInitializer.initialize(invokes);
+            invokes.setIsolate(CEntryPointContext.getCurrentIsolate());
             globalJavaVM = UnmanagedMemory.calloc(SizeOf.get(JNIJavaVM.class));
             globalJavaVM.setFunctions(invokes);
         }

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -21,6 +23,8 @@
  * questions.
  */
 package com.oracle.svm.hosted.meta;
+
+import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
 
 import java.lang.annotation.Annotation;
 import java.util.Arrays;
@@ -41,7 +45,7 @@ import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
-public abstract class HostedType implements SharedType, WrappedJavaType {
+public abstract class HostedType implements SharedType, WrappedJavaType, Comparable<HostedType> {
 
     protected final HostedUniverse universe;
     protected final AnalysisType wrapped;
@@ -214,13 +218,12 @@ public abstract class HostedType implements SharedType, WrappedJavaType {
 
     @Override
     public final boolean isInitialized() {
-        assert wrapped.isInitialized();
-        return true;
+        return wrapped.isInitialized();
     }
 
     @Override
     public void initialize() {
-        assert wrapped.isInitialized();
+        wrapped.initialize();
     }
 
     @Override
@@ -282,7 +285,7 @@ public abstract class HostedType implements SharedType, WrappedJavaType {
 
     @Override
     public final boolean isAssignableFrom(ResolvedJavaType other) {
-        boolean result = getHub().isAssignableFrom(((HostedType) other).getHub());
+        boolean result = getHub().isAssignableFromHub(((HostedType) other).getHub());
         assert result == wrapped.isAssignableFrom(((HostedType) other).wrapped);
         return result;
     }
@@ -427,5 +430,37 @@ public abstract class HostedType implements SharedType, WrappedJavaType {
 
     public void setEnclosingType(HostedType enclosingType) {
         this.enclosingType = enclosingType;
+    }
+
+    @Override
+    public int compareTo(HostedType other) {
+        if (this.equals(other)) {
+            return 0;
+        }
+        if (this.getClass().equals(other.getClass())) {
+            return compareToEqualClass(other);
+        }
+        int result = this.ordinal() - other.ordinal();
+        assert result != 0 : "Types not distinguishable: " + this + ", " + other;
+        return result;
+    }
+
+    int compareToEqualClass(HostedType other) {
+        assert getClass().equals(other.getClass());
+        return getName().compareTo(other.getName());
+    }
+
+    private int ordinal() {
+        if (isInterface()) {
+            return 4;
+        } else if (isArray()) {
+            return 3;
+        } else if (isInstanceClass()) {
+            return 2;
+        } else if (getJavaKind() != JavaKind.Object) {
+            return 1;
+        } else {
+            throw shouldNotReachHere();
+        }
     }
 }

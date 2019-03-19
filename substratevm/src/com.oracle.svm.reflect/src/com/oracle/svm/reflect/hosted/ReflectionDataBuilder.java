@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -38,8 +40,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.graalvm.nativeimage.Feature.DuringAnalysisAccess;
+import org.graalvm.nativeimage.impl.RuntimeReflectionSupport;
 
-import com.oracle.svm.core.RuntimeReflection.RuntimeReflectionSupport;
+import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.svm.core.hub.ClassForNameSupport;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.util.UserError;
@@ -113,8 +116,38 @@ public class ReflectionDataBuilder implements RuntimeReflectionSupport {
         reflectionMethods.stream().map(method -> method.getDeclaringClass()).forEach(clazz -> allClasses.add(clazz));
         reflectionFields.stream().map(field -> field.getDeclaringClass()).forEach(clazz -> allClasses.add(clazz));
 
+        /*
+         * We need to find all classes that have an enclosingMethod or enclosingConstructor.
+         * Unfortunately, there is no reverse lookup (ask a Method or Constructor about the classes
+         * they contain), so we need to iterate through all types that have been loaded so far.
+         * Accessing the original java.lang.Class for a ResolvedJavaType is not 100% reliable,
+         * especially in the case of class and method substitutions. But it is the best we can do
+         * here, and we assume that user code that requires reflection support is not using
+         * substitutions.
+         */
+        for (AnalysisType aType : access.getUniverse().getTypes()) {
+            Class<?> originalClass = aType.getJavaClass();
+            if (originalClass != null && enclosingMethodOrConstructor(originalClass) != null) {
+                /*
+                 * We haven an enclosing method or constructor for this class, so we add the class
+                 * to the set of processed classes so that the ReflectionData is initialized below.
+                 */
+                allClasses.add(originalClass);
+            }
+        }
+
         for (Class<?> clazz : allClasses) {
-            DynamicHub hub = access.getHostVM().dynamicHub(access.getMetaAccess().lookupJavaType(clazz));
+            AnalysisType type = access.getMetaAccess().lookupJavaType(clazz);
+            DynamicHub hub = access.getHostVM().dynamicHub(type);
+
+            if (type.isArray()) {
+                /*
+                 * Array types allocated reflectively need to be registered as instantiated.
+                 * Otherwise the isInstantiated check in AllocationSnippets.checkDynamicHub() will
+                 * fail at runtime when the array is *only* allocated through Array.newInstance().
+                 */
+                type.registerAsInHeap();
+            }
 
             if (reflectionClasses.contains(clazz)) {
                 ClassForNameSupport.registerClass(clazz);
@@ -142,7 +175,8 @@ public class ReflectionDataBuilder implements RuntimeReflectionSupport {
                                 filter(publicConstructorsField.get(originalReflectionData), reflectionMethods, emptyConstructors),
                                 nullaryConstructor(declaredConstructorsField.get(originalReflectionData), reflectionMethods),
                                 filter(declaredPublicFieldsField.get(originalReflectionData), reflectionFields, emptyFields),
-                                filter(declaredPublicMethodsField.get(originalReflectionData), reflectionMethods, emptyMethods)));
+                                filter(declaredPublicMethodsField.get(originalReflectionData), reflectionMethods, emptyMethods),
+                                enclosingMethodOrConstructor(clazz)));
             } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
                 throw VMError.shouldNotReachHere(ex);
             }
@@ -152,7 +186,7 @@ public class ReflectionDataBuilder implements RuntimeReflectionSupport {
     protected void afterAnalysis() {
         sealed = true;
         if (modified) {
-            throw UserError.abort("Registration of of classes, methods, and fields for reflective access during analysis must set DuringAnalysisAccess.requireAnalysisIteration().");
+            throw UserError.abort("Registration of classes, methods, and fields for reflective access during analysis must set DuringAnalysisAccess.requireAnalysisIteration().");
         }
     }
 
@@ -163,6 +197,35 @@ public class ReflectionDataBuilder implements RuntimeReflectionSupport {
             }
         }
         return null;
+    }
+
+    private Executable enclosingMethodOrConstructor(Class<?> clazz) {
+        Method enclosingMethod;
+        Constructor<?> enclosingConstructor;
+        try {
+            enclosingMethod = clazz.getEnclosingMethod();
+            enclosingConstructor = clazz.getEnclosingConstructor();
+        } catch (InternalError ex) {
+            // Checkstyle: stop
+            System.err.println("GR-7731: Could not find the enclosing method of class " + clazz.getTypeName() +
+                            ". This is a known transient error and most likely does not cause any problems, unless your code relies on the enclosing method of exactly this class. If you can reliably reproduce this problem, please send us a test case.");
+            // Checkstyle: resume
+            return null;
+        }
+
+        if (enclosingMethod == null && enclosingConstructor == null) {
+            return null;
+        } else if (enclosingMethod != null && enclosingConstructor != null) {
+            throw VMError.shouldNotReachHere("Classs has both an enclosingMethod and an enclosingConstructor: " + clazz + ", " + enclosingMethod + ", " + enclosingConstructor);
+        }
+
+        Executable enclosingMethodOrConstructor = enclosingMethod != null ? enclosingMethod : enclosingConstructor;
+
+        if (reflectionMethods.contains(enclosingMethodOrConstructor)) {
+            return enclosingMethodOrConstructor;
+        } else {
+            return null;
+        }
     }
 
     private static <T> T[] filter(Object elements, Set<?> filter, T[] prototypeArray) {

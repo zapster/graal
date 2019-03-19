@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -29,13 +31,14 @@ import java.util.Map;
 
 import com.oracle.objectfile.BuildDependency;
 import com.oracle.objectfile.ElementImpl;
-import com.oracle.objectfile.LayoutDecisionMap;
 import com.oracle.objectfile.LayoutDecision;
+import com.oracle.objectfile.LayoutDecisionMap;
 import com.oracle.objectfile.ObjectFile;
 import com.oracle.objectfile.ObjectFile.Element;
 import com.oracle.objectfile.ObjectFile.RelocationKind;
 import com.oracle.objectfile.ObjectFile.RelocationRecord;
 import com.oracle.objectfile.ObjectFile.Segment;
+import com.oracle.objectfile.ObjectFile.Symbol;
 import com.oracle.objectfile.io.AssemblyBuffer;
 import com.oracle.objectfile.macho.MachOObjectFile.MachOSection;
 import com.oracle.objectfile.macho.MachOObjectFile.SectionFlag;
@@ -199,7 +202,8 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
         sbb.writeTruncatedLong(desiredInlineAddendValue, length);
 
         // set section flag to note that we have relocations
-        boolean symbolIsDefinedLocally = getOwner().getSymbolTable().uniqueDefinedSymbolWithName(symbolName) != null;
+        Symbol sym = getOwner().getSymbolTable().getSymbol(symbolName);
+        boolean symbolIsDefinedLocally = (sym != null && sym.isDefined());
         // see note in MachOObjectFile's createDefinedSymbol
         boolean createAsLocalReloc = false;
         assert !createAsLocalReloc || symbolIsDefinedLocally;
@@ -207,7 +211,7 @@ public class MachOUserDefinedSection extends MachOSection implements ObjectFile.
 
         // return ByteBuffer cursor to where it was
         sbb.pop();
-        RelocationInfo rec = new RelocationInfo(el, this, offset, length, k, false, symbolName, createAsLocalReloc);
+        RelocationInfo rec = new RelocationInfo(el, this, offset, length, k, symbolName, createAsLocalReloc);
         el.add(rec);
 
         return rec;

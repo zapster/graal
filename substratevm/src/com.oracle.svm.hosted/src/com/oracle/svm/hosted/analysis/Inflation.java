@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,9 +24,12 @@
  */
 package com.oracle.svm.hosted.analysis;
 
+import static com.oracle.graal.pointsto.reports.AnalysisReportsOptions.PrintAnalysisCallTree;
+import static com.oracle.svm.hosted.NativeImageOptions.MaxReachableTypes;
 import static jdk.vm.ci.common.JVMCIError.shouldNotReachHere;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
@@ -56,13 +61,16 @@ import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.graal.pointsto.meta.AnalysisUniverse;
 import com.oracle.graal.pointsto.meta.HostedProviders;
+import com.oracle.graal.pointsto.reports.CallTreePrinter;
 import com.oracle.graal.pointsto.util.AnalysisError.TypeNotFoundError;
 import com.oracle.svm.core.annotate.UnknownObjectField;
 import com.oracle.svm.core.annotate.UnknownPrimitiveField;
+import com.oracle.svm.core.hub.AnnotatedSuperInfo;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.GenericInfo;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.hosted.NativeImageClassLoader;
 import com.oracle.svm.hosted.SVMHost;
 import com.oracle.svm.hosted.analysis.flow.SVMMethodTypeFlowBuilder;
 
@@ -74,6 +82,7 @@ import jdk.vm.ci.meta.ResolvedJavaType;
 public class Inflation extends BigBang {
     private Set<AnalysisField> handledUnknownValueFields;
     private Map<GenericInterfacesEncodingKey, Type[]> genericInterfacesMap;
+    private Map<AnnotatedInterfacesEncodingKey, AnnotatedType[]> annotatedInterfacesMap;
     private Map<InterfacesEncodingKey, DynamicHub[]> interfacesEncodings;
 
     private final Pattern illegalCalleesPattern;
@@ -82,7 +91,7 @@ public class Inflation extends BigBang {
     public Inflation(OptionValues options, AnalysisUniverse universe, HostedProviders providers, HostVM hostVM, ForkJoinPool executor) {
         super(options, universe, providers, hostVM, executor, new SubstrateUnsupportedFeatures());
 
-        String[] targetCallers = new String[]{"com\\.oracle\\.graal\\.", "org\\.graalvm"};
+        String[] targetCallers = new String[]{"com\\.oracle\\.graal\\.", "org\\.graalvm[^\\.polyglot\\.nativeapi]"};
         targetCallersPattern = buildPrefixMatchPattern(targetCallers);
 
         String[] illegalCallees = new String[]{"java\\.util\\.stream", "java\\.util\\.Collection\\.stream", "java\\.util\\.Arrays\\.stream"};
@@ -90,6 +99,7 @@ public class Inflation extends BigBang {
 
         handledUnknownValueFields = new HashSet<>();
         genericInterfacesMap = new HashMap<>();
+        annotatedInterfacesMap = new HashMap<>();
         interfacesEncodings = new HashMap<>();
     }
 
@@ -112,29 +122,6 @@ public class Inflation extends BigBang {
     public Object getRoot(JavaConstant constant) {
         SubstrateObjectConstant sConstant = (SubstrateObjectConstant) constant;
         return sConstant.getRoot();
-    }
-
-    @Override
-    public void checkUnsupportedSynchronization(AnalysisMethod method, int bci, AnalysisType aType) {
-        /* Can not synchronize on a non-instance type. For example, an array. */
-        checkUnsupportedSynchronization(aType.isInstanceClass(), method, bci, aType);
-        /*
-         * We want DynamicHub instances to be immutable, but synchronization would require
-         * installing a Lock object. Static synchronized methods are handled by synchronizing on a
-         * dedicated type instead.
-         */
-        checkUnsupportedSynchronization(!aType.equals(metaAccess.lookupJavaType(DynamicHub.class)), method, bci, aType);
-        /*
-         * We want String instances to be immutable, because they are a major part of the boot image
-         * heap.
-         */
-        checkUnsupportedSynchronization(!aType.equals(metaAccess.lookupJavaType(String.class)), method, bci, aType);
-    }
-
-    public void checkUnsupportedSynchronization(boolean condition, AnalysisMethod method, int bci, AnalysisType aType) {
-        UserError.guarantee(condition,
-                        "Not supported: Synchronization on '%s' in %s",
-                        aType.toJavaName(true), method.asStackTraceElement(bci).toString());
     }
 
     @Override
@@ -186,18 +173,29 @@ public class Inflation extends BigBang {
                 for (AnalysisField f : type.getStaticFields()) {
                     if (f.getName().endsWith("$VALUES")) {
                         if (found != null) {
-                            throw shouldNotReachHere("Enumeration has more than one static field with enumeration values: " + type);
+                            /*
+                             * Enumeration has more than one static field with enumeration values.
+                             * Bailout and use Class.getEnumConstants() to get the value instead.
+                             */
+                            found = null;
+                            break;
                         }
                         found = f;
                     }
                 }
+                Enum<?>[] enumConstants;
                 if (found == null) {
-                    throw shouldNotReachHere("Enumeration does not have static field with enumeration values: " + type);
+                    /*
+                     * We could not find a unique $VALUES field, so we use the value returned by
+                     * Class.getEnumConstants(). This is not ideal since Class.getEnumConstants()
+                     * returns a copy of the array, so we will have two arrays with the same content
+                     * in the image heap, but it is better than failing image generation.
+                     */
+                    enumConstants = (Enum<?>[]) type.getJavaClass().getEnumConstants();
+                } else {
+                    enumConstants = (Enum[]) SubstrateObjectConstant.asObject(getConstantReflectionProvider().readFieldValue(found, null));
+                    assert enumConstants != null;
                 }
-                AnalysisField field = found;
-                // field.registerAsRead(null);
-                Enum<?>[] enumConstants = (Enum[]) SubstrateObjectConstant.asObject(getConstantReflectionProvider().readFieldValue(field, null));
-                assert enumConstants != null;
                 svmHost.dynamicHub(type).setEnumConstants(enumConstants);
             }
         }
@@ -208,7 +206,30 @@ public class Inflation extends BigBang {
         super.cleanupAfterAnalysis();
         handledUnknownValueFields = null;
         genericInterfacesMap = null;
+        annotatedInterfacesMap = null;
         interfacesEncodings = null;
+    }
+
+    @Override
+    public boolean isValidClassLoader(Object valueObj) {
+        return valueObj.getClass().getClassLoader() == null || // boot class loader
+                        !(valueObj.getClass().getClassLoader() instanceof NativeImageClassLoader) || valueObj.getClass().getClassLoader() == Thread.currentThread().getContextClassLoader();
+    }
+
+    @Override
+    public void checkUserLimitations() {
+        int maxReachableTypes = MaxReachableTypes.getValue();
+        if (maxReachableTypes >= 0) {
+            CallTreePrinter callTreePrinter = new CallTreePrinter(this);
+            callTreePrinter.buildCallTree();
+            int numberOfTypes = callTreePrinter.classesSet(false).size();
+            if (numberOfTypes > maxReachableTypes) {
+                throw UserError.abort("Reachable " + numberOfTypes + " types but only " + maxReachableTypes + " allowed (because the " + MaxReachableTypes.getName() +
+                                " option is set). To see all reachable types use " + PrintAnalysisCallTree.getName() + "; to change the maximum number of allowed types use " +
+                                MaxReachableTypes.getName() +
+                                ".");
+            }
+        }
     }
 
     class GenericInterfacesEncodingKey {
@@ -229,6 +250,24 @@ public class Inflation extends BigBang {
         }
     }
 
+    class AnnotatedInterfacesEncodingKey {
+        final AnnotatedType[] interfaces;
+
+        AnnotatedInterfacesEncodingKey(AnnotatedType[] aInterfaces) {
+            this.interfaces = aInterfaces;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return obj instanceof AnnotatedInterfacesEncodingKey && Arrays.equals(interfaces, ((AnnotatedInterfacesEncodingKey) obj).interfaces);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(interfaces);
+        }
+    }
+
     private void fillGenericInfo(AnalysisType type) {
         SVMHost svmHost = (SVMHost) hostVM;
         DynamicHub hub = svmHost.dynamicHub(type);
@@ -240,6 +279,13 @@ public class Inflation extends BigBang {
         Type[] cachedGenericInterfaces = genericInterfacesMap.computeIfAbsent(new GenericInterfacesEncodingKey(genericInterfaces), k -> genericInterfaces);
         Type genericSuperClass = javaClass.getGenericSuperclass();
         hub.setGenericInfo(GenericInfo.factory(typeParameters, cachedGenericInterfaces, genericSuperClass));
+
+        AnnotatedType annotatedSuperclass = javaClass.getAnnotatedSuperclass();
+        AnnotatedType[] annotatedInterfaces = Arrays.stream(javaClass.getAnnotatedInterfaces())
+                        .filter(ai -> filterGenericInterfaces(ai.getType())).toArray(AnnotatedType[]::new);
+        AnnotatedType[] cachedAnnotatedInterfaces = annotatedInterfacesMap.computeIfAbsent(
+                        new AnnotatedInterfacesEncodingKey(annotatedInterfaces), k -> annotatedInterfaces);
+        hub.setAnnotatedSuperInfo(AnnotatedSuperInfo.factory(annotatedSuperclass, cachedAnnotatedInterfaces));
     }
 
     private boolean filterGenericInterfaces(Type t) {

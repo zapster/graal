@@ -96,7 +96,9 @@ import com.oracle.truffle.api.source.SourceSection;
  * <li>{@link #isInstrumentable()} is overridden and returns <code>true</code>.
  * <li>{@link #getSourceSection()} is overridden and returns a non-null value.
  * <li>The AST contains at least one node that is annotated with
- * {@link com.oracle.truffle.api.instrumentation.Instrumentable} .
+ * {@link com.oracle.truffle.api.instrumentation.Instrumentable}.
+ * <li>It is recommended that children of instrumentable root nodes are tagged with
+ * <code>StandardTags</code>.
  * </ul>
  * <p>
  * <strong>Note:</strong> It is recommended to override {@link #getSourceSection()} and provide a
@@ -109,13 +111,12 @@ public abstract class RootNode extends ExecutableNode {
 
     /*
      * Since languages were singletons in the past, we cannot use the Env instance stored in
-     * TruffleLanguage for languages that are not yet migrated. We use this env reference instead
-     * for compatibility.
+     * TruffleLanguage for languages that are not yet migrated. We use this sourceVM reference
+     * instead for compatibility.
      */
     final Object sourceVM;
     private RootCallTarget callTarget;
     @CompilationFinal private FrameDescriptor frameDescriptor;
-    private final SourceSection sourceSection;
     final ReentrantLock lock = new ReentrantLock();
 
     volatile byte instrumentationBits;
@@ -149,13 +150,13 @@ public abstract class RootNode extends ExecutableNode {
     protected RootNode(TruffleLanguage<?> language, FrameDescriptor frameDescriptor) {
         super(language);
         CompilerAsserts.neverPartOfCompilation();
-        if (this.languageInfo != null) {
-            this.sourceVM = Node.ACCESSOR.engineSupport().getVMFromLanguageObject(this.languageInfo.getEngineObject());
+        if (this.language != null) {
+            this.sourceVM = Node.ACCESSOR.engineSupport().getVMFromLanguageObject(Node.ACCESSOR.languageSupport().getLanguageInfo(this.language).getEngineObject());
         } else {
             this.sourceVM = getCurrentVM();
         }
+
         this.frameDescriptor = frameDescriptor == null ? new FrameDescriptor() : frameDescriptor;
-        this.sourceSection = null;
     }
 
     private static Object getCurrentVM() {
@@ -181,7 +182,9 @@ public abstract class RootNode extends ExecutableNode {
      * @since 0.27
      */
     public final <C, T extends TruffleLanguage<C>> C getCurrentContext(Class<T> languageClass) {
-        CompilerAsserts.partialEvaluationConstant(languageClass);
+        if (language == null) {
+            return null;
+        }
         return getLanguage(languageClass).getContextReference().get();
     }
 
@@ -191,17 +194,6 @@ public abstract class RootNode extends ExecutableNode {
         RootNode root = (RootNode) super.copy();
         root.frameDescriptor = frameDescriptor;
         return root;
-    }
-
-    /**
-     * Returns the source section associated with this {@link RootNode}. Returns <code>null</code>
-     * if by default. Can be called on any thread and without a language context.
-     *
-     * @since 0.13
-     */
-    @Override
-    public SourceSection getSourceSection() {
-        return sourceSection;
     }
 
     /**
@@ -365,10 +357,11 @@ public abstract class RootNode extends ExecutableNode {
     }
 
     /**
-     * Returns the {@link ExecutionContext} associated with this <code>RootNode</code>. This allows
-     * the correct <code>ExecutionContext</code> to be determined for a <code>RootNode</code> (and
-     * so also for a {@link RootCallTarget} and a {@link FrameInstance} obtained from the call
-     * stack) without prior knowledge of the language it has come from.
+     * Returns the {@link com.oracle.truffle.api.ExecutionContext} associated with this
+     * <code>RootNode</code>. This allows the correct <code>ExecutionContext</code> to be determined
+     * for a <code>RootNode</code> (and so also for a {@link RootCallTarget} and a
+     * {@link FrameInstance} obtained from the call stack) without prior knowledge of the language
+     * it has come from.
      *
      * Returns <code>null</code> by default.
      *

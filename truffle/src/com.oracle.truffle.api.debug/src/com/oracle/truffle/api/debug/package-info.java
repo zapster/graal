@@ -25,7 +25,7 @@
 
 /*
  @ApiInfo(
- group="Stable"
+ group="Truffle"
  )
  */
 
@@ -36,9 +36,7 @@
  *
  * <h4>Getting started using the debugger</h4>
  *
- * First the debugger instance needs to be discovered using a
- * {@link com.oracle.truffle.api.debug.Debugger#find(com.oracle.truffle.api.vm.PolyglotEngine)}
- * instance or from a Truffle guest language with
+ * First the debugger instance needs to be discovered using a Truffle guest language with
  * {@link com.oracle.truffle.api.debug.Debugger#find(com.oracle.truffle.api.TruffleLanguage.Env)}.
  * Next a debugger session needs to be started with
  * {@link com.oracle.truffle.api.debug.Debugger#startSession(SuspendedCallback)} providing a
@@ -52,8 +50,6 @@
  * {@link com.oracle.truffle.api.debug.DebuggerSession} and
  * {@link com.oracle.truffle.api.debug.Breakpoint}.
  * <p>
- * There is also a <a href="doc-files/faq-using.html">list of FAQs</a> that may provide useful hints
- * when writing your own Truffle debugger frontend.
  *
  * <h4>Enable Debugging for your Truffle guest language</h4>
  *
@@ -63,11 +59,11 @@
  * for code written in that particular language.
  * <p>
  * This extra information is expressed using so called tags. Tags can be applied to AST nodes by
- * implementing the {@link com.oracle.truffle.api.nodes.Node#isTaggedWith(Class)} method. The
- * debugger requires the guest language to implement statement and call tags from the set of
- * standard Truffle tags. Please refer to
+ * implementing the {@link com.oracle.truffle.api.instrumentation.InstrumentableNode#hasTag(Class)}
+ * method. The debugger requires the guest language to implement statement and call tags from the
+ * set of standard Truffle tags. Please refer to
  * {@link com.oracle.truffle.api.instrumentation.StandardTags} on how to implement them.
- * 
+ *
  * @since 0.8 or older
  */
 package com.oracle.truffle.api.debug;

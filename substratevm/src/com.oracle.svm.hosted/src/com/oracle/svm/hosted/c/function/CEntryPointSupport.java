@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -25,6 +27,7 @@ package com.oracle.svm.hosted.c.function;
 import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
 import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.ValueNode;
+import org.graalvm.compiler.nodes.calc.AddNode;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderContext;
 import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugin;
 import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugins;
@@ -33,6 +36,7 @@ import org.graalvm.compiler.phases.util.Providers;
 import org.graalvm.nativeimage.Isolate;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.c.function.CEntryPointContext;
+import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.word.WordBase;
 
 import com.oracle.svm.core.SubstrateOptions;
@@ -40,13 +44,16 @@ import com.oracle.svm.core.amd64.FrameAccess;
 import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.c.function.CEntryPointActions;
 import com.oracle.svm.core.c.function.CEntryPointCreateIsolateParameters;
+import com.oracle.svm.core.c.function.CEntryPointSetup;
 import com.oracle.svm.core.graal.GraalFeature;
 import com.oracle.svm.core.graal.nodes.CEntryPointEnterNode;
 import com.oracle.svm.core.graal.nodes.CEntryPointEnterNode.EnterAction;
 import com.oracle.svm.core.graal.nodes.CEntryPointLeaveNode;
 import com.oracle.svm.core.graal.nodes.CEntryPointLeaveNode.LeaveAction;
 import com.oracle.svm.core.graal.nodes.CEntryPointPrologueBailoutNode;
-import com.oracle.svm.core.graal.nodes.CurrentVMThreadFixedNode;
+import com.oracle.svm.core.graal.nodes.CEntryPointUtilityNode;
+import com.oracle.svm.core.graal.nodes.CEntryPointUtilityNode.UtilityAction;
+import com.oracle.svm.core.graal.nodes.ReadRegisterFixedNode;
 
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
@@ -54,7 +61,7 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
 @AutomaticFeature
 public class CEntryPointSupport implements GraalFeature {
     @Override
-    public void registerInvocationPlugins(Providers providers, SnippetReflectionProvider snippetReflection, InvocationPlugins invocationPlugins, boolean hosted) {
+    public void registerInvocationPlugins(Providers providers, SnippetReflectionProvider snippetReflection, InvocationPlugins invocationPlugins, boolean analysis, boolean hosted) {
         registerEntryPointActionsPlugins(invocationPlugins);
         registerEntryPointContextPlugins(invocationPlugins);
     }
@@ -128,6 +135,20 @@ public class CEntryPointSupport implements GraalFeature {
                 return true;
             }
         });
+        r.register2("failFatally", int.class, CCharPointer.class, new InvocationPlugin() {
+            @Override
+            public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode arg1, ValueNode arg2) {
+                b.add(new CEntryPointUtilityNode(UtilityAction.FailFatally, arg1, arg2));
+                return true;
+            }
+        });
+        r.register1("isCurrentThreadAttachedTo", Isolate.class, new InvocationPlugin() {
+            @Override
+            public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode isolate) {
+                b.addPush(JavaKind.Boolean, new CEntryPointUtilityNode(UtilityAction.IsAttached, isolate));
+                return true;
+            }
+        });
     }
 
     private static void registerEntryPointContextPlugins(InvocationPlugins plugins) {
@@ -136,9 +157,13 @@ public class CEntryPointSupport implements GraalFeature {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
                 if (SubstrateOptions.MultiThreaded.getValue()) {
-                    b.addPush(JavaKind.Object, new CurrentVMThreadFixedNode());
+                    b.addPush(JavaKind.Object, ReadRegisterFixedNode.forIsolateThread());
+                } else if (SubstrateOptions.SpawnIsolates.getValue()) {
+                    ValueNode heapBase = b.add(ReadRegisterFixedNode.forHeapBase());
+                    ConstantNode addend = b.add(ConstantNode.forIntegerKind(FrameAccess.getWordKind(), CEntryPointSetup.SINGLE_ISOLATE_TO_SINGLE_THREAD_ADDEND));
+                    b.addPush(JavaKind.Object, new AddNode(heapBase, addend));
                 } else {
-                    b.addPush(JavaKind.Object, ConstantNode.forIntegerKind(FrameAccess.getWordKind(), 0));
+                    b.addPush(JavaKind.Object, ConstantNode.forIntegerKind(FrameAccess.getWordKind(), CEntryPointSetup.SINGLE_THREAD_SENTINEL.rawValue()));
                 }
                 return true;
             }
@@ -146,7 +171,11 @@ public class CEntryPointSupport implements GraalFeature {
         r.register0("getCurrentIsolate", new InvocationPlugin() {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
-                b.addPush(JavaKind.Object, ConstantNode.forIntegerKind(FrameAccess.getWordKind(), 0));
+                if (SubstrateOptions.SpawnIsolates.getValue()) {
+                    b.addPush(JavaKind.Object, ReadRegisterFixedNode.forHeapBase());
+                } else {
+                    b.addPush(JavaKind.Object, ConstantNode.forIntegerKind(FrameAccess.getWordKind(), CEntryPointSetup.SINGLE_ISOLATE_SENTINEL.rawValue()));
+                }
                 return true;
             }
         });

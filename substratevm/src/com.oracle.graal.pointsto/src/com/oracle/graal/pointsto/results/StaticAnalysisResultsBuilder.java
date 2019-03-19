@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -27,6 +29,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -50,7 +53,6 @@ import jdk.vm.ci.meta.JavaMethodProfile.ProfiledMethod;
 import jdk.vm.ci.meta.JavaTypeProfile;
 import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
-import jdk.vm.ci.meta.ResolvedJavaType;
 import jdk.vm.ci.meta.TriState;
 
 public class StaticAnalysisResultsBuilder {
@@ -61,7 +63,7 @@ public class StaticAnalysisResultsBuilder {
      * The universe used to convert analysis metadata to hosted metadata, or {@code null} if no
      * conversion should be performed.
      */
-    private final Universe converter;
+    protected final Universe converter;
 
     /* Caches for JavaTypeProfile with 0, 1, or more types. */
     private final JavaTypeProfile[] types0;
@@ -110,10 +112,10 @@ public class StaticAnalysisResultsBuilder {
 
         ArrayList<BytecodeEntry> entries = new ArrayList<>(method.getCodeSize());
 
-        for (InstanceOfTypeFlow originalInstanceOf : originalFlows.getInstaceOfFlows()) {
-            if (BytecodeLocation.hasValidBci(originalInstanceOf.getLocation())) {
-
-                int bci = originalInstanceOf.getLocation().getBci();
+        for (Map.Entry<Object, InstanceOfTypeFlow> entry : originalFlows.getInstanceOfFlows()) {
+            if (BytecodeLocation.isValidBci(entry.getKey())) {
+                int bci = (int) entry.getKey();
+                InstanceOfTypeFlow originalInstanceOf = entry.getValue();
 
                 /* Fold the instanceof flows. */
                 TypeState instanceOfTypeState = methodFlow.foldTypeFlow(bb, originalInstanceOf);
@@ -123,14 +125,15 @@ public class StaticAnalysisResultsBuilder {
                 if (typeProfile != null) {
                     ensureSize(entries, bci);
                     assert entries.get(bci) == null : "In " + method.format("%h.%n(%p)") + " a profile with bci=" + bci + " already exists: " + entries.get(bci);
-                    entries.set(bci, new BytecodeEntry(bci, typeProfile, null, null));
+                    entries.set(bci, createBytecodeEntry(method, bci, typeProfile, null, null));
                 }
             }
         }
 
-        for (InvokeTypeFlow originalInvoke : originalFlows.getInvokes()) {
-            if (BytecodeLocation.hasValidBci(originalInvoke.getLocation())) {
-                int bci = originalInvoke.getLocation().getBci();
+        for (Entry<Object, InvokeTypeFlow> entry : originalFlows.getInvokes()) {
+            if (BytecodeLocation.isValidBci(entry.getKey())) {
+                int bci = (int) entry.getKey();
+                InvokeTypeFlow originalInvoke = entry.getValue();
 
                 TypeState invokeTypeState = TypeState.forEmpty();
                 if (originalInvoke.getTargetMethod().hasReceiver()) {
@@ -149,10 +152,10 @@ public class StaticAnalysisResultsBuilder {
                 JavaMethodProfile methodProfile = makeMethodProfile(originalInvoke.getCallees());
                 JavaTypeProfile invokeResultTypeProfile = originalReturn == null ? null : makeTypeProfile(returnTypeState);
 
-                if (typeProfile != null || methodProfile != null || invokeResultTypeProfile != null) {
+                if (hasStaticProfiles(typeProfile, methodProfile, invokeResultTypeProfile) || hasRuntimeProfiles()) {
                     ensureSize(entries, bci);
                     assert entries.get(bci) == null : "In " + method.format("%h.%n(%p)") + " a profile with bci=" + bci + " already exists: " + entries.get(bci);
-                    entries.set(bci, new BytecodeEntry(bci, typeProfile, methodProfile, invokeResultTypeProfile));
+                    entries.set(bci, createBytecodeEntry(method, bci, typeProfile, methodProfile, invokeResultTypeProfile));
                 }
             }
         }
@@ -193,11 +196,28 @@ public class StaticAnalysisResultsBuilder {
             }
         }
 
+        return createStaticAnalysisResults(method, parameterTypeProfiles, resultTypeProfile, first);
+    }
+
+    protected BytecodeEntry createBytecodeEntry(@SuppressWarnings("unused") AnalysisMethod method, int bci, JavaTypeProfile typeProfile, JavaMethodProfile methodProfile,
+                    JavaTypeProfile invokeResultTypeProfile) {
+        return new BytecodeEntry(bci, typeProfile, methodProfile, invokeResultTypeProfile);
+    }
+
+    protected StaticAnalysisResults createStaticAnalysisResults(AnalysisMethod method, JavaTypeProfile[] parameterTypeProfiles, JavaTypeProfile resultTypeProfile, BytecodeEntry first) {
         if (parameterTypeProfiles == null && resultTypeProfile == null && first == null) {
             return StaticAnalysisResults.NO_RESULTS;
         } else {
             return new StaticAnalysisResults(method.getCodeSize(), parameterTypeProfiles, resultTypeProfile, first);
         }
+    }
+
+    protected boolean hasRuntimeProfiles() {
+        return false;
+    }
+
+    private static boolean hasStaticProfiles(JavaTypeProfile typeProfile, JavaMethodProfile methodProfile, JavaTypeProfile invokeResultTypeProfile) {
+        return typeProfile != null || methodProfile != null || invokeResultTypeProfile != null;
     }
 
     private static void ensureSize(ArrayList<?> list, int index) {
@@ -269,13 +289,13 @@ public class StaticAnalysisResultsBuilder {
     }
 
     private JavaTypeProfile createTypeProfile(TypeState typeState) {
-        ProfiledType[] pitems = new ProfiledType[typeState.typesCount()];
-        double probability = 1d / pitems.length;
-        int idx = 0;
-        for (AnalysisType exactType : typeState.types()) {
-            ResolvedJavaType convertedType = converter == null ? exactType : converter.lookup(exactType);
-            pitems[idx++] = new ProfiledType(convertedType, probability);
-        }
+        double probability = 1d / typeState.typesCount();
+        ProfiledType[] pitems = typeState.typesStream()
+                        .map(analysisType -> converter == null ? analysisType : converter.lookup(analysisType))
+                        .sorted()
+                        .map(type -> new ProfiledType(type, probability))
+                        .toArray(ProfiledType[]::new);
+
         return new JavaTypeProfile(TriState.get(typeState.canBeNull()), 0, pitems);
     }
 
@@ -319,5 +339,4 @@ public class StaticAnalysisResultsBuilder {
         }
         return new JavaMethodProfile(0, pitems);
     }
-
 }

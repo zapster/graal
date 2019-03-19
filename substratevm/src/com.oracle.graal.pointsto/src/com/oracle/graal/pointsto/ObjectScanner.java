@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -37,6 +39,7 @@ import com.oracle.graal.pointsto.constraints.UnsupportedFeatureException;
 import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.AnalysisType;
+import com.oracle.graal.pointsto.util.AnalysisError;
 
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
@@ -110,6 +113,11 @@ public abstract class ObjectScanner {
         try {
             JavaConstant fieldValue = bb.getConstantReflectionProvider().readFieldValue(field, receiver);
 
+            if (fieldValue == null) {
+                throw AnalysisError.shouldNotReachHere("Could not find field " + field.format("%H.%n") +
+                                (receiver == null ? "" : " on " + bb.getSnippetReflectionProvider().asObject(Object.class, receiver).getClass()));
+            }
+
             if (fieldValue.getJavaKind() == JavaKind.Object && bb.getHostVM().isRelocatedPointer(bb.getSnippetReflectionProvider().asObject(Object.class, fieldValue))) {
                 forRelocatedPointerFieldValue(receiver, field, fieldValue);
             } else if (fieldValue.isNull()) {
@@ -160,10 +168,10 @@ public abstract class ObjectScanner {
      */
 
     /** Hook for scanned null element value. */
-    public abstract void forNullArrayElement(JavaConstant array, AnalysisType arrayType);
+    public abstract void forNullArrayElement(JavaConstant array, AnalysisType arrayType, int elementIndex);
 
     /** Hook for scanned non-null element value. */
-    public abstract void forNonNullArrayElement(JavaConstant array, AnalysisType arrayType, JavaConstant elementConstant, AnalysisType elementType);
+    public abstract void forNonNullArrayElement(JavaConstant array, AnalysisType arrayType, JavaConstant elementConstant, AnalysisType elementType, int elementIndex);
 
     /**
      * Scans constant arrays, one element at the time.
@@ -178,9 +186,11 @@ public abstract class ObjectScanner {
         assert valueObj instanceof Object[];
 
         try {
-            for (Object e : (Object[]) valueObj) {
+            Object[] arrayObject = (Object[]) valueObj;
+            for (int idx = 0; idx < arrayObject.length; idx++) {
+                Object e = arrayObject[idx];
                 if (e == null) {
-                    forNullArrayElement(array, arrayType);
+                    forNullArrayElement(array, arrayType, idx);
                 } else {
                     Object element = bb.getUniverse().replaceObject(e);
                     JavaConstant elementConstant = bb.getSnippetReflectionProvider().forObject(element);
@@ -190,7 +200,7 @@ public abstract class ObjectScanner {
                     /* Scan the array element. */
                     scanConstant(elementConstant, reason);
                     /* Process the array element. */
-                    forNonNullArrayElement(array, arrayType, elementConstant, elementType);
+                    forNonNullArrayElement(array, arrayType, elementConstant, elementType, idx);
 
                 }
             }
@@ -283,12 +293,9 @@ public abstract class ObjectScanner {
     }
 
     private boolean checkCorrectClassloaders(WorklistEntry entry, Object valueObj) {
-        boolean result = valueObj.getClass().getClassLoader() == null ||
-                        valueObj.getClass().getClassLoader() == Thread.currentThread().getContextClassLoader() ||
-                        valueObj.getClass().getClassLoader() == ClassLoader.getSystemClassLoader() ||
-                        valueObj.getClass().getClassLoader() == ClassLoader.getSystemClassLoader().getParent();
+        boolean result = bb.isValidClassLoader(valueObj);
         if (!result) {
-            System.err.println("detected an invalid object from previous compilations: " + valueObj.toString());
+            System.err.println("detected an object that originates from previous compilations: " + valueObj.toString());
             Object reason = entry.getReason();
             while (reason instanceof WorklistEntry) {
                 Object value = bb.getSnippetReflectionProvider().asObject(Object.class, ((WorklistEntry) reason).constant);

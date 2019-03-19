@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -39,8 +41,12 @@ import org.graalvm.word.WordFactory;
 import com.oracle.svm.core.SubstrateUtil;
 import com.oracle.svm.core.threadlocal.FastThreadLocalFactory;
 import com.oracle.svm.core.threadlocal.FastThreadLocalObject;
+import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.truffle.nfi.NativeAPI.TruffleContextHandle;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platform.DARWIN;
+import org.graalvm.nativeimage.Platform.LINUX;
 
 public final class TruffleNFISupport {
 
@@ -52,10 +58,20 @@ public final class TruffleNFISupport {
     private final ObjectHandles closureHandles;
     private final ObjectHandles contextHandles;
 
+    public final String errnoGetterFunctionName;
+
     TruffleNFISupport() {
         globalHandles = ObjectHandles.create();
         closureHandles = ObjectHandles.create();
         contextHandles = ObjectHandles.create();
+
+        if (Platform.includedIn(LINUX.class)) {
+            errnoGetterFunctionName = "__errno_location";
+        } else if (Platform.includedIn(DARWIN.class)) {
+            errnoGetterFunctionName = "__error";
+        } else {
+            throw VMError.unsupportedFeature("unsupported platform for TruffleNFIFeature");
+        }
     }
 
     public static LocalNativeScope createLocalScope(int pinCount) {
@@ -108,12 +124,12 @@ public final class TruffleNFISupport {
         closureHandles.destroy((ObjectHandle) handle);
     }
 
-    public TruffleContextHandle createContextHandle(Target_com_oracle_truffle_nfi_NFIContext context) {
+    public TruffleContextHandle createContextHandle(Target_com_oracle_truffle_nfi_impl_NFIContext context) {
         return (TruffleContextHandle) contextHandles.create(context);
     }
 
-    public Target_com_oracle_truffle_nfi_NFIContext resolveContextHandle(TruffleContextHandle handle) {
-        return (Target_com_oracle_truffle_nfi_NFIContext) contextHandles.get((ObjectHandle) handle);
+    public Target_com_oracle_truffle_nfi_impl_NFIContext resolveContextHandle(TruffleContextHandle handle) {
+        return (Target_com_oracle_truffle_nfi_impl_NFIContext) contextHandles.get((ObjectHandle) handle);
     }
 
     public void destroyContextHandle(TruffleContextHandle handle) {

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,14 +28,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
 
+import org.graalvm.collections.EconomicMap;
 import org.graalvm.compiler.core.amd64.AMD64NodeMatchRules;
 import org.graalvm.compiler.core.common.spi.ForeignCallsProvider;
 import org.graalvm.compiler.core.gen.NodeMatchRules;
 import org.graalvm.compiler.core.match.MatchRuleRegistry;
 import org.graalvm.compiler.core.match.MatchStatement;
-import org.graalvm.compiler.core.phases.CoreCompilerConfiguration;
+import org.graalvm.compiler.core.phases.CommunityCompilerConfiguration;
 import org.graalvm.compiler.core.target.Backend;
 import org.graalvm.compiler.graph.Node;
+import org.graalvm.compiler.hotspot.CommunityCompilerConfigurationFactory;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.spi.LoweringProvider;
 import org.graalvm.compiler.options.OptionValues;
@@ -44,7 +48,6 @@ import org.graalvm.compiler.phases.tiers.Suites;
 import org.graalvm.compiler.phases.util.Providers;
 import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.ImageSingletons;
-import org.graalvm.util.EconomicMap;
 
 import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.graal.code.amd64.SubstrateAMD64Backend;
@@ -53,6 +56,8 @@ import com.oracle.svm.core.graal.meta.SubstrateBasicLoweringProvider;
 import jdk.vm.ci.meta.MetaAccessProvider;
 
 public class GraalConfiguration {
+
+    private static final String COMPILER_CONFIGURATION_NAME = CommunityCompilerConfigurationFactory.NAME;
 
     public static GraalConfiguration instance() {
         return ImageSingletons.lookup(GraalConfiguration.class);
@@ -69,7 +74,11 @@ public class GraalConfiguration {
     }
 
     public Suites createSuites(OptionValues options, @SuppressWarnings("unused") boolean hosted) {
-        return Suites.createSuites(new CoreCompilerConfiguration(), options);
+        return Suites.createSuites(new CommunityCompilerConfiguration(), options);
+    }
+
+    public String getCompilerConfigurationName() {
+        return COMPILER_CONFIGURATION_NAME;
     }
 
     public void populateMatchRuleRegistry(HashMap<Class<? extends NodeMatchRules>, EconomicMap<Class<? extends Node>, List<MatchStatement>>> matchRuleRegistry) {

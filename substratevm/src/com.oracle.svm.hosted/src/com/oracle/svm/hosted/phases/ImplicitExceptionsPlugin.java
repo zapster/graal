@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -36,7 +38,7 @@ import com.oracle.svm.core.graal.nodes.DeadEndNode;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.snippets.SnippetRuntime.SubstrateForeignCallDescriptor;
-import com.oracle.svm.hosted.code.MustNotAllocateCallees;
+import com.oracle.svm.hosted.code.RestrictHeapAccessCallees;
 
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.MetaAccessProvider;
@@ -106,8 +108,14 @@ public class ImplicitExceptionsPlugin implements NodePlugin {
     }
 
     private static boolean methodMustNotAllocate(GraphBuilderContext b) {
-        return ImageSingletons.lookup(MustNotAllocateCallees.class).mustNotAllocate(b.getMethod());
+        return ImageSingletons.lookup(RestrictHeapAccessCallees.class).mustNotAllocate(b.getMethod());
     }
+
+    /**
+     * The singleton {@link AssertionError} to throw when an assert fails in code that must not
+     * allocate.
+     */
+    private static final AssertionError CACHED_ASSERTION_ERROR = new AssertionError();
 
     @Override
     public boolean handleNewInstance(GraphBuilderContext b, ResolvedJavaType type) {
@@ -124,7 +132,7 @@ public class ImplicitExceptionsPlugin implements NodePlugin {
              * then we get a NullPointerException when calling the constructor. So we just use the
              * cached AssertionError object that already exists.
              */
-            b.push(JavaKind.Object, ConstantNode.forConstant(SubstrateObjectConstant.forObject(SnippetRuntime.cachedAssertionError), metaAccess, b.getGraph()));
+            b.push(JavaKind.Object, ConstantNode.forConstant(SubstrateObjectConstant.forObject(CACHED_ASSERTION_ERROR), metaAccess, b.getGraph()));
             return true;
         }
         return false;

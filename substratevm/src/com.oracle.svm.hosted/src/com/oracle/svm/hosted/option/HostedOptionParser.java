@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,6 +24,7 @@
  */
 package com.oracle.svm.hosted.option;
 
+import static com.oracle.svm.core.option.SubstrateOptionsParser.BooleanOptionFormat.PLUS_MINUS;
 import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
 
 import java.lang.reflect.Modifier;
@@ -32,24 +35,22 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.EconomicSet;
 import org.graalvm.compiler.options.OptionDescriptor;
 import org.graalvm.compiler.options.OptionDescriptors;
 import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.nativeimage.Platforms;
-import org.graalvm.util.EconomicMap;
-import org.graalvm.util.EconomicSet;
 
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.option.RuntimeOptionKey;
 import com.oracle.svm.core.option.SubstrateOptionsParser;
+import com.oracle.svm.core.util.InterruptImageBuilding;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.hosted.ImageClassLoader;
 
 public class HostedOptionParser implements HostedOptionProvider {
-
-    public static final String HOSTED_OPTION_PREFIX = "-H:";
-    public static final String RUNTIME_OPTION_PREFIX = "-R:";
 
     private EconomicMap<OptionKey<?>, Object> hostedValues = OptionValues.newOptionMap();
     private EconomicMap<OptionKey<?>, Object> runtimeValues = OptionValues.newOptionMap();
@@ -57,7 +58,11 @@ public class HostedOptionParser implements HostedOptionProvider {
     private SortedMap<String, OptionDescriptor> allRuntimeOptions = new TreeMap<>();
 
     public HostedOptionParser(ImageClassLoader imageClassLoader) {
-        List<Class<? extends OptionDescriptors>> optionsClasses = imageClassLoader.findSubclasses(OptionDescriptors.class);
+        collectOptions(imageClassLoader.findSubclasses(OptionDescriptors.class), allHostedOptions, allRuntimeOptions);
+    }
+
+    public static void collectOptions(List<Class<? extends OptionDescriptors>> optionsClasses, SortedMap<String, OptionDescriptor> allHostedOptions,
+                    SortedMap<String, OptionDescriptor> allRuntimeOptions) {
         for (Class<? extends OptionDescriptors> optionsClass : optionsClasses) {
             if (Modifier.isAbstract(optionsClass.getModifiers())) {
                 continue;
@@ -65,8 +70,8 @@ public class HostedOptionParser implements HostedOptionProvider {
 
             OptionDescriptors descriptors;
             try {
-                descriptors = optionsClass.newInstance();
-            } catch (InstantiationException | IllegalAccessException ex) {
+                descriptors = optionsClass.getDeclaredConstructor().newInstance();
+            } catch (Exception ex) {
                 throw shouldNotReachHere(ex);
             }
             for (OptionDescriptor descriptor : descriptors) {
@@ -90,7 +95,6 @@ public class HostedOptionParser implements HostedOptionProvider {
                     }
                 }
             }
-
         }
     }
 
@@ -98,12 +102,25 @@ public class HostedOptionParser implements HostedOptionProvider {
 
         List<String> remainingArgs = new ArrayList<>();
         Set<String> errors = new HashSet<>();
+        InterruptImageBuilding interrupt = null;
         for (String arg : args) {
-            boolean isImageBuildOption = SubstrateOptionsParser.parseHostedOption(HOSTED_OPTION_PREFIX, "SVM hosted", allHostedOptions, hostedValues, errors, arg, System.out) ||
-                            SubstrateOptionsParser.parseHostedOption(RUNTIME_OPTION_PREFIX, "SVM runtime", allRuntimeOptions, runtimeValues, errors, arg, System.out);
+            boolean isImageBuildOption = false;
+            try {
+                isImageBuildOption |= SubstrateOptionsParser.parseHostedOption(SubstrateOptionsParser.HOSTED_OPTION_PREFIX, allHostedOptions, hostedValues, PLUS_MINUS, errors, arg, System.out);
+            } catch (InterruptImageBuilding e) {
+                interrupt = e;
+            }
+            try {
+                isImageBuildOption |= SubstrateOptionsParser.parseHostedOption(SubstrateOptionsParser.RUNTIME_OPTION_PREFIX, allRuntimeOptions, runtimeValues, PLUS_MINUS, errors, arg, System.out);
+            } catch (InterruptImageBuilding e) {
+                interrupt = e;
+            }
             if (!isImageBuildOption) {
                 remainingArgs.add(arg);
             }
+        }
+        if (interrupt != null) {
+            throw interrupt;
         }
         if (!errors.isEmpty()) {
             throw UserError.abort(errors);
@@ -137,21 +154,5 @@ public class HostedOptionParser implements HostedOptionProvider {
         EconomicSet<String> res = EconomicSet.create(allRuntimeOptions.size());
         allRuntimeOptions.keySet().forEach(res::add);
         return res;
-    }
-
-    /**
-     * Returns a string to be used on command line to set the option to a desirable value.
-     *
-     * @param option for which the command line argument is created
-     * @return recommendation for setting a option value (e.g., for option 'Name' and value 'file'
-     *         it returns "-H:Name=file")
-     */
-    public static String commandArgument(OptionKey<?> option, String value) {
-        if (option.getDescriptor().getType() == Boolean.class) {
-            assert value.equals("+") || value.equals("-") || value.equals("[+|-]") : "Boolean option can be only + or - or [+|-].";
-            return HOSTED_OPTION_PREFIX + value + option;
-        } else {
-            return HOSTED_OPTION_PREFIX + option.getName() + "=" + value;
-        }
     }
 }

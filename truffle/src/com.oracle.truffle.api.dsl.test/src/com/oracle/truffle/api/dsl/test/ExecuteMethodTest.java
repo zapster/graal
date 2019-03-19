@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,10 +24,16 @@
  */
 package com.oracle.truffle.api.dsl.test;
 
+import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
+
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.dsl.TypeSystem;
 import com.oracle.truffle.api.dsl.TypeSystemReference;
+import com.oracle.truffle.api.dsl.test.ExecuteMethodTestFactory.SpecializationMethodOverload1NodeGen;
+import com.oracle.truffle.api.dsl.test.ExecuteMethodTestFactory.SpecializationMethodOverload2NodeGen;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
@@ -380,6 +388,59 @@ public class ExecuteMethodTest {
         int doInt(int a) {
             return a;
         }
+    }
+
+    abstract static class SpecializationMethodOverload1Node extends Node {
+
+        public abstract String execute(int value);
+
+        public abstract String execute(Object value);
+
+        @Specialization(guards = "value < 10")
+        String test(@SuppressWarnings("unused") int value) {
+            return "value < 10";
+        }
+
+        @Specialization
+        String test(@SuppressWarnings("unused") Object value) {
+            return "any value";
+        }
+
+    }
+
+    @Test
+    public void testSpecializationMethodOverload1Node() {
+        SpecializationMethodOverload1Node node = SpecializationMethodOverload1NodeGen.create();
+        assertEquals("any value", node.execute(100));
+        assertEquals("any value", node.execute(100));
+    }
+
+    abstract static class SpecializationMethodOverload2Node extends Node {
+
+        public abstract String execute(String value);
+
+        public abstract String execute(CharSequence value);
+
+        @Specialization(guards = "guard(value)")
+        String test(@SuppressWarnings("unused") String value) {
+            return "is string";
+        }
+
+        protected static boolean guard(Object value) {
+            return value.equals("string");
+        }
+
+        @Specialization
+        String test(@SuppressWarnings("unused") CharSequence value) {
+            return "any value";
+        }
+    }
+
+    @Test
+    public void testSpecializationMethodOverload2Node() {
+        SpecializationMethodOverload2Node node = SpecializationMethodOverload2NodeGen.create();
+        assertEquals("any value", node.execute("foobar"));
+        assertEquals("any value", node.execute("foobar"));
     }
 
     @ExpectError("No generic execute method found with 0 evaluated arguments for node type ChildVirtualFrame and frame types [com.oracle.truffle.api.frame.Frame].")

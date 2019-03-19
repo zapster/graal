@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -25,7 +27,7 @@ package com.oracle.truffle.api.dsl.test.interop;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage;
 
-@TruffleLanguage.Registration(mimeType = "application/x-test", name = "InteropProcessorTest", version = "1.0")
+@TruffleLanguage.Registration(id = "InteropProcessorTest", name = "", version = "1.0")
 public final class TestTruffleLanguage extends TruffleLanguage<Object> {
 
     public TestTruffleLanguage() {
@@ -38,11 +40,6 @@ public final class TestTruffleLanguage extends TruffleLanguage<Object> {
 
     @Override
     protected CallTarget parse(ParsingRequest env) {
-        return null;
-    }
-
-    @Override
-    protected Object getLanguageGlobal(Object context) {
         return null;
     }
 

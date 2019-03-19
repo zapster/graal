@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,6 +28,7 @@ import static org.graalvm.compiler.core.common.GraalOptions.MaximumEscapeAnalysi
 
 import java.util.List;
 
+import org.graalvm.compiler.core.common.spi.ArrayOffsetProvider;
 import org.graalvm.compiler.core.common.spi.ConstantFieldProvider;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.graph.Node;
@@ -108,6 +111,11 @@ class VirtualizerToolImpl implements VirtualizerTool, CanonicalizerTool {
         return constantFieldProvider;
     }
 
+    @Override
+    public ArrayOffsetProvider getArrayOffsetProvider() {
+        return loweringProvider;
+    }
+
     public void reset(PartialEscapeBlockState<?> newState, ValueNode newCurrent, FixedNode newPosition, GraphEffectList newEffects) {
         deleted = false;
         state = newState;
@@ -160,7 +168,7 @@ class VirtualizerToolImpl implements VirtualizerTool, CanonicalizerTool {
                  * Special case: Allow storing a single long or double value into two consecutive
                  * int slots.
                  */
-                int nextIndex = virtual.entryIndexForOffset(offset + 4, JavaKind.Int);
+                int nextIndex = virtual.entryIndexForOffset(getArrayOffsetProvider(), offset + 4, JavaKind.Int);
                 if (nextIndex != -1) {
                     canVirtualize = true;
                     assert nextIndex == index + 1 : "expected to be sequential";

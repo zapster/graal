@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -29,17 +31,13 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.graalvm.compiler.core.common.calc.FloatConvert;
 import org.graalvm.compiler.core.common.type.StampFactory;
 import org.graalvm.compiler.core.common.type.TypeReference;
 import org.graalvm.compiler.debug.DebugContext;
-import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.nodes.CallTargetNode.InvokeKind;
 import org.graalvm.compiler.nodes.LogicNode;
-import org.graalvm.compiler.nodes.MergeNode;
 import org.graalvm.compiler.nodes.NodeView;
 import org.graalvm.compiler.nodes.PiNode;
 import org.graalvm.compiler.nodes.StructuredGraph;
@@ -57,7 +55,6 @@ import org.graalvm.compiler.nodes.java.InstanceOfNode;
 import org.graalvm.compiler.nodes.java.LoadFieldNode;
 import org.graalvm.compiler.nodes.java.NewInstanceNode;
 import org.graalvm.compiler.nodes.java.StoreFieldNode;
-import org.graalvm.compiler.phases.common.inlining.InliningUtil;
 
 import com.oracle.graal.pointsto.meta.HostedProviders;
 import com.oracle.svm.core.util.VMError;
@@ -66,7 +63,7 @@ import com.oracle.svm.hosted.annotation.CustomSubstitutionMethod;
 import com.oracle.svm.hosted.annotation.CustomSubstitutionType;
 import com.oracle.svm.hosted.phases.HostedGraphKit;
 import com.oracle.svm.reflect.hosted.ReflectionSubstitutionType.ReflectionSubstitutionMethod;
-import com.oracle.svm.reflect.proxies.ExceptionHelpers;
+import com.oracle.svm.reflect.helpers.ExceptionHelpers;
 
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
@@ -173,30 +170,12 @@ public final class ReflectionSubstitutionType extends CustomSubstitutionType<Cus
         }
     }
 
-    /** A graph with multiple unwinds is invalid. Merge the various unwind paths. */
-    private static void mergeUnwinds(HostedGraphKit graphKit) {
-        List<UnwindNode> unwinds = new ArrayList<>();
-        for (Node node : graphKit.getGraph().getNodes()) {
-            if (node instanceof UnwindNode) {
-                unwinds.add((UnwindNode) node);
-            }
-        }
-
-        if (unwinds.size() > 1) {
-            MergeNode unwindMergeNode = graphKit.add(new MergeNode());
-            ValueNode exceptionValue = InliningUtil.mergeValueProducers(unwindMergeNode, unwinds, null, unwindNode -> unwindNode.exception());
-            UnwindNode unwindReplacement = graphKit.add(new UnwindNode(exceptionValue));
-            unwindMergeNode.setNext(unwindReplacement);
-            unwindMergeNode.setStateAfter(graphKit.getFrameState().create(graphKit.bci(), unwindMergeNode));
-        }
-    }
-
     private static void throwFailedCast(HostedGraphKit graphKit, ResolvedJavaType expectedType, ValueNode actual) {
         ResolvedJavaMethod createFailedCast = graphKit.findMethod(ExceptionHelpers.class, "createFailedCast", true);
         JavaConstant expected = graphKit.getConstantReflection().asJavaClass(expectedType);
         ValueNode expectedNode = graphKit.createConstant(expected, JavaKind.Object);
 
-        ValueNode exception = graphKit.createJavaCall(InvokeKind.Static, createFailedCast, expectedNode, actual);
+        ValueNode exception = graphKit.createJavaCallWithExceptionAndUnwind(InvokeKind.Static, createFailedCast, expectedNode, actual);
         graphKit.append(new UnwindNode(exception));
     }
 
@@ -252,7 +231,7 @@ public final class ReflectionSubstitutionType extends CustomSubstitutionType<Cus
             }
         }
 
-        graphKit.createJavaCall(InvokeKind.Special, cons, ite, exception);
+        graphKit.createJavaCallWithExceptionAndUnwind(InvokeKind.Special, cons, ite, exception);
 
         graphKit.append(new UnwindNode(ite));
     }
@@ -271,7 +250,7 @@ public final class ReflectionSubstitutionType extends CustomSubstitutionType<Cus
         JavaConstant msg = graphKit.getConstantReflection().forString(message);
         ValueNode msgNode = graphKit.createConstant(msg, JavaKind.Object);
         ValueNode cause = graphKit.createConstant(JavaConstant.NULL_POINTER, JavaKind.Object);
-        graphKit.createJavaCall(InvokeKind.Special, cons, ite, msgNode, cause);
+        graphKit.createJavaCallWithExceptionAndUnwind(InvokeKind.Special, cons, ite, msgNode, cause);
 
         graphKit.append(new UnwindNode(ite));
     }
@@ -283,7 +262,7 @@ public final class ReflectionSubstitutionType extends CustomSubstitutionType<Cus
 
         switch (to) {
             case Object:
-                // boxing is always possible
+                // boxing can be possible
                 return true;
             case Boolean:
             case Char:
@@ -457,14 +436,21 @@ public final class ReflectionSubstitutionType extends CustomSubstitutionType<Cus
                         graphKit.createReturn(null, JavaKind.Void);
                     }
                 } else {
-                    value = doImplicitCast(graphKit, kind, fieldKind, value);
-                    graphKit.append(new StoreFieldNode(receiver, targetField, value));
-                    graphKit.createReturn(null, JavaKind.Void);
+                    // kind == PrimitiveKind
+                    if (fieldKind == JavaKind.Object && !field.getType().equals(kind.toBoxedJavaClass())) {
+                        throwIllegalArgumentException(graphKit, "cannot write field of type " + targetField.getJavaKind() + " with Field." + method.getName());
+                    } else {
+                        value = doImplicitCast(graphKit, kind, fieldKind, value);
+                        graphKit.append(new StoreFieldNode(receiver, targetField, value));
+                        graphKit.createReturn(null, JavaKind.Void);
+                    }
                 }
 
             } else {
                 throwIllegalArgumentException(graphKit, "cannot write field of type " + targetField.getJavaKind() + " with Field." + method.getName());
             }
+
+            graphKit.mergeUnwinds();
 
             assert graphKit.getGraph().verify();
             return graphKit.getGraph();
@@ -528,7 +514,7 @@ public final class ReflectionSubstitutionType extends CustomSubstitutionType<Cus
 
             graphKit.endInvokeWithException();
 
-            mergeUnwinds(graphKit);
+            graphKit.mergeUnwinds();
 
             assert graphKit.getGraph().verify();
             return graphKit.getGraph();
@@ -572,7 +558,7 @@ public final class ReflectionSubstitutionType extends CustomSubstitutionType<Cus
 
             graphKit.endInvokeWithException();
 
-            mergeUnwinds(graphKit);
+            graphKit.mergeUnwinds();
 
             assert graphKit.getGraph().verify();
             return graphKit.getGraph();

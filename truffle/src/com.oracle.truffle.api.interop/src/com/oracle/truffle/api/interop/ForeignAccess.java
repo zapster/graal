@@ -267,6 +267,37 @@ public final class ForeignAccess {
     }
 
     /**
+     * Sends a {@link Message#REMOVE REMOVE message} to the foreign receiver object by executing the
+     * <code> removeNode </code>.
+     *
+     * @param removeNode the node created by {@link Message#createNode()}
+     * @param receiver foreign object to receive the message passed to {@link Message#createNode()}
+     *            method
+     * @param identifier name of the property to be removed
+     * @return <code>true</code> if the property was successfully removed, <code>false</code>
+     *         otherwise
+     * @throws ClassCastException if the createNode has not been created by
+     *             {@link Message#createNode()} method.
+     * @throws UnsupportedMessageException if the <code>receiver</code> does not support the
+     *             {@link Message#createNode() message represented} by <code>readNode</code>
+     * @throws UnknownIdentifierException if the <code>receiver</code> does not allow removing a
+     *             property for the given <code>identifier</code>
+     * @since 0.32
+     */
+    public static boolean sendRemove(Node removeNode, TruffleObject receiver, Object identifier)
+                    throws UnknownIdentifierException, UnsupportedMessageException {
+        try {
+            return (boolean) ((InteropAccessNode) removeNode).execute(receiver, identifier);
+        } catch (UnsupportedMessageException | UnknownIdentifierException e) {
+            CompilerDirectives.transferToInterpreter();
+            throw e;
+        } catch (InteropException e) {
+            CompilerDirectives.transferToInterpreter();
+            throw new AssertionError("Unexpected exception caught.", e);
+        }
+    }
+
+    /**
      * Sends an {@link Message#UNBOX UNBOX message} to the foreign receiver object by executing the
      * <code> unboxNode </code>.
      *
@@ -784,11 +815,6 @@ public final class ForeignAccess {
         }
     }
 
-    // currently intrinsified by Graal
-    @SuppressWarnings("unused")
-    private void checkThread() {
-    }
-
     boolean canHandle(TruffleObject receiver) {
         return factory.canHandle(receiver);
     }
@@ -935,9 +961,20 @@ public final class ForeignAccess {
         }
 
         /**
-         * Handles {@link Message#createExecute(int)} messages.
+         * Handles {@link Message#REMOVE} message.
          *
-         * @param argumentsLength number of parameters the messages has been created for
+         * @return call target to handle the message or <code>null</code> if this message is not
+         *         supported
+         * @since 0.32
+         */
+        default CallTarget accessRemove() {
+            return null;
+        }
+
+        /**
+         * Handles {@link Message#EXECUTE} messages.
+         *
+         * @param argumentsLength do not use, always 0
          * @return call target to handle the message or <code>null</code> if this message is not
          *         supported
          * @since 0.30
@@ -947,9 +984,9 @@ public final class ForeignAccess {
         }
 
         /**
-         * Handles {@link Message#createInvoke(int)} messages.
+         * Handles {@link Message#INVOKE} messages.
          *
-         * @param argumentsLength number of parameters the messages has been created for
+         * @param argumentsLength do not use, always 0
          * @return call target to handle the message or <code>null</code> if this message is not
          *         supported
          * @since 0.30
@@ -959,9 +996,9 @@ public final class ForeignAccess {
         }
 
         /**
-         * Handles {@link Message#createNew(int)} messages.
+         * Handles {@link Message#NEW} messages.
          *
-         * @param argumentsLength number of parameters the messages has been created for
+         * @param argumentsLength do not use, always 0
          * @return call target to handle the message or <code>null</code> if this message is not
          *         supported
          * @since 0.30
@@ -1136,9 +1173,9 @@ public final class ForeignAccess {
         CallTarget accessWrite();
 
         /**
-         * Handles {@link Message#createExecute(int)} messages.
+         * Handles {@link Message#EXECUTE} messages.
          *
-         * @param argumentsLength number of parameters the messages has been created for
+         * @param argumentsLength do not use, always 0
          * @return call target to handle the message or <code>null</code> if this message is not
          *         supported
          * @since 0.26
@@ -1146,9 +1183,9 @@ public final class ForeignAccess {
         CallTarget accessExecute(int argumentsLength);
 
         /**
-         * Handles {@link Message#createInvoke(int)} messages.
+         * Handles {@link Message#INVOKE} messages.
          *
-         * @param argumentsLength number of parameters the messages has been created for
+         * @param argumentsLength do not use, always 0
          * @return call target to handle the message or <code>null</code> if this message is not
          *         supported
          * @since 0.26
@@ -1156,9 +1193,9 @@ public final class ForeignAccess {
         CallTarget accessInvoke(int argumentsLength);
 
         /**
-         * Handles {@link Message#createNew(int)} messages.
+         * Handles {@link Message#NEW} messages.
          *
-         * @param argumentsLength number of parameters the messages has been created for
+         * @param argumentsLength do not use, always 0
          * @return call target to handle the message or <code>null</code> if this message is not
          *         supported
          * @since 0.26
@@ -1256,12 +1293,12 @@ public final class ForeignAccess {
         private static CallTarget accessMessage(StandardFactory factory, Message msg) {
             if (msg instanceof KnownMessage) {
                 switch (msg.hashCode()) {
-                    case Execute.EXECUTE:
-                        return factory.accessExecute(((Execute) msg).getArity());
-                    case Execute.INVOKE:
-                        return factory.accessInvoke(((Execute) msg).getArity());
-                    case Execute.NEW:
-                        return factory.accessNew(((Execute) msg).getArity());
+                    case Execute.HASH:
+                        return factory.accessExecute(0);
+                    case Invoke.HASH:
+                        return factory.accessInvoke(0);
+                    case New.HASH:
+                        return factory.accessNew(0);
                     case GetSize.HASH:
                         return factory.accessGetSize();
                     case HasKeys.HASH:
@@ -1282,6 +1319,8 @@ public final class ForeignAccess {
                         return factory.accessUnbox();
                     case Write.HASH:
                         return factory.accessWrite();
+                    case Remove.HASH:
+                        return factory.accessRemove();
                     case Keys.HASH:
                         return factory.accessKeys();
                     case KeyInfoMsg.HASH:
@@ -1323,12 +1362,12 @@ public final class ForeignAccess {
         private static CallTarget accessMessage(Factory26 factory, Message msg) {
             if (msg instanceof KnownMessage) {
                 switch (msg.hashCode()) {
-                    case Execute.EXECUTE:
-                        return factory.accessExecute(((Execute) msg).getArity());
-                    case Execute.INVOKE:
-                        return factory.accessInvoke(((Execute) msg).getArity());
-                    case Execute.NEW:
-                        return factory.accessNew(((Execute) msg).getArity());
+                    case Execute.HASH:
+                        return factory.accessExecute(0);
+                    case Invoke.HASH:
+                        return factory.accessInvoke(0);
+                    case New.HASH:
+                        return factory.accessNew(0);
                     case GetSize.HASH:
                         return factory.accessGetSize();
                     case HasSize.HASH:

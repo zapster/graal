@@ -38,7 +38,10 @@ import com.oracle.truffle.api.nodes.Node;
  *
  * @param <T> the type of delegate node this factory operates on
  * @since 0.12
+ * @deprecated use {@link GenerateWrapper} and implement
+ *             {@link InstrumentableNode#createWrapper(ProbeNode)} instead.
  */
+@Deprecated
 public interface InstrumentableFactory<T extends Node> {
 
     /**
@@ -59,9 +62,9 @@ public interface InstrumentableFactory<T extends Node> {
      * onReturnValue(Frame,Object)}: an <em>execute</em> method on the delegate has just returned a
      * (possibly <code>null</code>) value;</li>
      * <li>
-     * {@linkplain ProbeNode#onReturnExceptional(com.oracle.truffle.api.frame.VirtualFrame, Throwable)
-     * onReturnExceptional(Frame,Throwable)}: an <em>execute</em> method on the delegate has just
-     * thrown an exception.</li>
+     * {@linkplain ProbeNode#onReturnExceptionalOrUnwind(com.oracle.truffle.api.frame.VirtualFrame, Throwable, boolean)
+     * onReturnExceptionalOrUnwind(Frame,Throwable,boolean)}: an <em>execute</em> method on the
+     * delegate has just thrown an exception.</li>
      * </ul>
      * </p>
      *
@@ -80,7 +83,10 @@ public interface InstrumentableFactory<T extends Node> {
      *
      * @see #createWrapper(Node, ProbeNode)
      * @since 0.12
+     * @deprecated use {@link GenerateWrapper} and implement
+     *             {@link InstrumentableNode#createWrapper(ProbeNode)} instead.
      */
+    @Deprecated
     public interface WrapperNode {
 
         /**

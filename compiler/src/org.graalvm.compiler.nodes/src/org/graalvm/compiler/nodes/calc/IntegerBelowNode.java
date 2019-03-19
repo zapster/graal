@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,22 +24,24 @@
  */
 package org.graalvm.compiler.nodes.calc;
 
-import jdk.vm.ci.meta.ConstantReflectionProvider;
-import jdk.vm.ci.meta.MetaAccessProvider;
 import org.graalvm.compiler.core.common.NumUtil;
-import org.graalvm.compiler.core.common.calc.Condition;
+import org.graalvm.compiler.core.common.calc.CanonicalCondition;
 import org.graalvm.compiler.core.common.type.IntegerStamp;
 import org.graalvm.compiler.core.common.type.StampFactory;
 import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.graph.NodeClass;
 import org.graalvm.compiler.graph.spi.CanonicalizerTool;
 import org.graalvm.compiler.nodeinfo.NodeInfo;
+import org.graalvm.compiler.nodes.LogicNegationNode;
 import org.graalvm.compiler.nodes.LogicNode;
 import org.graalvm.compiler.nodes.NodeView;
 import org.graalvm.compiler.nodes.ValueNode;
+import org.graalvm.compiler.options.OptionValues;
 
 import jdk.vm.ci.code.CodeUtil;
-import org.graalvm.compiler.options.OptionValues;
+import jdk.vm.ci.meta.ConstantReflectionProvider;
+import jdk.vm.ci.meta.MetaAccessProvider;
+import jdk.vm.ci.meta.TriState;
 
 @NodeInfo(shortName = "|<|")
 public final class IntegerBelowNode extends IntegerLowerThanNode {
@@ -126,13 +130,45 @@ public final class IntegerBelowNode extends IntegerLowerThanNode {
         }
 
         @Override
-        protected Condition getCondition() {
-            return Condition.BT;
+        protected CanonicalCondition getCondition() {
+            return CanonicalCondition.BT;
         }
 
         @Override
         protected IntegerLowerThanNode createNode(ValueNode x, ValueNode y) {
             return new IntegerBelowNode(x, y);
         }
+    }
+
+    @Override
+    public TriState implies(boolean thisNegated, LogicNode other) {
+        if (other instanceof LogicNegationNode) {
+            // Unwrap negations.
+            TriState result = implies(thisNegated, ((LogicNegationNode) other).getValue());
+            if (result.isKnown()) {
+                return TriState.get(!result.toBoolean());
+            }
+        }
+        if (!thisNegated) {
+            if (other instanceof IntegerLessThanNode) {
+                IntegerLessThanNode integerLessThanNode = (IntegerLessThanNode) other;
+                IntegerStamp stampL = (IntegerStamp) this.getY().stamp(NodeView.DEFAULT);
+                // if L >= 0:
+                if (stampL.isPositive()) { // L >= 0
+                    if (this.getX() == integerLessThanNode.getX()) {
+                        // x |<| L implies x < L
+                        if (this.getY() == integerLessThanNode.getY()) {
+                            return TriState.TRUE;
+                        }
+                        // x |<| L implies !(x < 0)
+                        if (integerLessThanNode.getY().isConstant() &&
+                                        IntegerStamp.OPS.getAdd().isNeutral(integerLessThanNode.getY().asConstant())) {
+                            return TriState.FALSE;
+                        }
+                    }
+                }
+            }
+        }
+        return super.implies(thisNegated, other);
     }
 }

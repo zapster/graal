@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,10 +24,10 @@
  */
 package com.oracle.svm.core.posix;
 
-import java.io.File;
-
 import org.graalvm.nativeimage.Feature;
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.c.type.CTypeConversion.CCharPointerHolder;
 import org.graalvm.word.PointerBase;
@@ -36,6 +38,7 @@ import com.oracle.svm.core.jdk.PlatformNativeLibrarySupport;
 import com.oracle.svm.core.posix.headers.Dlfcn;
 
 @AutomaticFeature
+@Platforms({Platform.LINUX.class, Platform.DARWIN.class})
 class PosixNativeLibraryFeature implements Feature {
     @Override
     public void afterRegistration(AfterRegistrationAccess access) {
@@ -50,40 +53,56 @@ class PosixNativeLibrarySupport implements PlatformNativeLibrarySupport {
     }
 
     @Override
-    public PosixNativeLibrary create(File canonicalPath) {
-        return new PosixNativeLibrary(canonicalPath);
+    public PosixNativeLibrary createLibrary(String canonical, boolean builtIn) {
+        return new PosixNativeLibrary(canonical, builtIn);
+    }
+
+    @Override
+    public PointerBase findBuiltinSymbol(String name) {
+        try (CCharPointerHolder symbol = CTypeConversion.toCString(name)) {
+            return Dlfcn.dlsym(Dlfcn.RTLD_DEFAULT(), symbol.get());
+        }
     }
 
     class PosixNativeLibrary implements NativeLibrary {
 
-        private final File canonicalPath;
+        private final String canonicalIdentifier;
+        private final boolean builtin;
         private PointerBase dlhandle = WordFactory.nullPointer();
 
-        PosixNativeLibrary(File canonicalPath) {
-            this.canonicalPath = canonicalPath;
+        PosixNativeLibrary(String canonicalIdentifier, boolean builtin) {
+            this.canonicalIdentifier = canonicalIdentifier;
+            this.builtin = builtin;
         }
 
         @Override
-        public File getCanonicalPath() {
-            return canonicalPath;
+        public String getCanonicalIdentifier() {
+            return canonicalIdentifier;
         }
 
         @Override
-        public boolean isLoaded() {
-            return dlhandle.isNonNull();
+        public boolean isBuiltin() {
+            return builtin;
         }
 
         @Override
         public void load() {
-            dlhandle = PosixUtils.dlopen(canonicalPath.toString(), Dlfcn.RTLD_LAZY());
-            if (this.dlhandle.isNull()) {
-                String error = CTypeConversion.toJavaString(Dlfcn.dlerror());
-                throw new UnsatisfiedLinkError(canonicalPath.toString() + ": " + error);
+            if (!builtin) {
+                assert dlhandle.isNull();
+                String path = canonicalIdentifier;
+                dlhandle = PosixUtils.dlopen(path, Dlfcn.RTLD_LAZY());
+                if (this.dlhandle.isNull()) {
+                    String error = CTypeConversion.toJavaString(Dlfcn.dlerror());
+                    throw new UnsatisfiedLinkError(path + ": " + error);
+                }
             }
         }
 
         @Override
         public PointerBase findSymbol(String name) {
+            if (builtin) {
+                return findBuiltinSymbol(name);
+            }
             assert dlhandle.isNonNull();
             try (CCharPointerHolder symbol = CTypeConversion.toCString(name)) {
                 return Dlfcn.dlsym(dlhandle, symbol.get());

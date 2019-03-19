@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -39,7 +41,7 @@ import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.annotate.MustNotAllocate;
+import com.oracle.svm.core.annotate.RestrictHeapAccess;
 import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.deopt.DeoptTester;
 import com.oracle.svm.core.genscavenge.AlignedHeapChunk.AlignedHeader;
@@ -140,7 +142,7 @@ public final class ThreadLocalAllocation {
         return result;
     }
 
-    @MustNotAllocate(reason = "Must not allocate in the implementation of allocation.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate in the implementation of allocation.")
     private static Object slowPathNewInstanceWithoutAllocating(DynamicHub hub) {
         ThreadLocalAllocation.Descriptor tlab = ThreadLocalAllocation.regularTLAB.getAddress();
         return allocateNewInstance(hub, tlab, false);
@@ -191,7 +193,8 @@ public final class ThreadLocalAllocation {
     @SubstrateForeignCallTarget
     private static Object slowPathNewArray(DynamicHub hub, int length) {
         /*
-         * Length check allocates an exception and so must be hoisted away from MustNotAllocate code
+         * Length check allocates an exception and so must be hoisted away from RestrictHeapAccess
+         * code
          */
         if (length < 0) {
             throw new NegativeArraySizeException();
@@ -206,7 +209,7 @@ public final class ThreadLocalAllocation {
         return result;
     }
 
-    @MustNotAllocate(reason = "Must not allocation in the implementation of allocation.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocation in the implementation of allocation.")
     private static Object slowPathNewArrayWithoutAllocating(DynamicHub hub, int length) {
         ThreadLocalAllocation.Descriptor tlab = ThreadLocalAllocation.regularTLAB.getAddress();
         return allocateNewArray(hub, length, tlab, false);
@@ -226,11 +229,11 @@ public final class ThreadLocalAllocation {
         Object result;
         if (size.aboveOrEqual(HeapPolicy.getLargeArrayThreshold())) {
             /*
-             * Check if the array is really too big. This is an optimistic check because the old
-             * generation probably has other objects in it already, so the next collection will fail
-             * if this object is allocated and survives.
+             * Check if the array is really too big. This is an optimistic check because the heap
+             * probably has other objects in it, so the next collection will throw an
+             * OutOfMemoryError if this object is allocated and survives.
              */
-            if (size.aboveOrEqual(HeapPolicy.getOldGenerationSize())) {
+            if (size.aboveOrEqual(HeapPolicy.getMaximumHeapSize())) {
                 throw arrayAllocationTooLarge;
             }
             /* Large arrays go into their own unaligned chunk. */
@@ -467,15 +470,12 @@ public final class ThreadLocalAllocation {
      */
     @Uninterruptible(reason = "Pops from the free list that is drained, at a safepoint, by garbage collections.")
     private static AlignedHeader popFromThreadLocalFreeList() {
-        log().string("[ThreadLocalAllocation.popFromThreadLocalFreeList:").newline();
-        log().string("  before freeList: ").hex(freeList.get()).string("]").newline();
         final AlignedHeader result = freeList.get();
         if (result.isNonNull()) {
             final AlignedHeader next = result.getNext();
             result.setNext(WordFactory.nullPointer());
             freeList.set(next);
         }
-        log().string("   after freeList: ").hex(freeList.get()).string("  result: ").hex(result).string("]").newline();
         return result;
     }
 
@@ -568,8 +568,6 @@ public final class ThreadLocalAllocation {
         if (allocationTop.isNonNull()) {
             AlignedHeader alignedChunk = tlab.getAlignedChunk();
 
-            log().string("  [ThreadLocalAllocator.retireAllocationChunk: tlab ").hex(tlab).string(" chunk ").hex(alignedChunk).string(" top ").hex(allocationTop).string(" ]").newline();
-
             assert alignedChunk.getTop().isNull();
             assert alignedChunk.getEnd().equal(tlab.getAllocationEnd(END_IDENTITY));
 
@@ -594,8 +592,6 @@ public final class ThreadLocalAllocation {
 
         AlignedHeader alignedChunk = tlab.getAlignedChunk();
         if (alignedChunk.isNonNull()) {
-            log().string("  [ThreadLocalAllocator.resumeAllocationChunk: tlab ").hex(tlab).string(" chunk ").hex(alignedChunk).string(" top ").hex(alignedChunk.getTop()).string(" ]").newline();
-
             tlab.setAllocationTop(alignedChunk.getTop(), TOP_IDENTITY);
             tlab.setAllocationEnd(alignedChunk.getEnd(), END_IDENTITY);
             alignedChunk.setTop(WordFactory.nullPointer());

@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -32,7 +34,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.test.polyglot.MultiThreadedLanguage.LanguageContext;
 
-@TruffleLanguage.Registration(id = MultiThreadedLanguage.ID, name = MultiThreadedLanguage.ID, version = "1.0", mimeType = MultiThreadedLanguage.ID)
+@TruffleLanguage.Registration(id = MultiThreadedLanguage.ID, name = MultiThreadedLanguage.ID)
 public class MultiThreadedLanguage extends TruffleLanguage<LanguageContext> {
 
     static final String ID = "MultiThreadedLanguage";
@@ -118,7 +120,7 @@ public class MultiThreadedLanguage extends TruffleLanguage<LanguageContext> {
                 if (result == null) {
                     result = "null result";
                 }
-                return result;
+                return getContext().env.asGuestValue(result);
             }
 
             @TruffleBoundary
@@ -143,11 +145,6 @@ public class MultiThreadedLanguage extends TruffleLanguage<LanguageContext> {
     @Override
     protected void disposeContext(LanguageContext context) {
         context.disposeCalled++;
-    }
-
-    @Override
-    protected Object getLanguageGlobal(LanguageContext context) {
-        return null;
     }
 
     @Override

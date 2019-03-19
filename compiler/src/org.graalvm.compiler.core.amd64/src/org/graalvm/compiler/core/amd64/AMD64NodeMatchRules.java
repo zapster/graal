@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -31,19 +33,18 @@ import static org.graalvm.compiler.asm.amd64.AMD64Assembler.AMD64BinaryArithmeti
 import static org.graalvm.compiler.asm.amd64.AMD64Assembler.AMD64RMOp.MOVSX;
 import static org.graalvm.compiler.asm.amd64.AMD64Assembler.AMD64RMOp.MOVSXB;
 import static org.graalvm.compiler.asm.amd64.AMD64Assembler.AMD64RMOp.MOVSXD;
-import static org.graalvm.compiler.asm.amd64.AMD64Assembler.OperandSize.DWORD;
-import static org.graalvm.compiler.asm.amd64.AMD64Assembler.OperandSize.QWORD;
-import static org.graalvm.compiler.asm.amd64.AMD64Assembler.OperandSize.SD;
-import static org.graalvm.compiler.asm.amd64.AMD64Assembler.OperandSize.SS;
+import static org.graalvm.compiler.asm.amd64.AMD64BaseAssembler.OperandSize.DWORD;
+import static org.graalvm.compiler.asm.amd64.AMD64BaseAssembler.OperandSize.QWORD;
+import static org.graalvm.compiler.asm.amd64.AMD64BaseAssembler.OperandSize.SD;
+import static org.graalvm.compiler.asm.amd64.AMD64BaseAssembler.OperandSize.SS;
 
 import org.graalvm.compiler.asm.amd64.AMD64Assembler.AMD64MIOp;
 import org.graalvm.compiler.asm.amd64.AMD64Assembler.AMD64RMOp;
-import org.graalvm.compiler.asm.amd64.AMD64Assembler.AMD64RRMOp;
-import org.graalvm.compiler.asm.amd64.AMD64Assembler.AVXOp;
-import org.graalvm.compiler.asm.amd64.AMD64Assembler.OperandSize;
 import org.graalvm.compiler.asm.amd64.AMD64Assembler.SSEOp;
+import org.graalvm.compiler.asm.amd64.AMD64BaseAssembler.OperandSize;
 import org.graalvm.compiler.core.common.LIRKind;
 import org.graalvm.compiler.core.common.NumUtil;
+import org.graalvm.compiler.core.common.calc.CanonicalCondition;
 import org.graalvm.compiler.core.common.calc.Condition;
 import org.graalvm.compiler.core.gen.NodeLIRBuilder;
 import org.graalvm.compiler.core.gen.NodeMatchRules;
@@ -77,10 +78,7 @@ import org.graalvm.compiler.nodes.memory.LIRLowerableAccess;
 import org.graalvm.compiler.nodes.memory.WriteNode;
 import org.graalvm.compiler.nodes.util.GraphUtil;
 
-import jdk.vm.ci.amd64.AMD64;
-import jdk.vm.ci.amd64.AMD64.CPUFeature;
 import jdk.vm.ci.amd64.AMD64Kind;
-import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.PlatformKind;
@@ -128,7 +126,7 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
     }
 
     protected ComplexMatchResult emitCompareBranchMemory(IfNode ifNode, CompareNode compare, ValueNode value, LIRLowerableAccess access) {
-        Condition cond = compare.condition();
+        Condition cond = compare.condition().asCondition();
         AMD64Kind kind = getMemoryKind(access);
         boolean matchedAsConstant = false; // For assertion checking
 
@@ -303,7 +301,7 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
     @MatchRule("(If (FloatEquals=compare value ValueCompareAndSwap=cas))")
     @MatchRule("(If (IntegerEquals=compare value ValueCompareAndSwap=cas))")
     public ComplexMatchResult ifCompareValueCas(IfNode root, CompareNode compare, ValueNode value, ValueCompareAndSwapNode cas) {
-        assert compare.condition() == Condition.EQ;
+        assert compare.condition() == CanonicalCondition.EQ;
         if (value == cas.getExpectedValue() && cas.usages().count() == 1) {
             return builder -> {
                 LIRKind kind = getLirKind(cas);
@@ -326,7 +324,7 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
     @MatchRule("(If (IntegerEquals=compare value LogicCompareAndSwap=cas))")
     public ComplexMatchResult ifCompareLogicCas(IfNode root, CompareNode compare, ValueNode value, LogicCompareAndSwapNode cas) {
         JavaConstant constant = value.asJavaConstant();
-        assert compare.condition() == Condition.EQ;
+        assert compare.condition() == CanonicalCondition.EQ;
         if (constant != null && cas.usages().count() == 1) {
             long constantValue = constant.asLong();
             boolean successIsTrue;
@@ -387,23 +385,12 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
                         getState(access));
     }
 
-    private ComplexMatchResult binaryRead(AMD64RRMOp op, OperandSize size, ValueNode value, LIRLowerableAccess access) {
-        return builder -> getArithmeticLIRGenerator().emitBinaryMemory(op, size, getLIRGeneratorTool().asAllocatable(operand(value)), (AMD64AddressValue) operand(access.getAddress()),
-                        getState(access));
-    }
-
     @MatchRule("(Add value Read=access)")
     @MatchRule("(Add value FloatingRead=access)")
     public ComplexMatchResult addMemory(ValueNode value, LIRLowerableAccess access) {
         OperandSize size = getMemorySize(access);
         if (size.isXmmType()) {
-            TargetDescription target = getLIRGeneratorTool().target();
-            boolean isAvx = ((AMD64) target.arch).getFeatures().contains(CPUFeature.AVX);
-            if (isAvx) {
-                return binaryRead(AVXOp.ADD, size, value, access);
-            } else {
-                return binaryRead(SSEOp.ADD, size, value, access);
-            }
+            return binaryRead(SSEOp.ADD, size, value, access);
         } else {
             return binaryRead(ADD.getRMOpcode(size), size, value, access);
         }
@@ -414,13 +401,7 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
     public ComplexMatchResult subMemory(ValueNode value, LIRLowerableAccess access) {
         OperandSize size = getMemorySize(access);
         if (size.isXmmType()) {
-            TargetDescription target = getLIRGeneratorTool().target();
-            boolean isAvx = ((AMD64) target.arch).getFeatures().contains(CPUFeature.AVX);
-            if (isAvx) {
-                return binaryRead(AVXOp.SUB, size, value, access);
-            } else {
-                return binaryRead(SSEOp.SUB, size, value, access);
-            }
+            return binaryRead(SSEOp.SUB, size, value, access);
         } else {
             return binaryRead(SUB.getRMOpcode(size), size, value, access);
         }
@@ -431,13 +412,7 @@ public class AMD64NodeMatchRules extends NodeMatchRules {
     public ComplexMatchResult mulMemory(ValueNode value, LIRLowerableAccess access) {
         OperandSize size = getMemorySize(access);
         if (size.isXmmType()) {
-            TargetDescription target = getLIRGeneratorTool().target();
-            boolean isAvx = ((AMD64) target.arch).getFeatures().contains(CPUFeature.AVX);
-            if (isAvx) {
-                return binaryRead(AVXOp.MUL, size, value, access);
-            } else {
-                return binaryRead(SSEOp.MUL, size, value, access);
-            }
+            return binaryRead(SSEOp.MUL, size, value, access);
         } else {
             return binaryRead(AMD64RMOp.IMUL, size, value, access);
         }

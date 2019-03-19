@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -82,6 +84,9 @@ final class ForeignAccessFactoryGenerator {
         w.append("package ").append(packageName).append(";\n\n");
         appendImports(w);
         Utils.appendFactoryGeneratedFor(w, "", receiverTypeClass, ElementUtils.getQualifiedName(element));
+        if (ElementUtils.isDeprecated(element)) {
+            Utils.suppressDeprecationWarnings(w, "");
+        }
         Utils.appendVisibilityModifier(w, element);
         w.append("final class ").append(simpleClassName);
         w.append(" implements StandardFactory, Factory {\n");
@@ -100,6 +105,7 @@ final class ForeignAccessFactoryGenerator {
         appendFactoryAccessUnbox(w);
         appendFactoryAccessRead(w);
         appendFactoryAccessWrite(w);
+        appendFactoryAccessRemove(w);
         appendFactoryAccessExecute(w);
         appendFactoryAccessInvoke(w);
         appendFactoryAccessNew(w);
@@ -205,14 +211,14 @@ final class ForeignAccessFactoryGenerator {
     private void appendFactoryAccessIsExecutable(Writer w) throws IOException {
         w.append("    @Override").append("\n");
         w.append("    public CallTarget accessIsExecutable() {").append("\n");
-        appendOptionalDefaultHandlerBody(w, Message.IS_EXECUTABLE, Message.createExecute(0));
+        appendOptionalDefaultHandlerBody(w, Message.IS_EXECUTABLE, Message.EXECUTE);
         w.append("    }").append("\n");
     }
 
     private void appendFactoryAccessIsInstantiable(Writer w) throws IOException {
         w.append("    @Override").append("\n");
         w.append("    public CallTarget accessIsInstantiable() {").append("\n");
-        appendOptionalDefaultHandlerBody(w, Message.IS_INSTANTIABLE, Message.createNew(0));
+        appendOptionalDefaultHandlerBody(w, Message.IS_INSTANTIABLE, Message.NEW);
         w.append("    }").append("\n");
     }
 
@@ -316,24 +322,31 @@ final class ForeignAccessFactoryGenerator {
         w.append("    }").append("\n");
     }
 
+    private void appendFactoryAccessRemove(Writer w) throws IOException {
+        w.append("    @Override").append("\n");
+        w.append("    public CallTarget accessRemove() {").append("\n");
+        appendOptionalHandlerBody(w, Message.REMOVE);
+        w.append("    }").append("\n");
+    }
+
     private void appendFactoryAccessExecute(Writer w) throws IOException {
         w.append("    @Override").append("\n");
         w.append("    public CallTarget accessExecute(int argumentsLength) {").append("\n");
-        appendOptionalHandlerBody(w, Message.createExecute(0));
+        appendOptionalHandlerBody(w, Message.EXECUTE);
         w.append("    }").append("\n");
     }
 
     private void appendFactoryAccessInvoke(Writer w) throws IOException {
         w.append("    @Override").append("\n");
         w.append("    public CallTarget accessInvoke(int argumentsLength) {").append("\n");
-        appendOptionalHandlerBody(w, Message.createInvoke(0));
+        appendOptionalHandlerBody(w, Message.INVOKE);
         w.append("    }").append("\n");
     }
 
     private void appendFactoryAccessNew(Writer w) throws IOException {
         w.append("    @Override").append("\n");
         w.append("    public CallTarget accessNew(int argumentsLength) {").append("\n");
-        appendOptionalHandlerBody(w, Message.createNew(0));
+        appendOptionalHandlerBody(w, Message.NEW);
         w.append("    }").append("\n");
     }
 

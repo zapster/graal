@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -134,18 +136,18 @@ public class LanguageSPIOrderTest {
         try {
             context.initialize(CYCLIC1);
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
 
         try {
             context.initialize(CYCLIC1);
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
         try {
             context.initialize(CYCLIC2);
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
         context.close();
     }
@@ -156,33 +158,33 @@ public class LanguageSPIOrderTest {
         try {
             context.initialize(PUBLIC);
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
         try {
             context.initialize(TRANSITIVE);
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
         try {
             context.initialize(INTERNAL);
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
         context.initialize(DEPENDENT);
         try {
             context.initialize(PUBLIC);
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
         try {
             context.initialize(TRANSITIVE);
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
         try {
             context.initialize(INTERNAL);
             fail();
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
         }
         context.close();
     }
@@ -303,23 +305,17 @@ public class LanguageSPIOrderTest {
         }
 
         @Override
-        protected Object getLanguageGlobal(OrderContext context) {
-            return null;
-        }
-
-        @Override
         protected boolean isObjectOfLanguage(Object object) {
             return false;
         }
 
         protected void useLanguage(OrderContext context, String id) {
-            Source source = Source.newBuilder("").language(id).name("").build();
             // initializes the language
-            context.env.parse(source);
+            context.env.parse(Source.newBuilder(id, "", "").build());
         }
     }
 
-    @Registration(id = PUBLIC, name = "", version = "", mimeType = {PUBLIC}, internal = false)
+    @Registration(id = PUBLIC, name = "", version = "", internal = false)
     public static class PublicLanguage extends BaseLang {
 
         @Override
@@ -337,7 +333,7 @@ public class LanguageSPIOrderTest {
 
     }
 
-    @Registration(id = INTERNAL, name = "", version = "", mimeType = {INTERNAL}, internal = true)
+    @Registration(id = INTERNAL, name = "", version = "", internal = true)
     public static class InternalLanguage extends BaseLang {
 
         @Override
@@ -361,7 +357,7 @@ public class LanguageSPIOrderTest {
 
     }
 
-    @Registration(id = LanguageSPIOrderTest.DEPENDENT, name = "", version = "", mimeType = {DEPENDENT}, dependentLanguages = LanguageSPIOrderTest.PUBLIC)
+    @Registration(id = LanguageSPIOrderTest.DEPENDENT, name = "", dependentLanguages = LanguageSPIOrderTest.PUBLIC)
     public static class DependentLanguage extends BaseLang {
 
         @Override
@@ -372,7 +368,7 @@ public class LanguageSPIOrderTest {
 
     }
 
-    @Registration(id = TRANSITIVE, name = "", version = "", mimeType = {TRANSITIVE}, dependentLanguages = LanguageSPIOrderTest.DEPENDENT)
+    @Registration(id = TRANSITIVE, name = "", dependentLanguages = LanguageSPIOrderTest.DEPENDENT)
     public static class TransitiveLanguage extends BaseLang {
 
         @Override
@@ -383,15 +379,15 @@ public class LanguageSPIOrderTest {
 
     }
 
-    @Registration(id = CYCLIC2, name = "", version = "", mimeType = {CYCLIC2}, dependentLanguages = CYCLIC1)
+    @Registration(id = CYCLIC2, name = "", dependentLanguages = CYCLIC1)
     public static class CyclicLanguage2 extends BaseLang {
     }
 
-    @Registration(id = CYCLIC1, name = "", version = "", mimeType = {CYCLIC1}, dependentLanguages = LanguageSPIOrderTest.CYCLIC2)
+    @Registration(id = CYCLIC1, name = "", dependentLanguages = LanguageSPIOrderTest.CYCLIC2)
     public static class CyclicLanguage1 extends BaseLang {
     }
 
-    @Registration(id = ACTIVATE_DURING_FINALIZE, name = "", version = "", mimeType = {ACTIVATE_DURING_FINALIZE}, dependentLanguages = PUBLIC)
+    @Registration(id = ACTIVATE_DURING_FINALIZE, name = "", dependentLanguages = PUBLIC)
     public static class ActivateDuringFinalizeLanguage extends BaseLang {
 
         @Override
@@ -402,7 +398,7 @@ public class LanguageSPIOrderTest {
 
     }
 
-    @Registration(id = ACTIVATE_DURING_DISPOSE, name = "", version = "", mimeType = {ACTIVATE_DURING_DISPOSE}, dependentLanguages = PUBLIC)
+    @Registration(id = ACTIVATE_DURING_DISPOSE, name = "", dependentLanguages = PUBLIC)
     public static class ActivateDuringDisposeLanguage extends BaseLang {
 
         @Override

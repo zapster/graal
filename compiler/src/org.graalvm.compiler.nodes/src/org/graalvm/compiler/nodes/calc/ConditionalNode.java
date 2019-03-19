@@ -1,10 +1,12 @@
 /*
- * Copyright (c) 2009, 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -26,7 +28,7 @@ import static org.graalvm.compiler.nodeinfo.NodeCycles.CYCLES_1;
 import static org.graalvm.compiler.nodeinfo.NodeSize.SIZE_2;
 import static org.graalvm.compiler.nodes.calc.CompareNode.createCompareNode;
 
-import org.graalvm.compiler.core.common.calc.Condition;
+import org.graalvm.compiler.core.common.calc.CanonicalCondition;
 import org.graalvm.compiler.core.common.type.IntegerStamp;
 import org.graalvm.compiler.core.common.type.Stamp;
 import org.graalvm.compiler.core.common.type.StampFactory;
@@ -170,9 +172,9 @@ public final class ConditionalNode extends FloatingNode implements Canonicalizab
                         return trueValue;
                     }
                 } else if (lessThan.getX() == falseValue && lessThan.getY() == trueValue) {
-                    // return "x" for "x < y ? y : x" in case that we know "x <= y"
+                    // return "y" for "x < y ? y : x" in case that we know "x <= y"
                     if (falseValueStamp.upperBound() <= trueValueStamp.lowerBound()) {
-                        return falseValue;
+                        return trueValue;
                     }
                 }
             }
@@ -268,7 +270,7 @@ public final class ConditionalNode extends FloatingNode implements Canonicalizab
         generator.emitConditional(this);
     }
 
-    public ConditionalNode(StructuredGraph graph, Condition condition, ValueNode x, ValueNode y) {
+    public ConditionalNode(StructuredGraph graph, CanonicalCondition condition, ValueNode x, ValueNode y) {
         this(createCompareNode(graph, condition, x, y, null, NodeView.DEFAULT));
     }
 }

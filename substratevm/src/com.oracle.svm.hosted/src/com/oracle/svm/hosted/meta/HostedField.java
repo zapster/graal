@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -37,7 +39,7 @@ import jdk.vm.ci.meta.JavaTypeProfile;
 /**
  * Store the compile-time information for a field in the Substrate VM, such as the field offset.
  */
-public class HostedField implements ReadableJavaField, SharedField {
+public class HostedField implements ReadableJavaField, SharedField, Comparable<HostedField> {
 
     private final HostedUniverse universe;
     private final HostedMetaAccess metaAccess;
@@ -128,6 +130,11 @@ public class HostedField implements ReadableJavaField, SharedField {
     @Override
     public int getModifiers() {
         return wrapped.getModifiers();
+    }
+
+    @Override
+    public int getOffset() {
+        return wrapped.getOffset();
     }
 
     @Override
@@ -223,5 +230,19 @@ public class HostedField implements ReadableJavaField, SharedField {
     @Override
     public JavaKind getStorageKind() {
         return getType().getStorageKind();
+    }
+
+    @Override
+    public int compareTo(HostedField other) {
+        /*
+         * Order by JavaKind. This is required, since we want instance fields of the same size and
+         * kind consecutive.
+         */
+        int result = other.getJavaKind().ordinal() - this.getJavaKind().ordinal();
+        /*
+         * If the kind is the same, i.e., result == 0, we return 0 so that the sorting keeps the
+         * order unchanged and therefore keeps the field order we get from the hosting VM.
+         */
+        return result;
     }
 }
