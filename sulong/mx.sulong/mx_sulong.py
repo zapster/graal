@@ -1218,6 +1218,18 @@ mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmLanguage(
     installable=False,
 ))
 
+mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmLanguage(
+    suite=_suite,
+    name='C Languages',
+    short_name='clang',
+    dir_name='clang',
+    license_files=[],
+    third_party_license_files=[],
+    dependencies=['Truffle', 'LLVM Runtime Core'],
+    truffle_jars=['sulong:SULONG_CLANG'],
+    support_distributions=[],
+    installable=False,
+))
 
 COPYRIGHT_HEADER_BSD = """\
 /*
