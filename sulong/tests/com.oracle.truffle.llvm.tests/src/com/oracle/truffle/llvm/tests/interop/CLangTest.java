@@ -30,8 +30,6 @@
 package com.oracle.truffle.llvm.tests.interop;
 
 import com.oracle.truffle.llvm.runtime.options.SulongEngineOption;
-import com.oracle.truffle.llvm.tests.BaseSuiteHarness;
-import com.oracle.truffle.llvm.tests.CLang;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Value;
 import org.junit.Assert;
@@ -42,9 +40,7 @@ import org.junit.runner.RunWith;
 
 import com.oracle.truffle.tck.TruffleRunner;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Paths;
 
 @RunWith(TruffleRunner.class)
 public class CLangTest {
@@ -87,7 +83,7 @@ public class CLangTest {
     protected static Value loadTestBitcodeValue(String name) {
         org.graalvm.polyglot.Source source;
         try {
-            source = org.graalvm.polyglot.Source.newBuilder("clang", SRC, name).mimeType(CLang.MIME_TYPE_CXX).build();
+            source = org.graalvm.polyglot.Source.newBuilder("clang", SRC, name).mimeType("text/x-cxx").build();
         } catch (IOException ex) {
             throw new AssertionError(ex);
         }

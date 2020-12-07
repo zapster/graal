@@ -1203,6 +1203,20 @@ suite = {
       "testProject" : True,
       "defaultBuild" : False,
     },
+    "com.oracle.truffle.clang" : {
+      "subDir" : "projects",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "truffle:TRUFFLE_API",
+        "com.oracle.truffle.llvm.api",
+      ],
+      "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
+      "checkstyle" : "com.oracle.truffle.llvm.runtime",
+      "javaCompliance" : "1.8+",
+      "workingSets" : "Truffle, LLVM",
+      "license" : "BSD-new",
+      "jacoco" : "include",
+    },
   },
 
   "distributions" : {
@@ -1379,6 +1393,7 @@ suite = {
         "sulong:SULONG_NFI",
         "sulong:SULONG_LEGACY",
         "SULONG_TEST_NATIVE",
+        "SULONG_CLANG",
       ],
       "javaProperties" : {
         "sulongtest.testSuitePath" : "<path:SULONG_TEST_SUITES>",
@@ -1487,6 +1502,17 @@ suite = {
           "file:README.md",
         ],
       },
+      "license" : "BSD-new",
+    },
+    "SULONG_CLANG" : {
+      "subDir" : "projects",
+      "dependencies" : [
+        "com.oracle.truffle.clang",
+      ],
+      "distDependencies" : [
+        "truffle:TRUFFLE_API",
+        "SULONG_API",
+      ],
       "license" : "BSD-new",
     },
   }
