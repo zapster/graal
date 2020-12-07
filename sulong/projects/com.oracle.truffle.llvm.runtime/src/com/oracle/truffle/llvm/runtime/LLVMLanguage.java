@@ -472,7 +472,7 @@ public class LLVMLanguage extends TruffleLanguage<LLVMContext> {
     protected CallTarget parse(ParsingRequest request) {
         synchronized (libraryCacheLock) {
             Source source = request.getSource();
-            String path = source.getPath();
+            String path = getSourcePath(source);
             CallTarget callTarget;
             if (source.isCached()) {
                 callTarget = libraryCache.get(path);
@@ -491,10 +491,12 @@ public class LLVMLanguage extends TruffleLanguage<LLVMContext> {
         }
     }
 
-    public boolean isLibraryCached(String path) {
-        synchronized (libraryCacheLock) {
-            return libraryCache.get(path) != null;
+    private String getSourcePath(Source source) {
+        String path = source.getPath();
+        if (path != null) {
+            return path;
         }
+        return "streamed-src://" + source.getName();
     }
 
     public CallTarget getCachedLibrary(String path) {
